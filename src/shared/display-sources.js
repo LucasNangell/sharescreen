@@ -2,7 +2,13 @@
  * Regras compartilhadas para fontes selecionf',veis na exibif',f',o.
  */
 export function isSelectableSource(client) {
-  return !!(client?.isProducing || client?.hasVideo || client?.producerIds?.video);
+  return !!(
+    client?.isProducing ||
+    client?.hasVideo ||
+    client?.producerIds?.video ||
+    client?.producerId ||
+    client?.status === 'transmitindo'
+  );
 }
 
 export function sortDisplaySources(clients) {

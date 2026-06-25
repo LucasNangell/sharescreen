@@ -1,6 +1,6 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
 import { MediaClient } from '../shared/media-client.js';
-import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, TransmissionSync } from '../shared/transmission.js';
+import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, TransmissionSync, enrichDisplaySources } from '../shared/transmission.js';
 import {
   loadCapturePrefs,
   saveCapturePrefs,
@@ -424,6 +424,7 @@ async function syncClientAudioMonitor(sources) {
 function resetClientPageState() {
   clientJoinInProgress = false;
   bootstrapping = false;
+  viewerOnly = false;
   pendingTransmission = null;
   pendingAudioSources = null;
   pendingRoomSnapshot = null;
@@ -612,10 +613,12 @@ async function confirmAudioAndTransmit() {
     clientDisplayStream = stream;
     await bootstrap(false, { deferScreenShare: true });
     if (!media) throw new Error('Sessao de midia nao iniciada');
-    if (!hasPendingDisplayStream()) {
-      throw new Error('Captura de tela expirada - selecione a tela novamente');
+    if (!media.hasVideoProducer()) {
+      if (!hasPendingDisplayStream()) {
+        throw new Error('Captura de tela expirada - selecione a tela novamente');
+      }
+      await media.publishDisplayStream(clientDisplayStream, publishPrefs);
     }
-    await media.publishDisplayStream(clientDisplayStream, publishPrefs);
     if (!media.hasVideoProducer()) {
       throw new Error('Falha ao publicar video - tente novamente');
     }
@@ -833,6 +836,7 @@ async function salvarEIniciar(asViewer = false) {
   }
 
   viewerOnly = false;
+  if (els.chkViewerOnly) els.chkViewerOnly.checked = false;
 
   if (sessionStarted && signaling?.connected && media?.hasVideoProducer?.()) {
     hideOverlay();
@@ -1113,6 +1117,7 @@ function runClientJoin() {
 async function executeJoinAndStart() {
   if (joinInFlight) return;
   joinInFlight = true;
+  let deferredShare = false;
   try {
     sessionReady = false;
     hideErro();
@@ -1147,11 +1152,28 @@ async function executeJoinAndStart() {
       await media.ensureSendTransport();
       const deferShare = deferScreenShareOnJoin;
       deferScreenShareOnJoin = false;
+      deferredShare = deferShare;
       if (deferShare) {
-        setStatus('Conectado - publicando tela...');
         const joinPrefs = getCapturePrefsFromUi();
-        if (joinPrefs.microphone) {
-          await media.publishMicrophone(joinPrefs);
+        const publishPrefs =
+          clientMicTrack?.readyState === 'live'
+            ? { ...joinPrefs, prefetchedMicTrack: clientMicTrack }
+            : joinPrefs;
+        if (hasPendingDisplayStream()) {
+          setStatus('Publicando tela...');
+          await media.publishDisplayStream(clientDisplayStream, publishPrefs);
+          if (!media.hasVideoProducer()) {
+            throw new Error('Falha ao publicar video - tente novamente');
+          }
+          signaling.send('status', { status: 'transmitindo' });
+          updateClientStates('sharing');
+          updateClientMicUi();
+          await attachVuMeterIfNeeded();
+        } else {
+          setStatus('Conectado - publicando tela...');
+          if (joinPrefs.microphone) {
+            await media.publishMicrophone(publishPrefs);
+          }
         }
       } else {
         setStatus('Selecione a tela para compartilhar...');
@@ -1175,7 +1197,10 @@ async function executeJoinAndStart() {
     sessionReady = true;
     setBadge('Online', 'online');
 
-    if (pendingRoomSnapshot || pendingTransmission || pendingAudioSources?.length) {
+    if (
+      !deferredShare &&
+      (pendingRoomSnapshot || pendingTransmission || pendingAudioSources?.length)
+    ) {
       await reconcileRemoteMediaState();
     }
   } finally {
@@ -1284,7 +1309,7 @@ async function rejoinSession() {
 function applyDisplayControlUpdate(payload) {
   const { ativo, fontes } = payload || {};
   displayControlActive = !!ativo;
-  displaySources = fontes || [];
+  displaySources = enrichDisplaySources(fontes || [], txSync.lastActiveTransmission);
   if (!displayControlActive) closeFsSourceMenu();
   syncFsSourceUi();
 }
@@ -1317,7 +1342,9 @@ function renderFsSourceMenu() {
   if (!els.fsSourceList) return;
   els.fsSourceList.innerHTML = '';
 
-  const sources = sortDisplaySources(displaySources);
+  const sources = sortDisplaySources(
+    enrichDisplaySources(displaySources, txSync.lastActiveTransmission)
+  );
   if (!sources.length) {
     const li = document.createElement('li');
     li.className = 'fs-source-empty';

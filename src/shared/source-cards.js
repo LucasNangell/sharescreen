@@ -2,11 +2,29 @@
  * Cards de fontes de exibicao - estrutura e estados compartilhados entre host e client.
  */
 function hasVideoAvailable(c) {
-  return !!(c?.isProducing || c?.hasVideo || c?.producerIds?.video);
+  return !!(
+    c?.isProducing ||
+    c?.hasVideo ||
+    c?.producerIds?.video ||
+    c?.producerId ||
+    c?.status === 'transmitindo'
+  );
+}
+
+function isConnectedPeer(c) {
+  return !!c?.id && c?.status !== 'desconectado';
 }
 
 export function getSourceCardState(c) {
   if (!hasVideoAvailable(c)) {
+    if (isConnectedPeer(c)) {
+      return {
+        kind: 'viewer',
+        description: 'Espectador - Participando sem compartilhar tela',
+        statusText: 'Assistindo',
+        blocked: true
+      };
+    }
     return {
       kind: 'spectator',
       description: 'Espectador - Participando com tela nao compartilhada',
@@ -79,7 +97,9 @@ export function buildDisplaySourceCard(c, onSelect, options = {}) {
       li.classList.add('sharing');
     }
   }
-  if (cardState.kind === 'spectator') li.classList.add('disabled', 'spectator');
+  if (cardState.kind === 'spectator' || cardState.kind === 'viewer') {
+    li.classList.add('disabled', 'spectator');
+  }
   if (cardState.kind === 'available') li.classList.add('available');
 
   const body = document.createElement('div');

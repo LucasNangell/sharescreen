@@ -1,6 +1,6 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
 import { MediaClient } from '../shared/media-client.js';
-import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded } from '../shared/transmission.js';
+import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded, enrichRoomSourcesState } from '../shared/transmission.js';
 import { loadCapturePrefs, saveCapturePrefs, setupMicrophonePicker, installAudioUnlock } from '../shared/audio-manager.js';
 import { RecordingClient, RecordingState } from '../shared/recording-client.js';
 import { ErrorManager, assertSecureContext } from '../shared/error-manager.js';
@@ -933,6 +933,13 @@ async function runTransmission(raw, gen = transmissionGeneration) {
     if (client) {
       estado.selecionado = {
         ...client,
+        isProducing: hasActiveVideo(tx) || client.isProducing,
+        hasVideo: hasActiveVideo(tx) || client.hasVideo,
+        producerIds: {
+          ...(client.producerIds || {}),
+          video: tx.producerIds?.video || client.producerIds?.video || client.producerId || null
+        },
+        producerId: tx.producerIds?.video || client.producerIds?.video || client.producerId || null,
         selecionado: true,
         pausado: tx.paused
       };
@@ -1076,11 +1083,14 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   if (!hostReady || joinInProgress) {
     pendingRoomSnapshot = snapshot;
     if (snapshot.clients?.length || parsed.peers?.length) {
-      estado = {
-        clients: snapshot.clients || parsed.peers || [],
-        selecionado: snapshot.selecionado || null,
-        controleExibicao: snapshot.controleExibicao || []
-      };
+      estado = enrichRoomSourcesState(
+        {
+          clients: snapshot.clients || parsed.peers || [],
+          selecionado: snapshot.selecionado || null,
+          controleExibicao: snapshot.controleExibicao || []
+        },
+        parsed.transmission
+      );
       renderLista();
     }
     if (parsed.audioSources?.length) {
@@ -1090,13 +1100,16 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     return;
   }
 
-  estado = {
-    clients: snapshot.clients || parsed.peers || [],
-    selecionado: snapshot.selecionado
-      ? { ...snapshot.selecionado, selecionado: true }
-      : null,
-    controleExibicao: snapshot.controleExibicao || []
-  };
+  estado = enrichRoomSourcesState(
+    {
+      clients: snapshot.clients || parsed.peers || [],
+      selecionado: snapshot.selecionado
+        ? { ...snapshot.selecionado, selecionado: true }
+        : null,
+      controleExibicao: snapshot.controleExibicao || []
+    },
+    parsed.transmission
+  );
   const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
   if (me) isCoHostInstance = !!me.isCoHost;
 
@@ -1251,13 +1264,16 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'estado') {
-    estado = {
-      clients: msg.payload.clients || [],
-      selecionado: msg.payload.selecionado
-        ? { ...msg.payload.selecionado, selecionado: true }
-        : null,
-      controleExibicao: msg.payload.controleExibicao || []
-    };
+    estado = enrichRoomSourcesState(
+      {
+        clients: msg.payload.clients || [],
+        selecionado: msg.payload.selecionado
+          ? { ...msg.payload.selecionado, selecionado: true }
+          : null,
+        controleExibicao: msg.payload.controleExibicao || []
+      },
+      lastActiveTransmission
+    );
     const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
     if (me) {
       isCoHostInstance = !!me.isCoHost;

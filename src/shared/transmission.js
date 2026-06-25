@@ -73,6 +73,87 @@ export function remoteVideoConsumeNeeded(
   return !hasVideoElement;
 }
 
+function mergeSourceWithTransmission(source, tx, { isSelected = false } = {}) {
+  if (!source) return source;
+  const normalized = normalizeTransmission(tx);
+  if (!hasActiveVideo(normalized)) return source;
+
+  const videoId = normalized.producerIds?.video || null;
+  return {
+    ...source,
+    isProducing: true,
+    hasVideo: true,
+    producerIds: {
+      ...(source.producerIds || {}),
+      video: videoId || source.producerIds?.video || source.producerId || null
+    },
+    producerId: videoId || source.producerIds?.video || source.producerId || null,
+    selecionado: isSelected || !!source.selecionado,
+    pausado: isSelected ? normalized.paused : source.pausado
+  };
+}
+
+/** Enriquece lista de peers/selecionado com dados da transmissao ativa (corrige lag do estado). */
+export function enrichRoomSourcesState(estado = {}, transmission) {
+  if (!estado) return estado;
+  const tx = normalizeTransmission(transmission || {});
+  if (!hasActiveVideo(tx)) return { ...estado };
+
+  const selectedId = tx.selectedPeerId;
+  const videoId = tx.producerIds?.video;
+
+  const clients = (estado.clients || []).map((c) => {
+    if (selectedId && String(c.id) === String(selectedId)) {
+      return mergeSourceWithTransmission(c, tx, { isSelected: true });
+    }
+    if (videoId && (c.producerIds?.video === videoId || c.producerId === videoId)) {
+      return mergeSourceWithTransmission(c, tx);
+    }
+    return c;
+  });
+
+  let selecionado = estado.selecionado;
+  if (selectedId) {
+    const match = clients.find((c) => String(c.id) === String(selectedId));
+    selecionado = match
+      ? { ...match, selecionado: true, pausado: tx.paused }
+      : {
+          id: selectedId,
+          displayName: tx.peerName || 'Fonte',
+          isProducing: true,
+          hasVideo: true,
+          producerIds: tx.producerIds,
+          producerId: tx.producerId,
+          selecionado: true,
+          pausado: tx.paused
+        };
+  } else if (selecionado) {
+    selecionado = mergeSourceWithTransmission(selecionado, tx, { isSelected: true });
+  }
+
+  return { ...estado, clients, selecionado };
+}
+
+/** Enriquece fontes do menu de controle de exibicao com a transmissao ativa. */
+export function enrichDisplaySources(sources, transmission) {
+  if (!sources?.length || !transmission) return sources || [];
+  const tx = normalizeTransmission(transmission);
+  if (!hasActiveVideo(tx)) return sources;
+
+  const selectedId = tx.selectedPeerId;
+  const videoId = tx.producerIds?.video;
+
+  return sources.map((s) => {
+    if (selectedId && String(s.id) === String(selectedId)) {
+      return mergeSourceWithTransmission(s, tx, { isSelected: !!s.selecionado });
+    }
+    if (videoId && (s.producerIds?.video === videoId || s.producerId === videoId)) {
+      return mergeSourceWithTransmission(s, tx);
+    }
+    return s;
+  });
+}
+
 function transmissionSelectionKey(tx) {
   const n = normalizeTransmission(tx);
   return [

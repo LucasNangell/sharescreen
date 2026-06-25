@@ -969,6 +969,9 @@ export class RoomManager {
         producerId: producer.id.slice(0, 8),
         hosts: this.getHostAndCoHostPeers().map((h) => h.id.slice(0, 8))
       });
+      for (const host of this.getHostAndCoHostPeers()) {
+        this.sendRoomSnapshot(host);
+      }
     }
     if (AUDIO_PRODUCER_SLOTS.includes(slot)) {
       logger.info('[audio] producer criado', {
