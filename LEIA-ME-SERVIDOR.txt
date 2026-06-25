@@ -1,0 +1,11 @@
+﻿PACOTE PRONTO PARA O SERVIDOR
+=============================
+
+Copie TODO o conteudo desta pasta para:
+  C:\Sistemas CGraf\Screen Share
+
+No servidor (so precisa Node.js 18+ instalado):
+  1. verificar-producao.bat
+  2. start-producao.bat
+
+Nao execute npm install no servidor.

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShareScreen — Host</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <video id="preview-video" autoplay playsinline muted></video>
+  <audio id="preview-audio" autoplay playsinline></audio>
+
+  <div id="aguardando" class="aguardando">Selecione uma fonte no menu ou aguarde a transmissão</div>
+  <div id="banner-proprio" class="banner" hidden>Sua tela está sendo transmitida para todos</div>
+  <div id="info-transmissao" class="info-transmissao" hidden></div>
+  <button id="btn-recompartilhar" type="button" class="btn-recompartilhar" hidden>Compartilhar tela novamente</button>
+
+  <aside id="sidebar" class="sidebar" aria-label="Painel de controle">
+    <button id="sidebar-toggle" type="button" class="sidebar-toggle" title="Abrir menu" aria-expanded="false">
+      <span class="icone-menu" aria-hidden="true">☰</span>
+    </button>
+    <div class="sidebar-painel">
+      <header class="sidebar-cabecalho">
+        <h1>Controle</h1>
+        <button id="sidebar-fechar" type="button" class="btn-fechar" title="Recolher menu">✕</button>
+      </header>
+      <p id="selecionado-info" class="selecionado-info">Nenhum client selecionado</p>
+      <h2 class="sidebar-titulo">Fontes de transmissão</h2>
+      <ul id="lista-clients" class="lista-clients"></ul>
+      <div class="controles-audio" id="controles-audio" hidden>
+        <label class="vol-label">Volume</label>
+        <input id="volume-slider" type="range" min="0" max="100" value="100" />
+        <button id="btn-mute-audio" type="button" title="Silenciar">🔊</button>
+      </div>
+      <div class="acoes">
+        <button id="btn-gravar" type="button">Gravar</button>
+        <button id="btn-parar-gravar" type="button" hidden>Parar gravação</button>
+        <button id="btn-pausar" type="button">Pausar</button>
+        <button id="btn-retomar" type="button">Retomar</button>
+        <button id="btn-limpar" type="button">Limpar</button>
+      </div>
+      <details class="prefs-host-audio">
+        <summary>Áudio deste painel (ao compartilhar)</summary>
+        <label class="check-audio">
+          <input id="host-chk-system-audio" type="checkbox" checked />
+          Áudio do sistema
+        </label>
+        <label class="check-audio">
+          <input id="host-chk-microphone" type="checkbox" />
+          Microfone
+        </label>
+        <div id="host-mic-picker-wrap" class="mic-picker" hidden>
+          <label for="host-mic-select">Qual microfone?</label>
+          <select id="host-mic-select"></select>
+          <button type="button" id="host-btn-refresh-mics" class="btn-link">Atualizar lista</button>
+          <p class="mic-hint">Ao marcar, o navegador pedirá permissão de microfone.</p>
+        </div>
+      </details>
+      <details class="logs-panel">
+        <summary>Registro de eventos</summary>
+        <div id="logs"></div>
+      </details>
+    </div>
+  </aside>
+
+  <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+  <footer id="status-bar" class="status">Conectando...</footer>
+
+  <script src="app.bundle.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+﻿Backup criado: 2026-06-16 10:33:14
+Workspace DEV: E:\Projetos\Trabalho\Screen Share
+Producao NAO tocada: \\cgrafsysvm\Sistemas CGraf\Screen Share
+Branch: dev/modernizacao-profissional-baixa-latencia

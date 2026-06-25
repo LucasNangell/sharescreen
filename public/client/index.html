@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShareScreen — Client</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <script>
+    (function () {
+      var isMeet = location.pathname.indexOf('/meet') === 0;
+      var base = document.createElement('base');
+      base.href = isMeet ? '/meet/' : '/client/';
+      document.head.appendChild(base);
+      if (new URLSearchParams(location.search).get('token')) {
+        document.addEventListener('DOMContentLoaded', function () {
+          var overlay = document.getElementById('overlay');
+          if (overlay) overlay.hidden = true;
+        });
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-25T21-19-59-dmvw3z" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-06-25T21-19-59-dmvw3z" />
+  <link rel="stylesheet" href="style.css?v=2026-06-25T21-19-59-dmvw3z" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-06-25T21-19-59-dmvw3z" />
+</head>
+<body class="app-client">
+  <div id="overlay" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
+    <div class="modal-panel">
+      <h1 id="onboard-title">Bem-vindo ao ShareScreen</h1>
+      <p id="onboard-intro">Informe o nome deste computador e selecione a tela quando o navegador solicitar.</p>
+      <ol class="steps" id="onboard-steps-identify">
+        <li>Identifique este PC com um nome visível no painel do host.</li>
+        <li>Selecione a tela quando o navegador solicitar.</li>
+        <li>A transmissão só será exibida para todos após o host selecionar esta fonte.</li>
+      </ol>
+      <ol class="steps" id="onboard-steps-audio" hidden>
+        <li>Tela selecionada com sucesso.</li>
+        <li>Clique em <strong>Iniciar transmissão</strong> para conectar e enviar ao host.</li>
+      </ol>
+
+      <div id="onboard-step-identify">
+      <div class="field">
+        <label for="nome-input">Nome deste computador</label>
+        <input id="nome-input" type="text" maxlength="64" placeholder="Ex.: PC Recepção" autocomplete="off" />
+      </div>
+
+      <div id="pin-wrap" class="field" hidden>
+        <label for="client-pin-input">PIN da sala</label>
+        <input id="client-pin-input" type="password" maxlength="32" autocomplete="off" />
+      </div>
+
+      <label class="check-row">
+        <input id="chk-viewer-only" type="checkbox" />
+        Entrar apenas como espectador (sem compartilhar tela)
+      </label>
+      </div>
+
+      <div id="onboard-step-audio" hidden>
+      <label class="check-row">
+        <input id="chk-system-audio" type="checkbox" />
+        <span>Áudio do sistema <small>(use a pista capturada no diálogo do navegador)</small></span>
+      </label>
+      <label class="check-row">
+        <input id="chk-microphone" type="checkbox" />
+        Microfone deste computador
+      </label>
+      <div id="mic-picker-wrap" class="mic-picker" hidden>
+        <label for="mic-select">Microfone</label>
+        <select id="mic-select"></select>
+        <button type="button" id="btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar lista</button>
+        <div class="vu-bar"><div id="vu-fill" class="vu-bar-fill"></div></div>
+      </div>
+      </div>
+
+      <div id="insecure-warning" class="insecure-banner" hidden>
+        Conexão não segura — use HTTPS para compartilhar tela e microfone.
+      </div>
+
+      <div class="onboard-actions">
+        <button id="btn-salvar-nome" type="button" class="btn btn-primary">Selecionar tela para compartilhar</button>
+        <button id="btn-viewer-enter" type="button" class="btn btn-secondary">Entrar como espectador</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="client-main app-main">
+    <div class="preview-area" id="preview-area" style="position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0;">
+      <div id="stream-source-badge" class="stream-source-badge" hidden aria-live="polite"></div>
+      <button type="button" id="btn-settings" class="preview-float-btn preview-gear-btn" aria-label="Configurações">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button type="button" id="btn-fullscreen" class="preview-float-btn preview-fullscreen-btn" aria-label="Tela cheia" title="Tela cheia">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <video id="video-remoto" autoplay playsinline muted></video>
+      <audio id="audio-remoto" autoplay playsinline></audio>
+
+      <div id="state-sharing" class="client-banner" hidden>Transmitindo — aguardando seleção do host</div>
+      <div id="state-selected" class="client-banner client-banner-active" hidden>Sua tela está sendo exibida para todos</div>
+      <div id="state-watching" class="client-overlay" hidden>
+        <h2>Assistindo transmissão</h2>
+        <p id="watching-label"></p>
+      </div>
+      <div id="state-waiting" class="client-overlay">
+        <h2>Aguardando transmissão</h2>
+        <p>O host ainda não selecionou uma fonte ou não há transmissão activa.</p>
+      </div>
+      <div id="state-paused" class="client-overlay" hidden>
+        <h2>Transmissão pausada pelo host</h2>
+      </div>
+      <div id="state-interrupted" class="client-overlay" hidden>
+        <h2 id="interrupted-message">Transmissão interrompida por Host</h2>
+      </div>
+      <div id="state-finalized" class="client-overlay" hidden>
+        <h2 id="finalized-message">Transmissão finalizada por Host</h2>
+      </div>
+
+      <div id="erro-box" class="client-error" hidden role="alert"></div>
+      <button type="button" id="btn-client-mic" class="preview-mic-toggle" hidden
+        aria-label="Microfone" aria-pressed="false" title="Silenciar microfone">
+        <svg class="mic-icon-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M19 11v1a7 7 0 0 1-14 0v-1"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+        <svg class="mic-icon-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" hidden>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+          <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
+          <path d="M17 11v1a5 5 0 0 1-5 5"/>
+          <path d="M12 19v3"/>
+          <path d="M8 5a4 4 0 0 1 7.5-1"/>
+        </svg>
+      </button>
+      <button type="button" id="btn-fs-sources" class="fs-source-toggle" hidden aria-label="Trocar fonte" aria-expanded="false" aria-haspopup="true" title="Trocar fonte">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+      </button>
+      <div id="fs-source-menu" class="fs-source-menu" hidden role="menu" aria-label="Fontes disponíveis">
+        <p class="fs-source-menu-title">Fontes</p>
+        <ul id="fs-source-list" class="fs-source-list" role="list"></ul>
+      </div>
+      <div id="lt-overlay" class="lt-overlay" hidden>
+        <canvas id="lt-overlay-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Host-like sidebar for co-host client usage -->
+    <aside class="sidebar" id="sidebar" aria-label="Painel de controle" hidden>
+      <button type="button" id="btn-sidebar-collapse" class="sidebar-rail-toggle" aria-label="Recolher painel" aria-expanded="true" title="Recolher painel">
+        <svg class="icon-collapse" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        <svg class="icon-expand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="sidebar-inner">
+        <!-- Seção Transmissão -->
+        <section class="sidebar-section transmission-section">
+          <h2 class="section-title">Transmissão</h2>
+          <div class="transmission-layout">
+            <div class="transmission-left">
+              <div id="transmission-card-container" class="transmission-card-container">
+                <div class="transmission-card-empty">Nenhuma transmissão ativa</div>
+              </div>
+              
+              <div class="transmission-controls-row">
+                <button type="button" id="btn-limpar" class="btn btn-ghost trans-btn" disabled title="Interromper transmissão">
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                  </svg>
+                </button>
+                
+                <button type="button" id="btn-playpause" class="btn btn-secondary trans-btn" disabled title="Pausar transmissão">
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                  </svg>
+                </button>
+                
+                <button type="button" id="btn-gravacao-toggle" class="btn btn-secondary trans-btn" disabled title="Iniciar gravação">
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="red">
+                    <circle cx="12" cy="12" r="8"></circle>
+                  </svg>
+                </button>
+                
+                <button type="button" id="btn-mute-audio" class="btn btn-ghost trans-btn" title="Silenciar áudio">
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div class="transmission-right-vu" id="controles-audio" hidden>
+              <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Volume" class="vertical-slider" title="Volume da transmissão" />
+            </div>
+          </div>
+          
+          <div style="display: none !important;">
+            <button type="button" id="btn-pausar" disabled>Pausar</button>
+            <button type="button" id="btn-retomar" disabled></button>
+            <button type="button" id="btn-gravar" disabled>Gravar</button>
+            <button type="button" id="btn-parar-gravar" disabled>Parar</button>
+          </div>
+        </section>
+
+        <!-- Seção Participantes -->
+        <section class="sidebar-section participants-section">
+          <h2 class="section-title">Participantes</h2>
+          <span id="selecionado-info" style="display: none !important;"></span>
+          <ul id="lista-clients" class="source-list" role="list"></ul>
+        </section>
+
+        <!-- Seção Configurações -->
+        <details class="sidebar-section settings-section" id="settings-details">
+          <summary class="settings-summary">
+            <div class="settings-summary-left">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="gear-icon">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>Configurações</span>
+            </div>
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </summary>
+          
+          <div class="settings-content">
+            <details class="settings-subdetails" id="details-imagem">
+              <summary class="settings-subsummary">
+                <span>Imagem</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon-sub">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+              <div class="subdetails-content quality-section">
+                <label class="field-label" for="quality-preset">Bitrate de vídeo</label>
+                <select id="quality-preset" aria-label="Qualidade da imagem">
+                  <option value="highQuality">Máxima — 32 Mbps</option>
+                  <option value="balanced">Alta — 16 Mbps</option>
+                  <option value="standard">Padrão — 12 Mbps</option>
+                  <option value="lowLatency">Baixa — 8 Mbps</option>
+                </select>
+                <p id="quality-hint" class="hint-text"></p>
+              </div>
+            </details>
+
+            <details class="settings-subdetails" id="details-audio">
+              <summary class="settings-subsummary">
+                <span>Áudio</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon-sub">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+              <div class="subdetails-content prefs-section">
+                <label class="check-row">
+                  <input id="host-chk-system-audio" type="checkbox" checked />
+                  Áudio do sistema
+                </label>
+                <label class="check-row">
+                  <input id="host-chk-microphone" type="checkbox" checked />
+                  Microfone
+                </label>
+                <div id="host-mic-picker-wrap" class="mic-picker" hidden>
+                  <label for="host-mic-select">Microfone</label>
+                  <select id="host-mic-select"></select>
+                  <button type="button" id="host-btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="settings-subdetails" id="details-recording">
+              <summary class="settings-subsummary">
+                <span>Gravação</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon-sub">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+              <div class="subdetails-content recording-section">
+                <div id="recording-status" class="recording-status">Pronto</div>
+                <div id="recording-timer" class="recording-timer" hidden>00:00</div>
+                <div class="progress-bar" id="upload-progress-wrap" hidden>
+                  <div class="progress-fill" id="upload-progress"></div>
+                </div>
+                <p id="recording-filename" class="hint-text"></p>
+                
+                <div class="field recordings-dir-field" style="margin-top: var(--space-sm);">
+                  <label for="recordings-dir-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Destino da gravação</label>
+                  <div style="display: flex; gap: var(--space-xs);">
+                    <input id="recordings-dir-input" type="text" placeholder="Padrão do servidor" style="flex: 1; padding: 0.4rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); min-width: 0;" />
+                    <button type="button" id="btn-browse-dir" class="btn btn-secondary" style="padding: 0 0.8rem; font-size: 0.8rem; flex-shrink: 0;">Procurar</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </main>
+
+  <button type="button" id="btn-editar-nome" hidden aria-hidden="true"></button>
+
+  <div id="settings-modal" class="modal-backdrop" hidden>
+    <div class="modal-panel client-settings-panel" role="dialog" aria-labelledby="settings-title">
+      <h2 id="settings-title">Configurações</h2>
+      <div class="field">
+        <label for="settings-nome-input">Nome deste computador</label>
+        <input id="settings-nome-input" type="text" maxlength="64" autocomplete="off" />
+      </div>
+      <p class="hint-text">Preferências de áudio aplicadas na próxima vez que você compartilhar a tela.</p>
+      <label class="check-row">
+        <input id="settings-chk-system-audio" type="checkbox" />
+        <span>Áudio do sistema <small>(marque também no diálogo do Chrome/Edge)</small></span>
+      </label>
+      <label class="check-row">
+        <input id="settings-chk-microphone" type="checkbox" />
+        Microfone deste computador
+      </label>
+      <div id="settings-mic-picker-wrap" class="mic-picker" hidden>
+        <label for="settings-mic-select">Microfone</label>
+        <select id="settings-mic-select"></select>
+        <button type="button" id="settings-btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar lista</button>
+      </div>
+      <div class="onboard-actions">
+        <button type="button" id="btn-settings-save" class="btn btn-primary">Salvar</button>
+        <button type="button" id="btn-settings-close" class="btn btn-ghost">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dir-picker-modal" class="modal-backdrop" hidden>
+    <div class="modal-panel" role="dialog" aria-labelledby="dir-picker-title" style="max-width: 500px; width: 90%;">
+      <h1 id="dir-picker-title">Selecionar Pasta</h1>
+      <div id="dir-picker-current-path" style="font-family: var(--font-mono); font-size: 0.8rem; background: var(--color-bg); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); margin-bottom: var(--space-sm); word-break: break-all;"></div>
+      <div id="dir-picker-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: var(--space-md); padding: var(--space-xs);">
+        <!-- Folders will list here -->
+      </div>
+      <div class="control-grid">
+        <button type="button" id="btn-dir-picker-up" class="btn btn-secondary">Subir Pasta</button>
+        <button type="button" id="btn-dir-picker-cancel" class="btn btn-ghost">Cancelar</button>
+        <button type="button" id="btn-dir-picker-select" class="btn btn-primary">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="custom-context-menu" class="context-menu" hidden>
+    <button type="button" id="ctx-cohost" class="ctx-item">
+      <span class="ctx-icon"></span>
+      <span class="ctx-text">Co-host</span>
+    </button>
+    <button type="button" id="ctx-troca-telas" class="ctx-item">
+      <span class="ctx-icon"></span>
+      <span class="ctx-text">Troca telas</span>
+    </button>
+  </div>
+
+  <div id="lt-modal" class="modal-backdrop" hidden>
+    <div class="modal-panel lt-modal-panel" role="dialog" aria-labelledby="lt-modal-title">
+      <h1 id="lt-modal-title">Definir Lower Third</h1>
+      <p class="hint-text">Participante: <strong id="lt-client-name">—</strong></p>
+
+      <div class="field">
+        <label for="lt-file-input">Vídeo Lower Third (.webm)</label>
+        <input id="lt-file-input" type="file" accept=".webm,video/webm" />
+      </div>
+
+      <div id="lt-preview-stage" class="lt-preview-stage" aria-label="Preview do Lower Third">
+        <video id="lt-preview-video" playsinline muted loop hidden></video>
+        <canvas id="lt-preview-canvas" class="lt-preview-canvas"></canvas>
+      </div>
+
+      <div class="lt-dimension-row">
+        <div class="field">
+          <label for="lt-width-input">Largura (px)</label>
+          <input id="lt-width-input" type="number" min="1" step="1" value="640" />
+        </div>
+        <div class="field">
+          <label for="lt-height-input">Altura (px)</label>
+          <input id="lt-height-input" type="number" min="1" step="1" value="360" />
+        </div>
+      </div>
+
+      <div class="lt-chroma-row">
+        <div class="field">
+          <label for="lt-chroma-color">Cor chromakey</label>
+          <input id="lt-chroma-color" type="color" value="#00FF00" />
+        </div>
+        <div class="field">
+          <label for="lt-chroma-tolerance">Tolerância</label>
+          <input id="lt-chroma-tolerance" type="range" min="5" max="120" value="40" />
+        </div>
+        <button type="button" id="lt-btn-pick-color" class="btn btn-secondary btn-sm">Conta-gotas</button>
+      </div>
+
+      <div class="control-grid">
+        <button type="button" id="btn-lt-modal-cancel" class="btn btn-ghost">Cancelar</button>
+        <button type="button" id="btn-lt-modal-save" class="btn btn-primary">Salvar</button>
+        <button type="button" id="btn-lt-modal-close" class="btn btn-ghost">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
+  <script src="app.bundle.js?v=2026-06-25T21-19-59-dmvw3z"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShareScreen — Client</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="overlay" class="overlay">
+    <div class="modal">
+      <h1>Identificação deste computador</h1>
+      <p>Informe um nome visível no painel do host (ex.: PC Recepção, Sala 1).</p>
+      <input id="nome-input" type="text" maxlength="64" placeholder="Ex.: PC Recepção" />
+      <label class="check-audio">
+        <input id="chk-system-audio" type="checkbox" checked />
+        Áudio do sistema (marque também na janela do Chrome)
+      </label>
+      <label class="check-audio">
+        <input id="chk-microphone" type="checkbox" />
+        Microfone deste computador
+      </label>
+      <div id="mic-picker-wrap" class="mic-picker" hidden>
+        <label for="mic-select">Qual microfone?</label>
+        <select id="mic-select"></select>
+        <button type="button" id="btn-refresh-mics" class="btn-link">Atualizar lista</button>
+        <p class="mic-hint">Ao marcar, o navegador pedirá permissão de microfone.</p>
+      </div>
+      <button id="btn-salvar-nome" type="button">Salvar e continuar</button>
+    </div>
+  </div>
+
+  <video id="video-remoto" autoplay playsinline muted></video>
+  <audio id="audio-remoto" autoplay playsinline></audio>
+
+  <div id="aguardando" class="aguardando">Aguardando seleção do host...</div>
+  <div id="banner-selecionado" class="banner" hidden>Sua tela está sendo transmitida para todos</div>
+  <div id="erro-box" class="erro" hidden></div>
+  <button id="btn-recompartilhar" type="button" hidden>Compartilhar tela novamente</button>
+  <button id="btn-editar-nome" type="button" class="btn-nome">Editar nome</button>
+  <footer id="status-bar" class="status">Iniciando...</footer>
+
+  <script src="app.bundle.js"></script>
+</body>
+</html>

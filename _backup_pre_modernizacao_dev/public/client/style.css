@@ -1,0 +1,175 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #0a0a0a;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #eee;
+}
+#video-remoto {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+/* display:flex acima pode impedir [hidden] em alguns navegadores */
+.overlay[hidden],
+.overlay.fechado {
+  display: none !important;
+  pointer-events: none;
+}
+.modal {
+  background: #1a1a2e;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+.modal h1 { font-size: 1.25rem; margin-bottom: .75rem; }
+.modal p { font-size: .9rem; opacity: .8; margin-bottom: 1rem; }
+.modal input {
+  width: 100%;
+  padding: .75rem;
+  margin-bottom: 1rem;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #111;
+  color: #fff;
+  font-size: 1rem;
+}
+.modal button, #btn-recompartilhar {
+  padding: .75rem 1.5rem;
+  background: #3d5afe;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+.modal button:hover { background: #536dfe; }
+.check-audio {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  text-align: left;
+  font-size: 0.85rem;
+  margin-bottom: 0.65rem;
+  opacity: 0.9;
+  cursor: pointer;
+}
+.check-audio input { margin-top: 0.2rem; flex-shrink: 0; }
+.mic-picker {
+  text-align: left;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(0,0,0,.25);
+  border-radius: 8px;
+}
+.mic-picker label {
+  display: block;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+.mic-picker select {
+  width: 100%;
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #111;
+  color: #fff;
+  font-size: 0.85rem;
+}
+.mic-hint { font-size: 0.75rem; opacity: 0.7; margin-top: 0.35rem; }
+.btn-link {
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid #555;
+  color: #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-link:hover { color: #fff; border-color: #777; }
+#audio-remoto {
+  position: fixed;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.aguardando {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,.6);
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+.banner {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(61, 90, 254, .9);
+  padding: .5rem 1rem;
+  border-radius: 8px;
+  font-size: .9rem;
+  z-index: 20;
+}
+.status {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: .4rem .8rem;
+  font-size: .75rem;
+  background: rgba(0,0,0,.55);
+  opacity: .85;
+  z-index: 30;
+}
+.erro {
+  position: fixed;
+  top: 3rem;
+  left: 1rem;
+  right: 1rem;
+  background: #b71c1c;
+  padding: .75rem;
+  border-radius: 8px;
+  z-index: 40;
+}
+#btn-recompartilhar {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+}
+.btn-nome {
+  position: fixed;
+  top: .5rem;
+  right: .5rem;
+  z-index: 25;
+  padding: .35rem .6rem;
+  font-size: .7rem;
+  background: rgba(255,255,255,.15);
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}

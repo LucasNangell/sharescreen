@@ -1,0 +1,99 @@
+import esbuild from 'esbuild';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { makeCacheGuardScript } from './cache-guard-snippet.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(__dirname, '..');
+
+const isProd = process.argv.includes('--prod') || process.env.NODE_ENV === 'production';
+
+const common = {
+  bundle: true,
+  format: 'iife',
+  platform: 'browser',
+  target: ['chrome90', 'edge90', 'firefox90'],
+  minify: isProd,
+  sourcemap: !isProd,
+  logLevel: 'info'
+};
+
+if (isProd) {
+  console.log('Build de produção (minificado, sem sourcemap)');
+}
+
+await esbuild.build({
+  ...common,
+  entryPoints: [path.join(root, 'src/client/app.js')],
+  outfile: path.join(root, 'public/client/app.bundle.js')
+});
+
+await esbuild.build({
+  ...common,
+  entryPoints: [path.join(root, 'src/host/app.js')],
+  outfile: path.join(root, 'public/host/app.bundle.js')
+});
+
+const buildId =
+  new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) +
+  '-' +
+  Math.random().toString(36).slice(2, 8);
+
+const sharedDir = path.join(root, 'public/shared');
+fs.mkdirSync(sharedDir, { recursive: true });
+fs.writeFileSync(
+  path.join(sharedDir, 'build-id.json'),
+  JSON.stringify({ buildId, builtAt: new Date().toISOString() }, null, 2),
+  'utf8'
+);
+
+const hostCssPath = path.join(root, 'public/host/style.css');
+const sharedCssPath = path.join(sharedDir, 'host-style.css');
+if (fs.existsSync(hostCssPath)) {
+  fs.copyFileSync(hostCssPath, sharedCssPath);
+  console.log('Copiado host/style.css para shared/host-style.css');
+}
+
+
+const cacheGuardTag = `<script>${makeCacheGuardScript(buildId)}</script>`;
+const cacheGuardRegex =
+  /<script>\(function\(\)\{[\s\S]*?sharescreen_cache_reload[\s\S]*?\}\)\(\);<\/script>\s*/g;
+const cacheGuardDiagRegex =
+  /<script>\(function\(\)\{[\s\S]*?cache-guard-after-all-scripts[\s\S]*?\}\)\(\);<\/script>\s*/g;
+const htmlPages = [
+  path.join(root, 'public/host/index.html'),
+  path.join(root, 'public/client/index.html')
+];
+
+function stripCacheGuardScripts(html) {
+  let prev;
+  do {
+    prev = html;
+    html = html.replace(cacheGuardRegex, '');
+    html = html.replace(cacheGuardDiagRegex, '');
+  } while (html !== prev);
+  return html.replace(/(<!-- SHARESCREEN_CACHE_GUARD -->\s*)+/g, '<!-- SHARESCREEN_CACHE_GUARD -->\n');
+}
+
+for (const htmlPath of htmlPages) {
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  html = stripCacheGuardScripts(html);
+  if (!html.includes('<!-- SHARESCREEN_CACHE_GUARD -->')) {
+    html = html.replace(
+      /<meta http-equiv="Expires" content="0" \/>\s*/i,
+      '$&\n  <!-- SHARESCREEN_CACHE_GUARD -->\n'
+    );
+  }
+  if (isProd) {
+    html = html.replace(/<!-- SHARESCREEN_CACHE_GUARD -->/g, cacheGuardTag);
+  } else {
+    html = html.replace(/<!-- SHARESCREEN_CACHE_GUARD -->\s*/g, '');
+  }
+  html = html.replace(/\?v=[^"'\s>]+/g, '?v=__BUILD_ID__');
+  html = html.replace(/__BUILD_ID__/g, buildId);
+  fs.writeFileSync(htmlPath, html, 'utf8');
+}
+
+console.log('Bundles gerados: public/client e public/host');
+console.log(`Build ID: ${buildId}`);

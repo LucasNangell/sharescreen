@@ -1,0 +1,523 @@
+/**
+ * Áudio remoto: reprodução direta no <audio> + VU por track (MediaStreamTrackProcessor).
+ */
+
+import { startTrackLevelMeter } from './audio-level-meter.js';
+
+function waitForPlayingTrack(track, timeoutMs = 8000) {
+  if (!track) return Promise.resolve(null);
+  const ready = () => track.readyState === 'live';
+  if (ready()) return Promise.resolve(track);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      if (track.readyState === 'live') resolve(track);
+      else reject(new Error('track não ficou live'));
+    }, timeoutMs);
+
+    const tryResolve = () => {
+      if (ready()) {
+        cleanup();
+        resolve(track);
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      track.removeEventListener('unmute', tryResolve);
+      track.removeEventListener('ended', onEnded);
+    };
+
+    const onEnded = () => {
+      cleanup();
+      reject(new Error('track encerrada'));
+    };
+
+    track.addEventListener('unmute', tryResolve);
+    track.addEventListener('ended', onEnded);
+    tryResolve();
+  });
+}
+
+export class HostAudioMonitor {
+  constructor(media, options = {}) {
+    this.media = media;
+    this.opts = options;
+    this.channels = new Map();
+    this.outputEl = null;
+    this.masterVolume = 1;
+    this.onLevels = null;
+    this._outputStream = null;
+    this._levelsRaf = null;
+    this._mutedPeerIds = new Set();
+    this.ctx = null;
+    this.dest = null;
+    this.filterPrefs = new Map();
+    this.stream = new MediaStream();
+  }
+
+  setManualMuted(mutedPeerIds) {
+    this._mutedPeerIds = new Set(
+      [...(mutedPeerIds || [])].map((id) => String(id))
+    );
+    for (const ch of this.channels.values()) {
+      const track = ch.consumer?.track;
+      if (!track) continue;
+      const silenced = this._isChannelMuted(ch.peerId);
+      track.enabled = !silenced;
+    }
+    this._refreshDirectOutput();
+  }
+
+  _isChannelMuted(peerId) {
+    const key = String(peerId);
+    return this._mutedPeerIds.has(key);
+  }
+
+  setMasterVolume(volume) {
+    this.masterVolume = Math.max(0, Math.min(1, volume));
+    if (this.outputEl) this.outputEl.volume = this.masterVolume;
+  }
+
+  get channelCount() {
+    return this.channels.size;
+  }
+
+  connectOutput(audioEl) {
+    this.outputEl = audioEl;
+    if (audioEl && audioEl.srcObject !== this.stream) {
+      audioEl.srcObject = this.stream;
+    }
+    this._refreshDirectOutput();
+  }
+
+  async resume() {
+    await this._refreshDirectOutput();
+    await this.outputEl?.play?.().catch(() => {});
+  }
+
+  getOutputTrack() {
+    for (const ch of this.channels.values()) {
+      const track = ch.consumer?.track;
+      if (track?.readyState === 'live') return track;
+    }
+    return null;
+  }
+
+  _startLevelsLoop() {
+    if (this._levelsRaf) return;
+    const tick = () => {
+      const levels = new Map();
+      for (const ch of this.channels.values()) {
+        levels.set(ch.peerId, {
+          level: ch.smoothedLevel || 0,
+          active: (ch.rawLevel || 0) > 0.015 || (ch.smoothedLevel || 0) > 0.02,
+          speaking: (ch.rawLevel || 0) > 0.04 || (ch.smoothedLevel || 0) > 0.05
+        });
+      }
+      if (levels.size) this.onLevels?.(levels);
+      this._levelsRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  _stopLevelsLoop() {
+    if (!this._levelsRaf) return;
+    cancelAnimationFrame(this._levelsRaf);
+    this._levelsRaf = null;
+  }
+
+  _startChannelMeter(ch) {
+    ch.stopMeter?.();
+    const track = ch.consumer?.track;
+    if (!track) return;
+
+    ch.stopMeter = startTrackLevelMeter(track, {
+      onLevel: (smoothed, raw) => {
+        ch.smoothedLevel = smoothed;
+        ch.rawLevel = raw;
+      }
+    });
+  }
+
+  _ensureAudioContext() {
+    if (this.ctx) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.dest = this.ctx.createMediaStreamDestination();
+    } catch (e) {
+      console.error('[HostAudioMonitor] Falha ao criar AudioContext:', e);
+    }
+  }
+
+  _refreshDirectOutput() {
+    const el = this.outputEl;
+    if (!el) return;
+
+    const tracksToPlay = [];
+    let hasDsp = false;
+
+    for (const ch of this.channels.values()) {
+      const track = ch.consumer?.track;
+      if (!track || track.readyState !== 'live') continue;
+
+      if (this._isChannelMuted(ch.peerId)) {
+        this._clearChannelDsp(ch);
+        continue;
+      }
+
+      if (this._hasAnyFilter(ch.peerId)) {
+        hasDsp = true;
+        this._setupChannelDsp(ch, track);
+      } else {
+        this._clearChannelDsp(ch);
+        tracksToPlay.push(track);
+      }
+    }
+
+    if (hasDsp) {
+      this._ensureAudioContext();
+      if (this.dest) {
+        const dspTracks = this.dest.stream.getAudioTracks();
+        if (dspTracks.length > 0) {
+          tracksToPlay.push(dspTracks[0]);
+        }
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+    }
+
+    if (el.srcObject !== this.stream) {
+      el.srcObject = this.stream;
+    }
+
+    const currentTracks = this.stream.getAudioTracks();
+
+    // Remove old tracks
+    for (const t of currentTracks) {
+      if (!tracksToPlay.some(p => p.id === t.id)) {
+        this.stream.removeTrack(t);
+      }
+    }
+
+    // Add new tracks
+    for (const t of tracksToPlay) {
+      if (!currentTracks.some(p => p.id === t.id)) {
+        this.stream.addTrack(t);
+      }
+    }
+
+    el.muted = false;
+    el.volume = this.masterVolume;
+    el.play?.().catch(() => {});
+  }
+
+  _hasAnyFilter(peerId) {
+    const prefs = this.getFilterPrefs(peerId);
+    return !!(prefs.highpass || prefs.peaking || prefs.compressor || prefs.noiseGate);
+  }
+
+  _clearChannelDsp(ch) {
+    if (ch.gateInterval) {
+      clearInterval(ch.gateInterval);
+      ch.gateInterval = null;
+    }
+    if (ch.sourceNode) {
+      try {
+        ch.sourceNode.disconnect();
+      } catch (_) {}
+      ch.sourceNode = null;
+    }
+    if (ch.highpassNode) {
+      try { ch.highpassNode.disconnect(); } catch (_) {}
+      ch.highpassNode = null;
+    }
+    if (ch.peakingNode) {
+      try { ch.peakingNode.disconnect(); } catch (_) {}
+      ch.peakingNode = null;
+    }
+    if (ch.compressorNode) {
+      try { ch.compressorNode.disconnect(); } catch (_) {}
+      ch.compressorNode = null;
+    }
+    if (ch.gainNode) {
+      try { ch.gainNode.disconnect(); } catch (_) {}
+      ch.gainNode = null;
+    }
+    ch.stream = null;
+  }
+
+  getFilterPrefs(peerId) {
+    const key = String(peerId);
+    if (!this.filterPrefs.has(key)) {
+      this.filterPrefs.set(key, {
+        highpass: false,
+        highpassFreq: 80,
+        peaking: false,
+        peakingFreq: 3000,
+        peakingGain: 3,
+        compressor: false,
+        noiseGate: false,
+        noiseGateThreshold: -45
+      });
+    }
+    return this.filterPrefs.get(key);
+  }
+
+  setFilterPrefs(peerId, prefs) {
+    const key = String(peerId);
+    this.filterPrefs.set(key, { ...this.getFilterPrefs(key), ...prefs });
+    const ch = this.channels.get(key);
+    if (ch) {
+      this._applyChannelFilters(ch);
+    }
+    this._refreshDirectOutput();
+  }
+
+  _setupChannelDsp(ch, track) {
+    if (ch.sourceNode) return; // Evita dupla configuração
+
+    this._ensureAudioContext();
+    if (!this.ctx || !this.dest) return;
+
+    try {
+      const stream = new MediaStream([track]);
+      ch.stream = stream; // Armazena a referência contra GC
+      ch.sourceNode = this.ctx.createMediaStreamSource(stream);
+
+      ch.highpassNode = this.ctx.createBiquadFilter();
+      ch.highpassNode.type = 'highpass';
+      ch.highpassNode.frequency.value = 80;
+
+      ch.peakingNode = this.ctx.createBiquadFilter();
+      ch.peakingNode.type = 'peaking';
+      ch.peakingNode.frequency.value = 3000;
+      ch.peakingNode.Q.value = 1.2;
+      ch.peakingNode.gain.value = 3;
+
+      ch.compressorNode = this.ctx.createDynamicsCompressor();
+      ch.compressorNode.threshold.value = -24;
+      ch.compressorNode.knee.value = 30;
+      ch.compressorNode.ratio.value = 4;
+      ch.compressorNode.attack.value = 0.003;
+      ch.compressorNode.release.value = 0.25;
+
+      ch.gainNode = this.ctx.createGain();
+      ch.gainNode.gain.value = 1.0;
+
+      ch.sourceNode.connect(ch.highpassNode);
+      ch.highpassNode.connect(ch.peakingNode);
+      ch.peakingNode.connect(ch.compressorNode);
+      ch.compressorNode.connect(ch.gainNode);
+      ch.gainNode.connect(this.dest);
+
+      this._applyChannelFilters(ch);
+      this._startNoiseGateLoop(ch);
+    } catch (err) {
+      console.warn('[HostAudioMonitor] Erro ao configurar DSP do canal:', err);
+    }
+  }
+
+  _applyChannelFilters(ch) {
+    if (!this.ctx) return;
+    const prefs = this.getFilterPrefs(ch.peerId);
+
+    if (ch.highpassNode) {
+      if (prefs.highpass) {
+        ch.highpassNode.frequency.value = prefs.highpassFreq || 80;
+      } else {
+        ch.highpassNode.frequency.value = 10;
+      }
+    }
+
+    if (ch.peakingNode) {
+      if (prefs.peaking) {
+        ch.peakingNode.frequency.value = prefs.peakingFreq || 3000;
+        ch.peakingNode.gain.value = prefs.peakingGain !== undefined ? prefs.peakingGain : 3;
+      } else {
+        ch.peakingNode.gain.value = 0;
+      }
+    }
+
+    if (ch.compressorNode) {
+      if (prefs.compressor) {
+        ch.compressorNode.threshold.value = -24;
+        ch.compressorNode.ratio.value = 4;
+      } else {
+        ch.compressorNode.threshold.value = 0;
+        ch.compressorNode.ratio.value = 1;
+      }
+    }
+  }
+
+  _startNoiseGateLoop(ch) {
+    if (ch.gateInterval) clearInterval(ch.gateInterval);
+    let isOpen = true;
+    ch.gateInterval = setInterval(() => {
+      if (!ch.gainNode) return;
+      const prefs = this.getFilterPrefs(ch.peerId);
+      if (!prefs.noiseGate) {
+        if (!isOpen) {
+          ch.gainNode.gain.setTargetAtTime(1.0, this.ctx.currentTime, 0.05);
+          isOpen = true;
+        }
+        return;
+      }
+
+      const threshDb = prefs.noiseGateThreshold !== undefined ? prefs.noiseGateThreshold : -45;
+      const threshAmp = Math.pow(10, threshDb / 20);
+      const currentLevel = ch.rawLevel || 0;
+
+      if (currentLevel < threshAmp) {
+        if (isOpen) {
+          ch.gainNode.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.04);
+          isOpen = false;
+        }
+      } else {
+        if (!isOpen) {
+          ch.gainNode.gain.setTargetAtTime(1.0, this.ctx.currentTime, 0.02);
+          isOpen = true;
+        }
+      }
+    }, 50);
+  }
+
+  async syncFromSources(sources) {
+    if (!this.media) return;
+
+    const wanted = new Map();
+    for (const source of sources || []) {
+      const peerId = source.peerId || source.id;
+      const producerId = source.producerId || source.producerIds?.audio;
+      if (!peerId || !producerId) continue;
+      wanted.set(String(peerId), producerId);
+    }
+
+    for (const peerId of [...this.channels.keys()]) {
+      if (!wanted.has(peerId)) await this._removeChannel(peerId);
+    }
+
+    for (const [peerId, producerId] of wanted) {
+      const ch = this.channels.get(peerId);
+      if (ch && ch.producerId === producerId && ch.consumer && !ch.consumer.closed) continue;
+      // #region agent log
+      fetch('http://127.0.0.1:7889/ingest/74bb6a3c-cb3c-453b-8553-a25acb2255a4', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2b48e6' },
+        body: JSON.stringify({
+          sessionId: '2b48e6',
+          hypothesisId: 'E',
+          location: 'host-audio-monitor.js:syncFromSources',
+          message: 'add/replace audio channel',
+          data: {
+            peerId: String(peerId).slice(0, 8),
+            producerId: String(producerId).slice(0, 8),
+            hadChannel: !!ch,
+            sameProducer: ch?.producerId === producerId
+          },
+          timestamp: Date.now()
+        })
+      }).catch(() => {});
+      // #endregion
+      await this._addChannel(peerId, producerId);
+    }
+
+    if (this.channels.size) this._startLevelsLoop();
+    else this._stopLevelsLoop();
+
+    this._refreshDirectOutput();
+    await this.outputEl?.play?.().catch(() => {});
+  }
+
+  async syncClients(clients, { excludePeerId = null } = {}) {
+    const sources = (clients || [])
+      .filter((c) => c.hasAudio && c.producerIds?.audio)
+      .filter((c) => !excludePeerId || String(c.id) !== String(excludePeerId))
+      .map((c) => ({
+        peerId: c.id,
+        producerId: c.producerIds.audio
+      }));
+    return this.syncFromSources(sources);
+  }
+
+  async _addChannel(peerId, producerId, attempt = 0) {
+    const key = String(peerId);
+    await this._removeChannel(key);
+    try {
+      const consumer = await this.media.consumeAuxiliaryAudio(key, producerId);
+      let track = consumer.track;
+      if (!track) return;
+
+      track.enabled = true;
+      await this.media._resumeRemoteConsumer?.(consumer);
+      if (consumer.paused) await consumer.resume();
+
+      try {
+        track = await waitForPlayingTrack(track);
+      } catch (err) {
+        console.warn('[HostAudioMonitor] aguardando track', key, err?.message || err);
+      }
+
+      const ch = {
+        peerId: key,
+        producerId,
+        consumer,
+        smoothedLevel: 0,
+        rawLevel: 0,
+        stopMeter: null,
+        sourceNode: null,
+        highpassNode: null,
+        peakingNode: null,
+        compressorNode: null,
+        gainNode: null,
+        gateInterval: null
+      };
+      this.channels.set(key, ch);
+
+      const wireMeter = () => this._startChannelMeter(ch);
+      wireMeter();
+      track.addEventListener('unmute', wireMeter, { once: false });
+      track.addEventListener('ended', () => ch.stopMeter?.(), { once: true });
+
+      this._refreshDirectOutput();
+    } catch (err) {
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+        return this._addChannel(peerId, producerId, attempt + 1);
+      }
+      console.warn('[HostAudioMonitor] falha ao consumir áudio', key, err?.message || err);
+      this.opts.onConsumeError?.(key, err);
+    }
+  }
+
+  async _removeChannel(peerId) {
+    const key = String(peerId);
+    const ch = this.channels.get(key);
+    if (!ch) return;
+    ch.stopMeter?.();
+    this._clearChannelDsp(ch);
+
+    await this.media?.closeAuxiliaryAudio(key);
+    this.channels.delete(key);
+  }
+
+  async dispose() {
+    this._stopLevelsLoop();
+    for (const peerId of [...this.channels.keys()]) {
+      await this._removeChannel(peerId);
+    }
+    if (this.outputEl) this.outputEl.srcObject = null;
+    this.outputEl = null;
+    this._outputStream = null;
+    if (this.ctx) {
+      await this.ctx.close().catch(() => {});
+      this.ctx = null;
+    }
+    this.dest = null;
+    for (const t of this.stream.getTracks()) {
+      this.stream.removeTrack(t);
+    }
+  }
+}

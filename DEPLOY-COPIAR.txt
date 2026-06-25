@@ -1,0 +1,33 @@
+DEPLOY SEM NPM NO SERVIDOR
+==========================
+
+NO PC DE DESENVOLVIMENTO (com internet):
+  1. Duplo clique: preparar-deploy.bat
+  2. Aguarde terminar (npm install + build + certificado)
+  3. Sera criada a pasta: pacote-servidor\
+
+NO SERVIDOR cgrafsysvm:
+  1. Instale apenas Node.js 18 LTS (nao precisa npm install nem Visual Studio)
+  2. Copie TODO o conteudo de pacote-servidor\ para:
+       C:\Sistemas CGraf\Screen Share
+     (substitua os arquivos antigos)
+  3. Execute: verificar-producao.bat
+  4. Execute: start-producao.bat
+  5. Firewall: TCP 3443, UDP 40000-40100
+
+OBRIGATORIO na copia:
+  - node_modules\  (pasta inteira, inclui mediasoup-worker.exe)
+  - public\host\app.bundle.js
+  - public\client\app.bundle.js
+  - certs\
+  - server\
+  - config\
+
+NAO copiar do PC dev (opcional):
+  - src\
+  - web_data\
+  - pacote-servidor\ (e a saida, nao a origem)
+  - .git\
+
+Se mediasoup-worker.exe faltar, o servidor NAO sobe.
+Rode preparar-deploy.bat de novo no PC de desenvolvimento.

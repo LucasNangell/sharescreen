@@ -1,0 +1,8 @@
+node_modules/
+_dev_recordings/
+data/
+pacote-servidor/
+certs/server.key
+*.log
+.DS_Store
+Thumbs.db

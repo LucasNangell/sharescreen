@@ -1,0 +1,54 @@
+{
+  "users": [
+    {
+      "ip": "10.120.1.122",
+      "computer_name": "DC-382530",
+      "user": "Felipe"
+    },
+    {
+      "ip": "10.120.1.120",
+      "computer_name": "DC-382539",
+      "user": "Lucas"
+    },
+    {
+      "ip": "10.120.1.117",
+      "computer_name": "DC-382532",
+      "user": "Ivonaldo"
+    },
+    {
+      "ip": "10.120.1.7",
+      "computer_name": "DC-382432",
+      "user": "Pedro"
+    },
+    {
+      "ip": "10.120.1.124",
+      "computer_name": "DC-382536",
+      "user": "Luis"
+    },
+    {
+      "ip": "10.120.1.132",
+      "computer_name": "DC-382439",
+      "user": "Everton"
+    },
+    {
+      "ip": "10.120.1.12",
+      "computer_name": "DC-382437",
+      "user": "J Lucas"
+    },
+    {
+      "ip": "10.120.1.3",
+      "computer_name": "DC-386808",
+      "user": "Bas\u00edlio"
+    },
+    {
+      "ip": "10.120.1.4",
+      "computer_name": "DC-394780",
+      "user": "Juan"
+    },
+    {
+      "ip": "10.120.1.6",
+      "computer_name": "DC-382438",
+      "user": "Calixto"
+    }
+  ]
+}

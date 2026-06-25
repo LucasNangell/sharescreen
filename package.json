@@ -1,0 +1,33 @@
+{
+  "name": "sharescreen-lan",
+  "version": "1.0.0",
+  "description": "Compartilhamento de tela em rede local com SFU mediasoup",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/copy-mediasoup-client.js",
+    "build": "node scripts/build-client.js",
+    "build:prod": "node scripts/build-client.js --prod",
+    "check": "node scripts/check-dev.js",
+    "test:smoke": "node scripts/smoke-test.js",
+    "cert": "node scripts/generate-cert.js",
+    "cert:prod": "node scripts/generate-cert.js",
+    "start": "node server/index.js",
+    "start:prod": "node server/index.js",
+    "dev": "node server/index.js --dev"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "express": "^4.21.2",
+    "mediasoup": "^3.14.11",
+    "mediasoup-client": "^3.7.17",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "selfsigned": "^2.4.1"
+  }
+}
