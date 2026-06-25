@@ -153,9 +153,51 @@
   
   
   
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-25T21-19-59-dmvw3z" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-06-25T21-19-59-dmvw3z" />
-  <link rel="stylesheet" href="style.css?v=2026-06-25T21-19-59-dmvw3z" />
+  
+  
+  
+  
+  
+  
+  
+  <script>(function(){
+var BUILD_ID="2026-06-25T23-20-06-5kigju";
+var KEY='sharescreen_build_id';
+var RELOAD_KEY='sharescreen_cache_reload';
+try{
+  if(sessionStorage.getItem(RELOAD_KEY)===BUILD_ID){sessionStorage.removeItem(RELOAD_KEY);return;}
+  var stored=localStorage.getItem(KEY);
+  if(stored&&stored!==BUILD_ID){
+    for(var i=localStorage.length-1;i>=0;i--){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf('sharescreen')===0)localStorage.removeItem(k);
+    }
+    sessionStorage.clear();
+    document.cookie.split(';').forEach(function(c){
+      var n=(c.split('=')[0]||'').trim();
+      if(!n)return;
+      document.cookie=n+'=; Max-Age=0; path=/';
+      document.cookie=n+'=; Max-Age=0; path=/; domain='+location.hostname;
+    });
+    if(window.caches&&caches.keys){
+      caches.keys().then(function(ns){return Promise.all(ns.map(function(n){return caches.delete(n);}));}).catch(function(){});
+    }
+    if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations){
+      navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});
+    }
+    localStorage.setItem(KEY,BUILD_ID);
+    sessionStorage.setItem(RELOAD_KEY,BUILD_ID);
+    var u=new URL(location.href);
+    u.searchParams.set('_sv',BUILD_ID);
+    location.replace(u.toString());
+    return;
+  }
+  if(!stored)localStorage.setItem(KEY,BUILD_ID);
+}catch(e){}
+})();</script>
+<link rel="stylesheet" href="/shared/theme.css?v=2026-06-25T23-20-06-5kigju" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-06-25T23-20-06-5kigju" />
+  <link rel="stylesheet" href="style.css?v=2026-06-25T23-20-06-5kigju" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -630,6 +672,6 @@
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-06-25T21-19-59-dmvw3z"></script>
+  <script src="app.bundle.js?v=2026-06-25T23-20-06-5kigju"></script>
 </body>
 </html>

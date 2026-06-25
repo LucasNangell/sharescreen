@@ -1,6 +1,6 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
 import { MediaClient } from '../shared/media-client.js';
-import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey } from '../shared/transmission.js';
+import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded } from '../shared/transmission.js';
 import { loadCapturePrefs, saveCapturePrefs, setupMicrophonePicker, installAudioUnlock } from '../shared/audio-manager.js';
 import { RecordingClient, RecordingState } from '../shared/recording-client.js';
 import { ErrorManager, assertSecureContext } from '../shared/error-manager.js';
@@ -135,6 +135,7 @@ let hostMicAutoplayNeeded = false;
 let lastAudioSources = [];
 let pendingRoomSnapshot = null;
 let lastAppliedSnapshotKey = '';
+let lastAppliedActiveVideoKey = '';
 let lastActiveTransmission = null;
 let pendingHostAudioSync = null;
 let localHostVuStop = null;
@@ -202,23 +203,7 @@ let hostTabBlocked = false;
 let hostLockTimer = null;
 let hostSessionJoined = false;
 
-function debugHostLog(hypothesisId, message, data = {}) {
-  // #region agent log
-  fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6121dc' },
-    body: JSON.stringify({
-      sessionId: '6121dc',
-      hypothesisId,
-      location: 'host/app.js',
-      message,
-      data: { tabId: HOST_TAB_ID, ...data },
-      timestamp: Date.now(),
-      runId: 'host-fix-v1'
-    })
-  }).catch(() => {});
-  // #endregion
-}
+function debugHostLog(_hypothesisId, _message, _data = {}) {}
 
 function readHostLock() {
   try {
@@ -976,14 +961,14 @@ async function runTransmission(raw, gen = transmissionGeneration) {
 
   try {
     if (!tx.producerId) {
-      await media?.detachMedia({ videoEl: els.preview, audioEl: null });
+      await media?.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true });
       hideLtOverlay();
       if (els.controlesAudio) els.controlesAudio.hidden = !hasAnyClientAudio();
       ui.set({ hasPreview: false, isPaused: tx.paused });
       updatePreviewOverlays();
       setStatus('Nenhuma transmissao ativa');
     } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
-      await media?.detachMedia({ videoEl: els.preview, audioEl: null });
+      await media?.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true });
       applyLtOverlayForTransmission(tx);
       ui.set({ hasPreview: true, isSharing: true });
       updatePreviewOverlays();
@@ -991,10 +976,26 @@ async function runTransmission(raw, gen = transmissionGeneration) {
     } else {
       if (gen !== transmissionGeneration) return;
 
-      await media.consumeRemoteMedia(tx.producerIds, {
-        videoEl: els.preview,
-        audioEl: null
+      const ownProducerId = media.producers?.video?.id || null;
+      const currentProducerId = media.currentActiveVideoProducerId || media.remoteConsumers?.video?.producerId;
+      const needsConsume = remoteVideoConsumeNeeded(tx, {
+        currentProducerId,
+        isSelfSelected: false,
+        hasVideoElement: !!els.preview?.srcObject,
+        consumerClosed: !media?.remoteConsumers?.video || media.remoteConsumers.video.closed
       });
+
+      if (needsConsume) {
+        debugHostLog('H2', '[CLIENT_CONSUME] host consumindo video ativo', {
+          producerVideo: tx.producerIds?.video?.slice(0, 8) || null,
+          previousProducer: currentProducerId?.slice(0, 8) || null
+        });
+        await media.consumeRemoteMedia(tx.producerIds, {
+          videoEl: els.preview,
+          audioEl: null,
+          ownProducerIds: { video: ownProducerId }
+        });
+      }
 
       els.previewError.hidden = true;
       if (els.controlesAudio) {
@@ -1034,6 +1035,22 @@ function applyTransmission(raw) {
   queueTransmission(raw);
 }
 
+function shouldHostApplyActiveVideo(tx) {
+  const activeKey = activeVideoTransmissionKey(tx);
+  const currentProducerId = media?.currentActiveVideoProducerId || media?.remoteConsumers?.video?.producerId || null;
+  const isOwn = String(normalizeTransmission(tx).selectedPeerId) === String(hostPeerId);
+  const needsConsume = remoteVideoConsumeNeeded(tx, {
+    currentProducerId,
+    isSelfSelected: isOwn,
+    hasVideoElement: !!els.preview?.srcObject,
+    consumerClosed: !media?.remoteConsumers?.video || media.remoteConsumers.video.closed
+  });
+  const keyChanged = activeKey !== lastAppliedActiveVideoKey;
+  if (!hasActiveVideo(tx)) return keyChanged || !!currentProducerId;
+  if (isOwn) return keyChanged || !!currentProducerId;
+  return keyChanged || needsConsume;
+}
+
 async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   if (!snapshot) return;
 
@@ -1048,6 +1065,13 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   }
 
   const mediaKey = roomSnapshotMediaKey(snapshot);
+  const activeKey = activeVideoTransmissionKey(parsed.transmission);
+
+  debugHostLog('H1', '[ROOM_STATE] snapshot recebido', {
+    activeKey,
+    producerVideo: parsed.transmission?.producerIds?.video?.slice(0, 8) || null,
+    clients: (snapshot.clients || parsed.peers || []).length
+  });
 
   if (!hostReady || joinInProgress) {
     pendingRoomSnapshot = snapshot;
@@ -1082,8 +1106,10 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
 
   renderLista();
 
-  if (!force && mediaKey && mediaKey === lastAppliedSnapshotKey) return;
+  const applyVideo = force || shouldHostApplyActiveVideo(parsed.transmission);
+  if (!applyVideo && !force && mediaKey && mediaKey === lastAppliedSnapshotKey) return;
   lastAppliedSnapshotKey = mediaKey;
+  lastAppliedActiveVideoKey = activeKey;
   applyTransmission(parsed.transmission);
   await syncHostAudioMonitor(parsed.audioSources).catch((e) =>
     errors.handle(e, 'audio-monitor')
@@ -1236,6 +1262,17 @@ function handleMessage(msg) {
     if (me) {
       isCoHostInstance = !!me.isCoHost;
     }
+    const videoProducers = (estado.clients || [])
+      .filter((c) => c.hasVideo || c.isProducing || c.producerIds?.video)
+      .map((c) => ({
+        peerId: c.id?.slice(0, 8),
+        producerId: c.producerIds?.video?.slice(0, 8) || c.producerId?.slice(0, 8) || null,
+        name: c.displayName
+      }));
+    debugHostLog('H3', '[HOST_LIST] estado recebido', {
+      totalClients: estado.clients.length,
+      videoProducers
+    });
     renderLista();
     syncHostAudioMonitor().catch((e) => errors.handle(e, 'audio-monitor'));
   }
@@ -1266,8 +1303,10 @@ function handleMessage(msg) {
     const wasVideoConsumer = media?.remoteConsumers?.video?.id === consumerId;
     if (wasVideoConsumer) {
       media.remoteConsumers.video = null;
+      media.currentActiveVideoProducerId = null;
       if (els.preview) els.preview.srcObject = null;
       lastAppliedSnapshotKey = '';
+      lastAppliedActiveVideoKey = '';
       if (lastActiveTransmission && hasActiveVideo(lastActiveTransmission)) {
         applyTransmission(lastActiveTransmission);
       } else {
@@ -1282,12 +1321,19 @@ function handleMessage(msg) {
     );
   }
   if (msg.type === 'transmissaoAtiva') {
-    const key = roomSnapshotMediaKey({
+    const tx = normalizeTransmission(msg.payload);
+    debugHostLog('H2', '[ACTIVE_VIDEO] evento de transmissao ativa recebido no host', {
+      selectedPeerId: tx.selectedPeerId?.slice(0, 8) || null,
+      producerVideo: tx.producerIds?.video?.slice(0, 8) || null,
+      activeKey: activeVideoTransmissionKey(tx),
+      lastAppliedActiveVideoKey
+    });
+    if (!shouldHostApplyActiveVideo(msg.payload)) return;
+    lastAppliedActiveVideoKey = activeVideoTransmissionKey(tx);
+    lastAppliedSnapshotKey = roomSnapshotMediaKey({
       transmission: msg.payload,
       audioSources: lastAudioSources
     });
-    if (key === lastAppliedSnapshotKey) return;
-    lastAppliedSnapshotKey = key;
     applyTransmission(msg.payload);
     return;
   }
@@ -1317,11 +1363,6 @@ function canHostCommand() {
     signaling?.connected &&
     signaling?.authenticated &&
     !joinInProgress;
-  // #region agent log
-  if (isCoHostInstance && !ok) {
-    fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a21d40'},body:JSON.stringify({sessionId:'a21d40',location:'host/app.js:canHostCommand',message:'canHostCommand blocked',data:{hostPeerId:!!hostPeerId,hostReady,connected:!!signaling?.connected,authenticated:!!signaling?.authenticated,joinInProgress},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-  }
-  // #endregion
   return ok;
 }
 
@@ -1351,6 +1392,7 @@ async function joinHost({ autoShare = true } = {}) {
   joinInProgress = true;
   hostPeerId = null;
   lastAppliedSnapshotKey = '';
+  lastAppliedActiveVideoKey = '';
   pendingRoomSnapshot = null;
   signaling?.markAuthenticated(false);
   updateHostMicUi();
@@ -2227,10 +2269,6 @@ export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
   hostPeerId = clientPeerId;
   isCoHostInstance = true;
   hostReady = true;
-
-  // #region agent log
-  fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a21d40'},body:JSON.stringify({sessionId:'a21d40',location:'host/app.js:initCoHost',message:'co-host init',data:{clientPeerId:!!clientPeerId,signalingPeerId:!!clientSignaling?.peerId,authenticated:!!clientSignaling?.authenticated,connected:!!clientSignaling?.connected,hasPreviewEmpty:!!els.previewEmpty,hasPlayPause:!!els.btnPlayPause},timestamp:Date.now(),hypothesisId:'A,B'})}).catch(()=>{});
-  // #endregion
 
   if (els.sidebar) els.sidebar.hidden = false;
   els.appMain?.classList.add('sidebar-open');

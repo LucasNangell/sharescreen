@@ -27,6 +27,8 @@ export class MediaClient {
     this._creatingTransports = new Map();
     this.producers = { video: null, microphone: null, system: null, mixed: null };
     this.remoteConsumers = { video: null, audio: null };
+    this.videoConsumersByProducerId = new Map();
+    this.currentActiveVideoProducerId = null;
     this.auxAudioConsumers = new Map();
     this.consumeGeneration = 0;
     this.localScreenStream = null;
@@ -141,26 +143,6 @@ export class MediaClient {
     });
     const payload = await createdPromise;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '67508d' },
-      body: JSON.stringify({
-        sessionId: '67508d',
-        hypothesisId: 'A',
-        location: 'media-client.js:createTransport',
-        message: 'transporteCriado',
-        data: {
-          direction,
-          recvTag,
-          candidateIps: (payload.iceCandidates || []).map((c) => c.ip)
-        },
-        timestamp: Date.now(),
-        runId: 'pre-fix'
-      })
-    }).catch(() => {});
-    // #endregion
-
     const transportOptions = {
       id: payload.id,
       iceParameters: payload.iceParameters,
@@ -201,21 +183,6 @@ export class MediaClient {
     transport.on('connectionstatechange', (state) => {
       const level = state === 'failed' ? 'error' : 'info';
       let msg = `Transport ${direction}${recvTag !== 'default' ? `/${recvTag}` : ''}: ${state}`;
-      // #region agent log
-      fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '67508d' },
-        body: JSON.stringify({
-          sessionId: '67508d',
-          hypothesisId: 'A',
-          location: 'media-client.js:connectionstatechange',
-          message: 'transport state',
-          data: { direction, recvTag, state },
-          timestamp: Date.now(),
-          runId: 'pre-fix'
-        })
-      }).catch(() => {});
-      // #endregion
       if (state === 'failed') {
         const ice =
           transport.iceCandidates?.map((c) => c.ip).filter(Boolean).join(', ') ||
@@ -288,20 +255,6 @@ export class MediaClient {
       return existing;
     }
     if (existing?.closed) {
-      // #region agent log
-      fetch('http://127.0.0.1:7889/ingest/74bb6a3c-cb3c-453b-8553-a25acb2255a4', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2b48e6' },
-        body: JSON.stringify({
-          sessionId: '2b48e6',
-          hypothesisId: 'C',
-          location: 'media-client.js:ensureRecvTransport',
-          message: 'recreating closed recv transport',
-          data: { tag },
-          timestamp: Date.now()
-        })
-      }).catch(() => {});
-      // #endregion
       this.recvTransports.delete(tag);
       if (tag === 'default') this.recvTransport = null;
     }
@@ -759,11 +712,38 @@ export class MediaClient {
     return consumer;
   }
 
+  async closeActiveVideoConsumer({ videoEl = null, notifyServer = true } = {}) {
+    return this._runMediaOp(async () => {
+      const currentVideo = this.remoteConsumers.video;
+      if (!currentVideo || currentVideo.closed) {
+        this.remoteConsumers.video = null;
+        this.currentActiveVideoProducerId = null;
+        if (videoEl) videoEl.srcObject = null;
+        return;
+      }
+      const producerId = currentVideo.producerId;
+      currentVideo.close();
+      if (notifyServer && this.signaling.connected) {
+        try {
+          this.signaling.send('fecharConsumer', { consumerId: currentVideo.id });
+        } catch (_) {}
+      }
+      this.remoteConsumers.video = null;
+      if (producerId) this.videoConsumersByProducerId.delete(producerId);
+      this.currentActiveVideoProducerId = null;
+      if (videoEl) videoEl.srcObject = null;
+    });
+  }
+
   async closeRemoteConsumers() {
     return this._runMediaOp(async () => {
       for (const slot of ['video', 'audio']) {
         const consumer = this.remoteConsumers[slot];
         if (!consumer || consumer.closed) continue;
+        if (slot === 'video') {
+          if (consumer.producerId) this.videoConsumersByProducerId.delete(consumer.producerId);
+          this.currentActiveVideoProducerId = null;
+        }
         consumer.close();
         try {
           if (this.signaling.connected) {
@@ -859,10 +839,39 @@ export class MediaClient {
     });
   }
 
-  async consumeRemoteMedia(producerIds, { videoEl = null, audioEl = null } = {}) {
+  async consumeRemoteMedia(
+    producerIds,
+    { videoEl = null, audioEl = null, ownProducerIds = null } = {}
+  ) {
     return this._runMediaOp(async () => {
       if (producerIds?.video && videoEl) {
+        const ownVideoIds = new Set(
+          [ownProducerIds?.video, this.producers.video?.id].filter(Boolean)
+        );
+        if (ownVideoIds.has(producerIds.video)) {
+          this.onLog('Ignorando consumo do proprio producer de video', 'warn');
+          return;
+        }
+
+        const cached = this.videoConsumersByProducerId.get(producerIds.video);
         const currentVideo = this.remoteConsumers.video;
+        if (
+          cached &&
+          !cached.closed &&
+          currentVideo?.id === cached.id &&
+          currentVideo.producerId === producerIds.video
+        ) {
+          if (cached.appStream && videoEl.srcObject !== cached.appStream) {
+            videoEl.srcObject = cached.appStream;
+            videoEl.muted = true;
+            try {
+              await videoEl.play();
+            } catch (_) {}
+          }
+          this.currentActiveVideoProducerId = producerIds.video;
+          return;
+        }
+
         if (
           currentVideo &&
           !currentVideo.closed &&
@@ -875,36 +884,34 @@ export class MediaClient {
               await videoEl.play();
             } catch (_) {}
           }
-        } else {
-          await this.ensureRecvTransport(this._videoRecvTag());
-          if (currentVideo && !currentVideo.closed) {
-            currentVideo.close();
-            try {
-              if (this.signaling.connected) {
-                this.signaling.send('fecharConsumer', { consumerId: currentVideo.id });
-              }
-            } catch (_) {}
-            this.remoteConsumers.video = null;
-          }
-          this.remoteConsumers.video = await this._consumeOne(
-            producerIds.video,
-            videoEl,
-            'video',
-            this._videoRecvTag()
-          );
+          this.currentActiveVideoProducerId = producerIds.video;
+          this.videoConsumersByProducerId.set(producerIds.video, currentVideo);
+          return;
         }
-      } else if (!producerIds?.video && this.remoteConsumers.video) {
-        const currentVideo = this.remoteConsumers.video;
+
+        await this.ensureRecvTransport(this._videoRecvTag());
         if (currentVideo && !currentVideo.closed) {
+          if (currentVideo.producerId) {
+            this.videoConsumersByProducerId.delete(currentVideo.producerId);
+          }
           currentVideo.close();
           try {
             if (this.signaling.connected) {
               this.signaling.send('fecharConsumer', { consumerId: currentVideo.id });
             }
           } catch (_) {}
+          this.remoteConsumers.video = null;
         }
-        this.remoteConsumers.video = null;
-        if (videoEl) videoEl.srcObject = null;
+        this.remoteConsumers.video = await this._consumeOne(
+          producerIds.video,
+          videoEl,
+          'video',
+          this._videoRecvTag()
+        );
+        this.videoConsumersByProducerId.set(producerIds.video, this.remoteConsumers.video);
+        this.currentActiveVideoProducerId = producerIds.video;
+      } else if (!producerIds?.video && this.remoteConsumers.video) {
+        await this.closeActiveVideoConsumer({ videoEl, notifyServer: true });
       }
 
       if (producerIds?.audio && audioEl) {

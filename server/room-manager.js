@@ -13,6 +13,26 @@ const _agentDebugLogPath = path.join(
   'debug-2b48e6.log'
 );
 
+const _sessionDebugLogPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'debug-0e898e.log'
+);
+
+function sessionDebugLog(tag, message, data = {}) {
+  const entry = {
+    sessionId: '0e898e',
+    timestamp: Date.now(),
+    location: 'room-manager.js',
+    message: `${tag} ${message}`,
+    data
+  };
+  try {
+    fs.appendFileSync(_sessionDebugLogPath, `${JSON.stringify(entry)}\n`);
+  } catch (_) {}
+  logger.info(`${tag} ${message}`, data);
+}
+
 export function getAgentDebugLogPath() {
   return _agentDebugLogPath;
 }
@@ -432,7 +452,16 @@ export class RoomManager {
 
   sendRoomSnapshot(peer) {
     if (!peer || !this.isPeerSocketOpen(peer)) return;
-    peer.send({ type: 'estadoSala', payload: this.buildRoomSnapshot(peer) });
+    const snapshot = this.buildRoomSnapshot(peer);
+    sessionDebugLog('[ROOM_STATE]', 'snapshot enviado', {
+      peerId: peer.id.slice(0, 8),
+      role: peer.role,
+      selectedPeerId: snapshot.transmission?.selectedPeerId?.slice(0, 8) || null,
+      activeProducerId: snapshot.transmission?.producerIds?.video?.slice(0, 8) || null,
+      videoProducers: (snapshot.videoProducers || []).length,
+      peers: (snapshot.peers || []).length
+    });
+    peer.send({ type: 'estadoSala', payload: snapshot });
   }
 
   addPeer(ws, role, displayName, agentHostname = '', { isExternal = false } = {}) {
@@ -492,20 +521,17 @@ export class RoomManager {
     }
 
     if (audioSourcesChanged) {
-      // #region agent log
-      agentDebugLog({
-        hypothesisId: 'B',
-        location: 'room-manager.js:addPeer',
-        message: 'broadcastAudioSources after peer replacement',
-        data: { role, sources: this.getAudioSources().map((s) => s.peerId) }
-      });
-      // #endregion
       this.broadcastAudioSources();
     }
 
     const peer = new Peer(ws, role, displayName, agentHostname, { isExternal });
     peer.ws = ws;
     this.peers.set(peer.id, peer);
+    sessionDebugLog('[ROOM_STATE]', 'peer entrou', {
+      peerId: peer.id.slice(0, 8),
+      role,
+      name: peer.displayName
+    });
     logger.info('Peer conectado', { peerId: peer.id, role, name: peer.displayName });
     this.notifyHostState();
     return peer;
@@ -722,22 +748,15 @@ export class RoomManager {
 
   broadcastActiveProducer() {
     const payload = this.buildTransmissionPayload();
-    // #region agent log
-    agentDebugLog({
-      hypothesisId: 'G',
-      location: 'room-manager.js:broadcastActiveProducer',
-      message: 'transmissaoAtiva broadcast',
-      data: {
-        selectedPeerId: payload.selectedPeerId?.slice(0, 8) || null,
-        producerVideo: payload.producerIds?.video?.slice(0, 8) || null,
-        peerName: payload.peerName || null,
-        paused: payload.paused,
-        recipients: [...this.peers.values()]
-          .filter((p) => this.isPeerSocketOpen(p))
-          .map((p) => ({ id: p.id.slice(0, 8), role: p.role, name: p.displayName }))
-      }
+    sessionDebugLog('[ACTIVE_VIDEO]', 'transmissao ativa alterada', {
+      selectedPeerId: payload.selectedPeerId?.slice(0, 8) || null,
+      producerVideo: payload.producerIds?.video?.slice(0, 8) || null,
+      peerName: payload.peerName || null,
+      paused: payload.paused,
+      recipients: [...this.peers.values()]
+        .filter((p) => this.isPeerSocketOpen(p))
+        .map((p) => ({ id: p.id.slice(0, 8), role: p.role }))
     });
-    // #endregion
     for (const peer of this.peers.values()) {
       peer.send({ type: 'transmissaoAtiva', payload });
     }
@@ -797,20 +816,6 @@ export class RoomManager {
 
   broadcastAudioSources() {
     const payload = { sources: this.getAudioSources() };
-    // #region agent log
-    agentDebugLog({
-      hypothesisId: 'B',
-      location: 'room-manager.js:broadcastAudioSources',
-      message: 'fontesAudio broadcast',
-      data: {
-        count: payload.sources.length,
-        sources: payload.sources.map((s) => ({
-          peerId: s.peerId?.slice(0, 8),
-          producerId: s.producerId?.slice(0, 8)
-        }))
-      }
-    });
-    // #endregion
     for (const peer of this.peers.values()) {
       peer.send({ type: 'fontesAudio', payload });
     }
@@ -912,6 +917,11 @@ export class RoomManager {
     peer.producers[slot] = producer;
     if (slot === 'video') {
       peer.status = 'transmitindo';
+      sessionDebugLog('[VIDEO_PRODUCER]', 'producer de video criado', {
+        peerId: peer.id.slice(0, 8),
+        producerId: producer.id.slice(0, 8),
+        name: peer.displayName
+      });
     }
     peer.replacingProducers.delete(slot);
 
@@ -925,6 +935,11 @@ export class RoomManager {
         this.displayControllerIds.delete(peer.id);
       }
       if (slot === 'video' && !peer.hasVideoProducer()) {
+        sessionDebugLog('[VIDEO_PRODUCER]', 'producer ativo fechado', {
+          peerId: peer.id.slice(0, 8),
+          producerId: producer.id.slice(0, 8),
+          wasSelected: this.selectedPeerId === peer.id
+        });
         this._onSelectedVideoLost(peer);
       }
       if (AUDIO_PRODUCER_SLOTS.includes(slot)) {
@@ -948,6 +963,13 @@ export class RoomManager {
     });
 
     this.notifyHostState();
+    if (slot === 'video') {
+      sessionDebugLog('[VIDEO_PRODUCER]', 'producer de video anunciado ao host', {
+        peerId: peer.id.slice(0, 8),
+        producerId: producer.id.slice(0, 8),
+        hosts: this.getHostAndCoHostPeers().map((h) => h.id.slice(0, 8))
+      });
+    }
     if (AUDIO_PRODUCER_SLOTS.includes(slot)) {
       logger.info('[audio] producer criado', {
         peerId: peer.id.slice(0, 8),
@@ -975,24 +997,14 @@ export class RoomManager {
   }
 
   async consume(peer, { producerId, rtpCapabilities, consumerTag = 'default' }) {
+    const owner = this._findProducerOwner(producerId);
+    if (owner && owner.id === peer.id) {
+      throw new Error('Nao e possivel consumir o proprio producer');
+    }
     const router = getRouter();
     if (!router.canConsume({ producerId, rtpCapabilities })) {
       throw new Error('NÃ£o Ã© possÃ­vel consumir este producer com as capacidades atuais');
     }
-    // #region agent log
-    if (peer.role === 'client') {
-      agentDebugLog({
-        hypothesisId: 'G',
-        location: 'room-manager.js:consume',
-        message: 'client consume video',
-        data: {
-          peerId: peer.id.slice(0, 8),
-          producerId: producerId.slice(0, 8),
-          consumerTag
-        }
-      });
-    }
-    // #endregion
     const transport = peer.recvTransports.get(consumerTag) || peer.recvTransport;
     if (!transport) {
       throw new Error('Transport de recepÃ§Ã£o nÃ£o criado');

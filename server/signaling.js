@@ -1,4 +1,7 @@
 import { WebSocketServer } from 'ws';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { room, logClientTrace } from './room-manager.js';
 import { getRtpCapabilities } from './mediasoup-manager.js';
 import { logger } from './logger.js';
@@ -85,7 +88,25 @@ export function attachSignaling(server) {
 }
 
 function sendPeerJoinSnapshot(enviar, peer = null) {
-  enviar({ type: 'estadoSala', payload: room.buildRoomSnapshot(peer) });
+  const snapshot = room.buildRoomSnapshot(peer);
+  try {
+    const logPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'debug-0e898e.log');
+    fs.appendFileSync(
+      logPath,
+      `${JSON.stringify({
+        sessionId: '0e898e',
+        timestamp: Date.now(),
+        location: 'signaling.js:sendPeerJoinSnapshot',
+        message: '[ROOM_STATE] snapshot enviado',
+        data: {
+          peerId: peer?.id?.slice(0, 8) || null,
+          role: peer?.role || null,
+          activeProducerId: snapshot.transmission?.producerIds?.video?.slice(0, 8) || null
+        }
+      })}\n`
+    );
+  } catch (_) {}
+  enviar({ type: 'estadoSala', payload: snapshot });
 }
 
 async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
@@ -226,7 +247,7 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
     case 'fecharConsumer': {
       if (!peer) throw new Error('Não autenticado');
       await room.closeConsumer(peer, msg.payload.consumerId);
-      enviar({ type: 'consumerFechado', payload: { ok: true } });
+      enviar({ type: 'consumerFechado', payload: { ok: true, consumerId: msg.payload.consumerId } });
       break;
     }
 

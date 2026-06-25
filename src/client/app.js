@@ -1,6 +1,6 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
 import { MediaClient } from '../shared/media-client.js';
-import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey } from '../shared/transmission.js';
+import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, TransmissionSync } from '../shared/transmission.js';
 import {
   loadCapturePrefs,
   saveCapturePrefs,
@@ -100,23 +100,18 @@ let media = null;
 let peerId = null;
 let displayName = readQueryParam('nome') || localStorage.getItem(STORAGE_NAME) || '';
 let agentHostname = readQueryParam('maquina') || localStorage.getItem(STORAGE_MACHINE) || '';
-let transmissionWork = Promise.resolve();
-let transmissionGeneration = 0;
-let lastConsumedSelectionKey = '';
-let sessionStarted = false;
-let sessionReady = false;
-let viewerOnly = false;
 let pendingTransmission = null;
 let pendingAudioSources = null;
 let pendingRoomSnapshot = null;
-let lastAppliedSnapshotKey = '';
+let sessionStarted = false;
+let sessionReady = false;
+let viewerOnly = false;
 let roomAudioMonitor = null;
 let clientMicAutoplayNeeded = false;
 let syncClientAudioPromise = null;
 let syncClientAudioPending = false;
 let lastAudioSources = [];
 let deferScreenShareOnJoin = false;
-let lastActiveTransmission = null;
 let pendingPostPublishRemoteWork = null;
 let clientDisplayStream = null;
 let clientMicTrack = null;
@@ -153,17 +148,36 @@ if (readQueryParam('maquina')) localStorage.setItem(STORAGE_MACHINE, readQueryPa
 
 bindLtOverlayResize(els.previewArea);
 
-function transmissionSelectionKey(tx) {
-  const n = normalizeTransmission(tx);
-  return [
-    n.selectedPeerId || '',
-    n.producerIds?.video || '',
-    n.paused ? '1' : '0'
-  ].join(':');
+function updateClientStates(mode, _tx, opts = {}) {
+  els.stateSharing.hidden = mode !== 'sharing';
+  els.stateSelected.hidden = mode !== 'selected';
+  els.stateWatching.hidden = mode !== 'watching' || !!opts.hideWatchingBanner;
+  els.stateWaiting.hidden = mode !== 'waiting';
+  els.statePaused.hidden = mode !== 'paused';
+  if (els.stateInterrupted) els.stateInterrupted.hidden = mode !== 'interrupted';
+  if (els.stateFinalized) els.stateFinalized.hidden = mode !== 'finalized';
 }
 
+const txSync = new TransmissionSync({
+  getMedia: () => media,
+  getVideoEl: () => els.video,
+  getPeerId: () => peerId,
+  isViewerOnly: () => viewerOnly,
+  onStateChange: (mode, _tx, opts) => updateClientStates(mode, _tx, opts),
+  onStatus: (text) => setStatus(text),
+  onLtOverlay: (tx) => applyLtOverlayForTransmission(tx),
+  onAutoplayBlocked: () => onRemoteAudioAutoplayBlocked(),
+  onError: (e) => {
+    const entry = errors.handle(e, 'consume');
+    showErro(entry.friendly, entry.technical);
+  },
+  getInterruptedMessageEl: () => els.interruptedMessage,
+  getFinalizedMessageEl: () => els.finalizedMessage,
+  getWatchingLabelEl: () => els.watchingLabel
+});
+
 function updateClientStreamBadge(tx) {
-  const raw = tx ?? lastActiveTransmission;
+  const raw = tx ?? txSync.lastActiveTransmission;
   if (!raw) {
     updateStreamSourceBadge(els.streamSourceBadge, '', false);
     return;
@@ -413,12 +427,9 @@ function resetClientPageState() {
   pendingTransmission = null;
   pendingAudioSources = null;
   pendingRoomSnapshot = null;
-  lastAppliedSnapshotKey = '';
   deferScreenShareOnJoin = false;
-  lastActiveTransmission = null;
   pendingPostPublishRemoteWork = null;
-  lastConsumedSelectionKey = '';
-  transmissionGeneration = 0;
+  txSync.reset();
 }
 
 function releaseClientMicTrack() {
@@ -458,6 +469,7 @@ async function teardownClientSession({ keepDisplayStream = false, keepMicTrack =
   sessionStarted = false;
   sessionReady = false;
   joinInFlight = false;
+  txSync.reset();
   if (!keepDisplayStream) {
     clientDisplayStream?.getTracks?.().forEach((t) => t.stop());
     clientDisplayStream = null;
@@ -616,7 +628,7 @@ async function confirmAudioAndTransmit() {
     updateClientMicUi();
     await attachVuMeterIfNeeded();
     onboardStep = 'identify';
-    const activeTx = lastActiveTransmission;
+    const activeTx = txSync.lastActiveTransmission;
     const watchingRemote =
       activeTx &&
       hasActiveVideo(activeTx) &&
@@ -692,16 +704,6 @@ function getCapturePrefsFromUi() {
     microphone: els.chkMicrophone ? els.chkMicrophone.checked : false,
     microphoneDeviceId: els.micSelect ? els.micSelect.value : ''
   };
-}
-
-function updateClientStates(mode) {
-  els.stateSharing.hidden = mode !== 'sharing';
-  els.stateSelected.hidden = mode !== 'selected';
-  els.stateWatching.hidden = mode !== 'watching';
-  els.stateWaiting.hidden = mode !== 'waiting';
-  els.statePaused.hidden = mode !== 'paused';
-  if (els.stateInterrupted) els.stateInterrupted.hidden = mode !== 'interrupted';
-  if (els.stateFinalized) els.stateFinalized.hidden = mode !== 'finalized';
 }
 
 function configureExternalViewerUi() {
@@ -918,15 +920,14 @@ function reportClientTrace(message, data = {}) {
 }
 
 function updateClientStateAfterPublish() {
-  const tx = lastActiveTransmission;
+  const tx = txSync.lastActiveTransmission;
   if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) === String(peerId)) {
     updateClientStates('selected');
     setStatus('Voce esta selecionado - transmitindo para todos');
     return;
   }
   if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) !== String(peerId)) {
-    updateClientStates('watching');
-    if (els.stateWatching) els.stateWatching.hidden = true;
+    updateClientStates('watching', tx, { hideWatchingBanner: true });
     return;
   }
   updateClientStates('sharing');
@@ -936,7 +937,7 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   if (!snapshot) return;
 
   const parsed = parseRoomSnapshot(snapshot);
-  
+
   if (parsed.mutedPeerIds) {
     mutedClients.clear();
     for (const id of parsed.mutedPeerIds) {
@@ -945,16 +946,18 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     applyClientAudioMute();
   }
 
-  const mediaKey = roomSnapshotMediaKey(snapshot);
-
   if (parsed.displayControl) {
     applyDisplayControlUpdate(parsed.displayControl);
   }
 
-  lastActiveTransmission = parsed.transmission;
   if (parsed.audioSources?.length) {
     lastAudioSources = parsed.audioSources;
   }
+
+  debugClientLog('H1', '[ROOM_STATE] snapshot recebido', {
+    producerVideo: parsed.transmission?.producerIds?.video?.slice(0, 8) || null,
+    selectedPeerId: parsed.transmission?.selectedPeerId?.slice(0, 8) || null
+  });
 
   if (!sessionReady) {
     pendingRoomSnapshot = snapshot;
@@ -963,19 +966,14 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     return;
   }
 
-  if (!force && mediaKey && mediaKey === lastAppliedSnapshotKey) {
-    return;
-  }
-  lastAppliedSnapshotKey = mediaKey;
-
-  await applyTransmission(parsed.transmission);
+  await txSync.apply(parsed.transmission, { force });
   await syncClientAudioMonitor(parsed.audioSources).catch((e) =>
     errors.handle(e, 'audio-sync')
   );
 }
 
 async function reconcileRemoteMediaState() {
-  lastConsumedSelectionKey = '';
+  txSync.clearAppliedState();
   if (pendingRoomSnapshot) {
     const snap = pendingRoomSnapshot;
     pendingRoomSnapshot = null;
@@ -990,10 +988,9 @@ async function reconcileRemoteMediaState() {
     await applyRoomSnapshot(snap, { force: true });
     return;
   }
-  const tx = pendingTransmission || lastActiveTransmission;
+  const tx = pendingTransmission || txSync.lastActiveTransmission;
   if (tx) {
-    lastActiveTransmission = normalizeTransmission(tx);
-    await applyTransmission(tx);
+    await txSync.apply(tx, { force: true });
   }
   const audio = pendingAudioSources?.length ? pendingAudioSources : lastAudioSources;
   if (audio?.length) {
@@ -1001,20 +998,6 @@ async function reconcileRemoteMediaState() {
   }
   pendingTransmission = null;
   pendingAudioSources = null;
-}
-
-async function applyPendingRemoteJoinState(tx, audio) {
-  if (tx) {
-    await applyTransmission(tx);
-    debugClientLog('H2', 'applyPendingRemoteJoinState tx', {
-      selectedPeerId: tx?.selectedPeerId,
-      peerId,
-      hasVideo: !!(tx?.producerIds?.video || tx?.producerId)
-    });
-  }
-  if (audio?.length) {
-    await syncClientAudioMonitor(audio).catch((e) => errors.handle(e, 'audio-sync'));
-  }
 }
 
 async function flushPostPublishRemoteWork() {
@@ -1038,7 +1021,7 @@ async function schedulePostJoinWork({ skipRemoteMedia = false } = {}) {
 
   debugClientLog('H2', 'schedulePostJoinWork', {
     skipRemoteMedia,
-    hasTx: !!(pendingTransmission || lastActiveTransmission),
+    hasTx: !!(pendingTransmission || txSync.lastActiveTransmission),
     hasAudio: !!(pendingAudioSources?.length || lastAudioSources?.length),
     viewerOnly,
     peerId
@@ -1208,7 +1191,7 @@ async function rejoinSession() {
   if (joinInFlight || clientJoinInProgress || bootstrapping) return;
   joinInFlight = true;
   sessionReady = false;
-  lastAppliedSnapshotKey = '';
+  txSync.reset();
   try {
   const prefs = getCapturePrefsFromUi();
   const publishPrefs =
@@ -1289,7 +1272,7 @@ async function rejoinSession() {
 
   if (!viewerOnly && stream) {
     updateClientStateAfterPublish();
-  } else if (viewerOnly && (!lastActiveTransmission || !hasActiveVideo(lastActiveTransmission))) {
+  } else if (viewerOnly && (!txSync.lastActiveTransmission || !hasActiveVideo(txSync.lastActiveTransmission))) {
     setStatus('Modo espectador - aguardando transmissao');
     updateClientStates('waiting');
   }
@@ -1392,23 +1375,20 @@ async function handleServerMessage(msg) {
     await syncClientAudioMonitor(sources);
   }
   if (msg.type === 'transmissaoAtiva') {
-    debugClientLog('H2', 'transmissaoAtiva received', {
-      selectedPeerId: msg.payload?.selectedPeerId?.slice(0, 8) || null,
-      producerVideo: msg.payload?.producerIds?.video?.slice(0, 8) || msg.payload?.producerId?.slice(0, 8) || null,
-      hasVideo: !!(msg.payload?.producerIds?.video || msg.payload?.producerId)
+    const tx = normalizeTransmission(msg.payload);
+    debugClientLog('H2', '[ACTIVE_VIDEO] transmissao ativa recebida', {
+      selectedPeerId: tx.selectedPeerId?.slice(0, 8) || null,
+      producerVideo: tx.producerIds?.video?.slice(0, 8) || null
     });
     if (!sessionReady) {
       pendingTransmission = msg.payload;
-      lastActiveTransmission = normalizeTransmission(msg.payload);
       return;
     }
-    const key = roomSnapshotMediaKey({
-      transmission: msg.payload,
-      audioSources: lastAudioSources
-    });
-    if (key === lastAppliedSnapshotKey) return;
-    lastAppliedSnapshotKey = key;
-    await applyTransmission(msg.payload);
+    await txSync.apply(msg.payload);
+    await syncClientAudioMonitor(lastAudioSources).catch((e) =>
+      errors.handle(e, 'audio-sync')
+    );
+    return;
   }
   if (msg.type === 'erro' && sessionReady) {
     errors.handle(new Error(msg.payload?.mensagem), 'servidor');
@@ -1421,21 +1401,16 @@ async function handleServerMessage(msg) {
     }
     const wasVideoConsumer = media?.remoteConsumers?.video?.id === consumerId;
     if (wasVideoConsumer) {
-      media.remoteConsumers.video = null;
-      if (els.video) els.video.srcObject = null;
-      lastConsumedSelectionKey = '';
+      debugClientLog('H3', '[CLIENT_CONSUME] consumer de video fechado', {
+        consumerId: consumerId?.slice(0, 8) || null
+      });
       setStatus('Stream remota encerrada');
-      if (lastActiveTransmission && hasActiveVideo(lastActiveTransmission)) {
-        await applyTransmission(lastActiveTransmission);
-      } else {
-        hideLtOverlay();
-        updateClientStreamBadge(null);
-        updateClientStates(viewerOnly ? 'waiting' : 'sharing');
-      }
     }
+    await txSync.onConsumerClosed(consumerId);
     await syncClientAudioMonitor(lastAudioSources).catch((e) =>
       errors.handle(e, 'audio-sync')
     );
+    return;
   }
   if (msg.type === 'qualidadeAtualizada') {
     const presetId = msg.payload?.presetId;
@@ -1462,113 +1437,6 @@ async function handleServerMessage(msg) {
     mainEl?.classList.remove('sidebar-collapsed');
     els.sidebar?.classList.remove('is-collapsed');
   }
-}
-
-function queueTransmission(raw) {
-  const gen = ++transmissionGeneration;
-  transmissionWork = transmissionWork
-    .then(() => runTransmission(raw, gen))
-    .catch((e) => {
-      const entry = errors.handle(e, 'consume');
-      showErro(entry.friendly, entry.technical);
-    });
-}
-
-async function runTransmission(raw, gen = transmissionGeneration) {
-  if (gen !== transmissionGeneration) return;
-
-  const tx = normalizeTransmission(raw);
-  lastActiveTransmission = tx;
-  const selectionKey = transmissionSelectionKey(tx);
-
-  debugClientLog('H2', 'runTransmission', {
-    selectedPeerId: tx.selectedPeerId?.slice(0, 8) || null,
-    peerId: peerId?.slice(0, 8) || null,
-    hasActiveVideo: hasActiveVideo(tx),
-    selectionKey
-  });
-
-  try {
-    if (!hasActiveVideo(tx)) {
-      lastConsumedSelectionKey = '';
-      await media?.detachMedia({ videoEl: els.video, audioEl: null });
-      hideLtOverlay();
-      updateClientStreamBadge(tx);
-      if (tx.interrompidaPor) {
-        if (els.interruptedMessage) {
-          els.interruptedMessage.textContent = `Transmissao interrompida por ${tx.interrompidaPor}`;
-        }
-        updateClientStates('interrupted');
-      } else if (tx.finalizadaPor) {
-        if (els.finalizedMessage) {
-          els.finalizedMessage.textContent = `Transmissao finalizada por ${tx.finalizadaPor}`;
-        }
-        updateClientStates('finalized');
-      } else {
-        updateClientStates(tx.paused ? 'paused' : viewerOnly ? 'waiting' : 'sharing');
-      }
-      if (lastAudioSources.length) {
-        await syncClientAudioMonitor(lastAudioSources).catch((e) => errors.handle(e, 'audio-sync'));
-      }
-      return;
-    }
-
-    const isSelectedSelf = String(tx.selectedPeerId) === String(peerId);
-
-    updateClientStates(isSelectedSelf && !tx.paused ? 'selected' : tx.paused ? 'paused' : 'watching');
-    if (isSelectedSelf && !tx.paused) {
-      setStatus('Voc\u00ea est\u00e1 selecionado \u2014 transmitindo para todos');
-    } else {
-      if (els.watchingLabel) els.watchingLabel.textContent = tx.peerName || 'Transmiss\u00e3o ativa';
-      setStatus(tx.paused ? 'Transmiss\u00e3o pausada pelo host' : `Assistindo: ${tx.peerName || 'fonte'}`);
-    }
-
-    const nextVideoProducer = tx.producerIds?.video;
-    if (nextVideoProducer && !tx.paused && media) {
-      if (gen !== transmissionGeneration) return;
-
-      const currentProducerId = media.remoteConsumers?.video?.producerId;
-      const needsConsume =
-        !currentProducerId ||
-        currentProducerId !== nextVideoProducer ||
-        media.remoteConsumers.video?.closed ||
-        !els.video?.srcObject;
-
-      if (needsConsume) {
-        debugClientLog('H1', 'runTransmission consume start', {
-          producerVideo: nextVideoProducer.slice(0, 8),
-          selectionKey
-        });
-        await media.consumeRemoteMedia(tx.producerIds, {
-          videoEl: els.video,
-          audioEl: null
-        });
-        lastConsumedSelectionKey = selectionKey;
-      }
-      try {
-        await els.video?.play?.();
-      } catch (_) {}
-    }
-
-    applyLtOverlayForTransmission(tx);
-    els.stateWatching.hidden = true;
-    await syncClientAudioMonitor(lastAudioSources).catch((e) => errors.handle(e, 'audio-sync'));
-  } catch (e) {
-    debugClientLog('D', 'runTransmission consume failed', {
-      error: String(e?.message || e),
-      name: e?.name || ''
-    });
-    if (e.message?.includes('Autoplay') || e.name === 'NotAllowedError') {
-      clientMicAutoplayNeeded = true;
-      updateClientMicUi();
-    }
-    throw e;
-  }
-}
-
-function applyTransmission(raw) {
-  queueTransmission(raw);
-  return transmissionWork;
 }
 
 els.btnSettings?.addEventListener('click', () => openSettingsModal());
