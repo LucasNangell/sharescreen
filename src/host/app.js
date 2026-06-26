@@ -408,7 +408,7 @@ function syncControlButtons() {
   // Sync merged Recording/Stop button
   if (els.btnRecordingToggle) {
     const isRec = ui._flags.isRecording;
-    els.btnRecordingToggle.disabled = isRec ? !ui.canStopRecord() : !ui.canRecord();
+    els.btnRecordingToggle.disabled = isRec ? !ui.canStopRecord() : ui._flags.isUploading;
     els.btnRecordingToggle.title = isRec ? 'Parar gravacao' : 'Gravar transmissao';
     if (isRec) {
       els.btnRecordingToggle.classList.add('btn-danger');
@@ -1191,7 +1191,7 @@ function updateRecordingUi(state) {
 }
 
 async function iniciarGravacao() {
-  if (!ui.canRecord()) return;
+  if (ui._flags.isRecording || ui._flags.isUploading) return;
   try {
     const stream = await getRecordingStream();
     if (!stream) {
@@ -1251,7 +1251,7 @@ async function getRecordingStream() {
   const own =
     hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
 
-  if (!selectedPeerId || selected?.pausado || !ui._flags.hasPreview) return null;
+  if (!selectedPeerId || selected?.pausado) return null;
 
   stopRecordingCapture();
 
@@ -1716,9 +1716,9 @@ els.btnPlayPause?.addEventListener('click', () => {
 
 els.btnRecordingToggle?.addEventListener('click', () => {
   if (ui._flags.isRecording) {
-    els.btnPararGravar?.click();
+    pararGravacao();
   } else {
-    els.btnGravar?.click();
+    iniciarGravacao();
   }
 });
 
