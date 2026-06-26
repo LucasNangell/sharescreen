@@ -17392,7 +17392,10 @@
     try {
       const stream = await getRecordingStream();
       if (!stream) {
-        throw new Error("Nenhuma transmissao ativa");
+        if (els.recordingStatus) els.recordingStatus.textContent = "Nenhuma transmissao ativa para gravar";
+        setStatus("Nenhuma transmissao ativa para gravar");
+        showToast2("Nenhuma transmissao ativa para gravar", "warn");
+        return;
       }
       const quality = mergeServerQuality(media.videoQuality, loadPresetId());
       recorder.setHostToken(hostToken);
@@ -17440,9 +17443,43 @@
     (_a43 = recordingCapture == null ? void 0 : recordingCapture.stop) == null ? void 0 : _a43.call(recordingCapture);
     recordingCapture = null;
   }
+  function getActiveRecordingSelection() {
+    var _a43, _b, _c, _d, _e, _f;
+    if ((_a43 = estado.selecionado) == null ? void 0 : _a43.id) return estado.selecionado;
+    const tx = normalizeTransmission(lastActiveTransmission || {});
+    if (tx.selectedPeerId && hasActiveVideo(tx)) {
+      const client = estado.clients.find((c) => String(c.id) === String(tx.selectedPeerId));
+      return {
+        ...client || {},
+        id: tx.selectedPeerId,
+        displayName: (client == null ? void 0 : client.displayName) || tx.peerName || "Fonte",
+        isProducing: true,
+        hasVideo: true,
+        producerIds: tx.producerIds,
+        producerId: ((_b = tx.producerIds) == null ? void 0 : _b.video) || tx.producerId || null,
+        selecionado: true,
+        pausado: tx.paused
+      };
+    }
+    const previewStream = (_c = els.preview) == null ? void 0 : _c.srcObject;
+    const previewTrack = previewStream instanceof MediaStream ? (_d = previewStream.getVideoTracks) == null ? void 0 : _d.call(previewStream).find((track) => track.readyState === "live") : null;
+    if (!previewTrack || !ui._flags.hasPreview) return null;
+    const localTrack = ((_f = (_e = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _e.getVideoTracks) == null ? void 0 : _f.call(_e)[0]) || null;
+    const isOwnPreview = !!localTrack && localTrack.readyState === "live" && localTrack.id === previewTrack.id;
+    return {
+      id: isOwnPreview && hostPeerId ? hostPeerId : "preview",
+      displayName: isOwnPreview ? hostDisplayName || "Host" : "Fonte",
+      isProducing: true,
+      hasVideo: true,
+      producerIds: { video: null },
+      producerId: null,
+      selecionado: true,
+      pausado: false
+    };
+  }
   async function getRecordingStream() {
     var _a43, _b, _c, _d;
-    const selected = estado.selecionado;
+    const selected = getActiveRecordingSelection();
     const selectedPeerId = selected == null ? void 0 : selected.id;
     const own = hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
     if (!selectedPeerId || (selected == null ? void 0 : selected.pausado)) return null;

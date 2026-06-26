@@ -1196,7 +1196,10 @@ async function iniciarGravacao() {
   try {
     const stream = await getRecordingStream();
     if (!stream) {
-      throw new Error('Nenhuma transmissao ativa');
+      if (els.recordingStatus) els.recordingStatus.textContent = 'Nenhuma transmissao ativa para gravar';
+      setStatus('Nenhuma transmissao ativa para gravar');
+      showToast('Nenhuma transmissao ativa para gravar', 'warn');
+      return;
     }
     const quality = mergeServerQuality(media.videoQuality, loadPresetId());
     recorder.setHostToken(hostToken);
@@ -1246,8 +1249,47 @@ function stopRecordingCapture() {
   recordingCapture = null;
 }
 
+function getActiveRecordingSelection() {
+  if (estado.selecionado?.id) return estado.selecionado;
+
+  const tx = normalizeTransmission(lastActiveTransmission || {});
+  if (tx.selectedPeerId && hasActiveVideo(tx)) {
+    const client = estado.clients.find((c) => String(c.id) === String(tx.selectedPeerId));
+    return {
+      ...(client || {}),
+      id: tx.selectedPeerId,
+      displayName: client?.displayName || tx.peerName || 'Fonte',
+      isProducing: true,
+      hasVideo: true,
+      producerIds: tx.producerIds,
+      producerId: tx.producerIds?.video || tx.producerId || null,
+      selecionado: true,
+      pausado: tx.paused
+    };
+  }
+
+  const previewStream = els.preview?.srcObject;
+  const previewTrack = previewStream instanceof MediaStream
+    ? previewStream.getVideoTracks?.().find((track) => track.readyState === 'live')
+    : null;
+  if (!previewTrack || !ui._flags.hasPreview) return null;
+
+  const localTrack = media?.localScreenStream?.getVideoTracks?.()[0] || null;
+  const isOwnPreview = !!localTrack && localTrack.readyState === 'live' && localTrack.id === previewTrack.id;
+  return {
+    id: isOwnPreview && hostPeerId ? hostPeerId : 'preview',
+    displayName: isOwnPreview ? (hostDisplayName || 'Host') : 'Fonte',
+    isProducing: true,
+    hasVideo: true,
+    producerIds: { video: null },
+    producerId: null,
+    selecionado: true,
+    pausado: false
+  };
+}
+
 async function getRecordingStream() {
-  const selected = estado.selecionado;
+  const selected = getActiveRecordingSelection();
   const selectedPeerId = selected?.id;
   const own =
     hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
