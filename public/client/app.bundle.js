@@ -14989,7 +14989,9 @@
             } catch (_) {
             }
             this._appliedVideoKey = activeKey;
-          } else if (!nextVideoProducer || tx.paused) {
+          } else if (tx.paused) {
+            this._appliedVideoKey = activeKey;
+          } else if (!nextVideoProducer) {
             await (media3 == null ? void 0 : media3.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
             this._appliedVideoKey = "";
           }

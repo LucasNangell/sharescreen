@@ -363,7 +363,9 @@ export class TransmissionSync {
             await videoEl?.play?.();
           } catch (_) {}
           this._appliedVideoKey = activeKey;
-        } else if (!nextVideoProducer || tx.paused) {
+        } else if (tx.paused) {
+          this._appliedVideoKey = activeKey;
+        } else if (!nextVideoProducer) {
           await media?.closeActiveVideoConsumer({ videoEl, notifyServer: true });
           this._appliedVideoKey = '';
         }
