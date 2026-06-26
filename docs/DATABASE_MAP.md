@@ -70,4 +70,5 @@ Não há frameworks de migração (como Knex ou Sequelize). As migrações ocorr
 Se o banco SQLite for criado do zero e estiver vazio:
 1. O servidor tentará ler o arquivo [users.json](file:///e:/Projetos/Trabalho/Screen%20Share/users.json) na raiz do projeto.
 2. Irá disparar a rotina `seedUsersIfEmpty(usersJsonPath)` para popular os cadastros padrão (nome, IP, computador).
-3. Desenvolvedores também podem re-forçar essa importação chamando o endpoint `/api/admin/seed` (disponível apenas em modo DEV).
+3. Em todo startup e a cada 24 horas, o servidor tambem sincroniza os IPs atuais por `computer_name` via ping/DNS e atualiza `clients.ip` e `users.json` quando houver mudanca.
+4. Desenvolvedores também podem re-forçar essa importação chamando o endpoint `/api/admin/seed` (disponível apenas em modo DEV).

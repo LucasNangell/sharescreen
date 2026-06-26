@@ -52,10 +52,11 @@ Arquivos envolvidos:
 * [index.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/index.js)
 * [mediasoup-manager.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/mediasoup-manager.js)
 
-1. O Express inicializa e chama `initMediasoup()`.
-2. O Mediasoup cria um Worker nativo (`mediasoup-worker.exe` no Windows).
-3. Cria-se o Router do mediasoup com os codecs configurados (preferência por `video/H264`).
-4. Os IPs de rede interna são escutados (`announcedIp` e portas UDP configuradas).
+1. No startup e a cada 24 horas, o servidor sincroniza automaticamente os IPs dos clients com `computer_name` usando `server/user-resolve.js`, atualizando SQLite e `users.json` quando houver mudanca.
+2. O Express inicializa e chama `initMediasoup()`.
+3. O Mediasoup cria um Worker nativo (`mediasoup-worker.exe` no Windows).
+4. Cria-se o Router do mediasoup com os codecs configurados (preferência por `video/H264`).
+5. Os IPs de rede interna são escutados (`announcedIp` e portas UDP configuradas).
 
 ### Fluxo de Comunicação de Sinalização (WebSockets)
 Arquivos envolvidos:

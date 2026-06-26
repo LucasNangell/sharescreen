@@ -36,6 +36,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
 const publicDir = path.join(rootDir, 'public');
 const isDev = process.argv.includes('--dev');
+const CLIENT_IP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let clientIpSyncRunning = false;
 
 function loadAppBuildId() {
   try {
@@ -176,6 +178,105 @@ function loadTlsOptions() {
   };
 }
 
+function writeJsonAscii(filePath, data) {
+  const json = `${JSON.stringify(data, null, 2)}\n`.replace(/[^\x00-\x7F]/g, (char) =>
+    `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+  );
+  fs.writeFileSync(filePath, json, 'utf8');
+}
+
+function updateUsersJsonIp(usersJsonPath, computerName, ip) {
+  try {
+    if (!fs.existsSync(usersJsonPath)) return false;
+    const data = JSON.parse(fs.readFileSync(usersJsonPath, 'utf8'));
+    const users = Array.isArray(data.users) ? data.users : [];
+    const computer = String(computerName || '').trim().toUpperCase();
+    let changed = false;
+    for (const user of users) {
+      const currentComputer = String(user.computer_name || user.computerName || '').trim().toUpperCase();
+      if (currentComputer === computer && user.ip !== ip) {
+        user.ip = ip;
+        changed = true;
+      }
+    }
+    if (changed) writeJsonAscii(usersJsonPath, data);
+    return changed;
+  } catch (err) {
+    logger.warn('Nao foi possivel atualizar users.json no startup', {
+      computerName,
+      ip,
+      erro: err.message
+    });
+    return false;
+  }
+}
+
+async function syncClientIps(usersJsonPath, reason = 'manual') {
+  const users = listAllClients().filter((user) => user.computerName);
+  if (!users.length) return { checked: 0, changed: 0, failed: 0 };
+
+  let changed = 0;
+  let failed = 0;
+  for (const user of users) {
+    const resolved = await resolveComputerIp(user.computerName);
+    if (!resolved.ok) {
+      failed += 1;
+      logger.warn('Nao foi possivel atualizar IP do client', {
+        reason,
+        name: user.name,
+        computerName: user.computerName,
+        erro: resolved.erro
+      });
+      continue;
+    }
+    if (resolved.ip === user.ip) continue;
+
+    const dbResult = updateClientIp(user.name, resolved.ip);
+    const jsonChanged = updateUsersJsonIp(usersJsonPath, user.computerName, resolved.ip);
+    changed += 1;
+    logger.info('IP do client atualizado', {
+      reason,
+      name: user.name,
+      computerName: user.computerName,
+      previousIp: user.ip,
+      ip: resolved.ip,
+      method: resolved.method,
+      database: dbResult.ok,
+      usersJson: jsonChanged
+    });
+  }
+
+  return { checked: users.length, changed, failed };
+}
+
+async function runClientIpSync(usersJsonPath, reason = 'manual') {
+  if (clientIpSyncRunning) {
+    logger.warn('Verificacao de IPs dos clients ignorada porque outra execucao esta em andamento', { reason });
+    return { skipped: true };
+  }
+  clientIpSyncRunning = true;
+  try {
+    const result = await syncClientIps(usersJsonPath, reason);
+    logger.info('Verificacao de IPs dos clients concluida', { reason, ...result });
+    return result;
+  } catch (err) {
+    logger.error('Falha na verificacao de IPs dos clients', { reason, error: err.message });
+    return { ok: false, error: err.message };
+  } finally {
+    clientIpSyncRunning = false;
+  }
+}
+
+function scheduleClientIpSync(usersJsonPath) {
+  const timer = setInterval(() => {
+    runClientIpSync(usersJsonPath, 'periodic').catch((err) => {
+      logger.error('Falha inesperada no agendamento de IPs dos clients', { error: err.message });
+    });
+  }, CLIENT_IP_SYNC_INTERVAL_MS);
+  timer.unref?.();
+  logger.info('Verificacao periodica de IPs dos clients agendada', { intervalHours: 24 });
+  return timer;
+}
 function createApp() {
   const app = express();
   if (config.trustProxy) app.set('trust proxy', 1);
@@ -471,7 +572,10 @@ function createApp() {
 
 async function main() {
   const lanIp = getLanIPv4();
-  seedUsersIfEmpty(path.join(rootDir, 'users.json'));
+  const usersJsonPath = path.join(rootDir, 'users.json');
+  seedUsersIfEmpty(usersJsonPath);
+  await runClientIpSync(usersJsonPath, 'startup');
+  scheduleClientIpSync(usersJsonPath);
   const dataWritable = verifyDataDirWritable();
   if (!dataWritable.ok) {
     logger.error(

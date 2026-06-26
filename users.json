@@ -6,12 +6,12 @@
       "user": "Felipe"
     },
     {
-      "ip": "10.120.1.120",
+      "ip": "10.120.1.123",
       "computer_name": "DC-382539",
       "user": "Lucas"
     },
     {
-      "ip": "10.120.1.117",
+      "ip": "10.120.1.6",
       "computer_name": "DC-382532",
       "user": "Ivonaldo"
     },
@@ -46,7 +46,7 @@
       "user": "Juan"
     },
     {
-      "ip": "10.120.1.6",
+      "ip": "10.120.2.2",
       "computer_name": "DC-382438",
       "user": "Calixto"
     }
