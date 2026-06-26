@@ -7,166 +7,169 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   
   <script>(function(){
-var BUILD_ID="2026-06-25T23-44-20-x342yh";
+var BUILD_ID="2026-06-26T13-33-41-innven";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -200,9 +203,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-06-25T23-44-20-x342yh" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-06-25T23-44-20-x342yh" />
-  <link rel="stylesheet" href="style.css?v=2026-06-25T23-44-20-x342yh" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-06-26T13-33-41-innven" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-06-26T13-33-41-innven" />
+  <link rel="stylesheet" href="style.css?v=2026-06-26T13-33-41-innven" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -276,7 +279,7 @@ try{
               <div id="transmission-card-container" class="transmission-card-container">
                 <div class="transmission-card-empty">Nenhuma transmissão ativa</div>
               </div>
-              
+
               <div class="transmission-controls-row">
                 <!-- Limpar: block icon, Interromper transmissão tooltip -->
                 <button type="button" id="btn-limpar" class="btn btn-ghost trans-btn" disabled title="Interromper transmissão">
@@ -285,7 +288,7 @@ try{
                     <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
                   </svg>
                 </button>
-                
+
                 <!-- Play/Pause toggler -->
                 <button type="button" id="btn-playpause" class="btn btn-secondary trans-btn" disabled title="Pausar transmissão">
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
@@ -293,14 +296,14 @@ try{
                     <rect x="14" y="4" width="4" height="16"></rect>
                   </svg>
                 </button>
-                
+
                 <!-- Gravar/Parar toggler: active class overrides this -->
                 <button type="button" id="btn-gravacao-toggle" class="btn btn-secondary trans-btn" disabled title="Iniciar gravação">
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="red">
                     <circle cx="12" cy="12" r="8"></circle>
                   </svg>
                 </button>
-                
+
                 <!-- Som (Mute) -->
                 <button type="button" id="btn-mute-audio" class="btn btn-ghost trans-btn" title="Silenciar áudio">
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -310,12 +313,12 @@ try{
                 </button>
               </div>
             </div>
-            
+
             <div class="transmission-right-vu" id="controles-audio" hidden>
               <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Volume" class="vertical-slider" title="Volume da transmissão" />
             </div>
           </div>
-          
+
           <!-- Hidden standard buttons for JS code backward-compatibility -->
           <div style="display: none !important;">
             <button type="button" id="btn-pausar" disabled>Pausar</button>
@@ -346,7 +349,7 @@ try{
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </summary>
-          
+
           <div class="settings-content">
             <!-- Sub-imagem -->
             <details class="settings-subdetails" id="details-imagem">
@@ -677,6 +680,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-06-25T23-44-20-x342yh"></script>
+  <script src="app.bundle.js?v=2026-06-26T13-33-41-innven"></script>
 </body>
 </html>

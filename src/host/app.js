@@ -3,6 +3,8 @@ import { MediaClient } from '../shared/media-client.js';
 import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded, enrichRoomSourcesState } from '../shared/transmission.js';
 import { loadCapturePrefs, saveCapturePrefs, setupMicrophonePicker, installAudioUnlock } from '../shared/audio-manager.js';
 import { RecordingClient, RecordingState } from '../shared/recording-client.js';
+import { RecordingCompositor } from '../shared/recording-compositor.js';
+import { RecordingAudioMixer } from '../shared/recording-audio-mixer.js';
 import { ErrorManager, assertSecureContext } from '../shared/error-manager.js';
 import { UiStateMachine } from '../shared/ui-state.js';
 import { mergeServerQuality, loadPresetId, savePresetId, getPreset, bitrateMbps } from '../shared/quality-manager.js';
@@ -254,6 +256,7 @@ const recorder = new RecordingClient({
     }
   }
 });
+let recordingCapture = null;
 
 const hostCapturePrefs = loadCapturePrefs();
 if (els.hostChkSystem) els.hostChkSystem.checked = hostCapturePrefs.systemAudio !== false;
@@ -976,6 +979,13 @@ async function runTransmission(raw, gen = transmissionGeneration) {
       setStatus('Nenhuma transmissao ativa');
     } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
       await media?.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true });
+      const localVideoTrack = media?.localScreenStream?.getVideoTracks?.()[0];
+      if (els.preview && localVideoTrack?.readyState === 'live') {
+        if (els.preview.srcObject !== media.localScreenStream) {
+          els.preview.srcObject = media.localScreenStream;
+        }
+        els.preview.play?.().catch(() => {});
+      }
       applyLtOverlayForTransmission(tx);
       ui.set({ hasPreview: true, isSharing: true });
       updatePreviewOverlays();
@@ -1182,17 +1192,17 @@ function updateRecordingUi(state) {
 
 async function iniciarGravacao() {
   if (!ui.canRecord()) return;
-  const stream = getRecordingStream();
-  if (!stream) {
-    errors.handle(new Error('Nenhuma transmissao ativa'), 'gravacao');
-    return;
-  }
   try {
+    const stream = await getRecordingStream();
+    if (!stream) {
+      throw new Error('Nenhuma transmissao ativa');
+    }
     const quality = mergeServerQuality(media.videoQuality, loadPresetId());
     recorder.setHostToken(hostToken);
     recorder.start(stream, quality);
     showToast('Gravacao iniciada', 'info');
   } catch (e) {
+    stopRecordingCapture();
     errors.handle(e, 'gravacao');
   }
 }
@@ -1200,6 +1210,7 @@ async function iniciarGravacao() {
 async function pararGravacao() {
   try {
     const blob = await recorder.stop();
+    stopRecordingCapture();
     if (!blob) {
       showToast('Gravacao vazia', 'warn');
       return;
@@ -1214,6 +1225,7 @@ async function pararGravacao() {
     setStatus(`Gravacao salva: ${uploadResult.filename || filename}`);
     setTimeout(() => recorder.resetIdle(), 4000);
   } catch (e) {
+    stopRecordingCapture();
     errors.handle(e, 'upload');
     recorder.resetIdle();
   }
@@ -1228,24 +1240,58 @@ function applyVolumeFromSlider() {
   }
 }
 
-function getRecordingStream() {
-  const selectedPeerId = estado.selecionado?.id;
+function stopRecordingCapture() {
+  recordingCapture?.stop?.();
+  recordingCapture = null;
+}
+
+async function getRecordingStream() {
+  const selected = estado.selecionado;
+  const selectedPeerId = selected?.id;
   const own =
     hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
 
-  const tracks = [];
-  if (!own) {
-    const rv = media?.remoteConsumers?.video?.track;
-    if (rv?.readyState === 'live') tracks.push(rv);
+  if (!selectedPeerId || selected?.pausado || !ui._flags.hasPreview) return null;
+
+  stopRecordingCapture();
+
+  const compositor = RecordingCompositor.start({
+    videoEl: els.preview,
+    fallbackStream: own ? media?.localScreenStream : null,
+    badgeText: selected?.displayName || 'Fonte',
+    visible: !!selected && !selected?.pausado
+  });
+  const videoTrack = compositor?.stream?.getVideoTracks?.()[0];
+  if (videoTrack?.readyState !== 'live') {
+    compositor?.stop?.();
+    return null;
   }
 
-  let ra = hostAudioMonitor?.getOutputTrack();
-  if (!ra && !own) ra = media?.remoteConsumers?.audio?.track;
-  if (ra?.readyState === 'live' && !audioMuted) tracks.push(ra);
+  let mixer = null;
+  try {
+    mixer = await RecordingAudioMixer.build({
+      hostAudioMonitor,
+      media,
+      own,
+      mutedClients
+    });
+  } catch (err) {
+    compositor.stop();
+    throw err;
+  }
 
-  if (tracks.length) return new MediaStream(tracks);
+  const tracks = [videoTrack];
+  if (mixer?.track?.readyState === 'live') tracks.push(mixer.track);
 
-  return media?.getRecordableStream({ hostPeerId, selectedPeerId });
+  const stream = new MediaStream(tracks);
+  recordingCapture = {
+    stream,
+    stop() {
+      compositor.stop();
+      mixer?.stop?.();
+    }
+  };
+  return stream;
 }
 
 function handleMessage(msg) {
@@ -1843,6 +1889,7 @@ window.addEventListener('beforeunload', () => {
   clearInterval(hostLockTimer);
   releaseHostLock();
   localHostVuStop?.();
+  stopRecordingCapture();
   hostAudioMonitor?.dispose();
   media?.dispose();
   signaling?.close();

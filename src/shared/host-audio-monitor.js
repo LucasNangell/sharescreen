@@ -157,6 +157,12 @@ export class HostAudioMonitor {
     return null;
   }
 
+  getMixedOutputTrack() {
+    this._ensureAudioContext();
+    this._refreshDirectOutput();
+    const track = this.dest?.stream?.getAudioTracks?.()[0];
+    return track?.readyState === 'live' ? track : null;
+  }
   _startLevelsLoop() {
     if (this._levelsRaf) return;
     const tick = () => {
