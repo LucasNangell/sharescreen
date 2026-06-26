@@ -10,9 +10,9 @@ A aplicação possui scripts prontos (.bat) para facilitar a execução no Windo
 * **Comando:** Executar [start-dev.bat](file:///e:/Projetos/Trabalho/Screen%20Share/start-dev.bat) ou `npm run dev`.
 * **Comportamento:**
   * Define `SHARESCREEN_DEV=1` (libera endpoints `/api/admin/*`).
-  * Escuta em `127.0.0.1` na porta `3443`.
+  * Detecta automaticamente o IPv4 LAN da maquina, define `SHARESCREEN_SERVER_HOST`/`ANNOUNCED_IP` e anuncia os IPv4 LAN validos nos candidatos ICE/WebRTC (fallback para `127.0.0.1` se nao houver LAN).
   * Grava os vídeos locais em `_dev_recordings/` na raiz do projeto.
-  * Habilita a geração e escuta de source maps no frontend.
+  * Habilita a geracao e escuta de source maps no frontend, mantendo o guard de cache nas paginas Host/Client.
 
 ### 2. Produção (PROD)
 * **Comando:** Executar [start-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/start-producao.bat) ou `npm start`.

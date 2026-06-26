@@ -85,11 +85,7 @@ for (const htmlPath of htmlPages) {
       '$&\n  <!-- SHARESCREEN_CACHE_GUARD -->\n'
     );
   }
-  if (isProd) {
-    html = html.replace(/<!-- SHARESCREEN_CACHE_GUARD -->/g, cacheGuardTag);
-  } else {
-    html = html.replace(/<!-- SHARESCREEN_CACHE_GUARD -->\s*/g, '');
-  }
+  html = html.replace(/<!-- SHARESCREEN_CACHE_GUARD -->/g, cacheGuardTag);
   html = html.replace(/\?v=[^"'\s>]+/g, '?v=__BUILD_ID__');
   html = html.replace(/__BUILD_ID__/g, buildId);
   fs.writeFileSync(htmlPath, html, 'utf8');

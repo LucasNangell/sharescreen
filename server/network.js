@@ -36,7 +36,7 @@ function resolve4ViaServers(hostname, servers, timeoutMs = 4000) {
 /**
  * Retorna IPv4 da LAN. Se preferredIp existir em alguma interface, usa esse.
  */
-export function getLanIPv4(preferredIp) {
+export function getLanIPv4Candidates(preferredIp) {
   const interfaces = os.networkInterfaces();
   const found = [];
 
@@ -45,32 +45,31 @@ export function getLanIPv4(preferredIp) {
       if (iface.family !== 'IPv4' || iface.internal) continue;
       if (isBadLanIp(iface.address)) continue;
       found.push({ name, address: iface.address });
-      if (preferredIp && iface.address === preferredIp) {
-        return iface.address;
-      }
     }
   }
 
-  if (preferredIp && !isBadLanIp(preferredIp)) {
-    return preferredIp;
-  }
+  const addresses = [];
+  if (preferredIp && !isBadLanIp(preferredIp)) addresses.push(preferredIp);
+  for (const item of found) addresses.push(item.address);
+  return [...new Set(addresses)];
+}
 
-  return found[0]?.address || '127.0.0.1';
+export function getLanIPv4(preferredIp) {
+  return getLanIPv4Candidates(preferredIp)[0] || '127.0.0.1';
 }
 
 /**
  * IP anunciado nos candidatos ICE do WebRTC.
  */
 export function resolveAnnouncedIp(explicitIp) {
-  if (process.env.SHARESCREEN_ICE_LOCALHOST === '1') {
-    return '127.0.0.1';
-  }
-
   const serverHost = (config.serverHost || '').trim().toLowerCase();
-  if (
-    process.env.SHARESCREEN_DEV === '1' &&
-    (serverHost === '127.0.0.1' || serverHost === 'localhost')
-  ) {
+  const detectedLanIp = getLanIPv4();
+  const hasUsableLan = detectedLanIp !== '127.0.0.1';
+  const wantsLocalhost =
+    process.env.SHARESCREEN_ICE_LOCALHOST === '1' ||
+    (config.dev && (serverHost === '127.0.0.1' || serverHost === 'localhost'));
+
+  if (wantsLocalhost && !hasUsableLan) {
     return '127.0.0.1';
   }
 
@@ -87,8 +86,8 @@ export function resolveAnnouncedIp(explicitIp) {
 }
 
 /**
- * IP público anunciado para espectadores via internet (PUBLIC_URL).
- * Ordem: PUBLIC_ANNOUNCED_IP → DNS externo do hostname de PUBLIC_URL.
+ * IP pÃƒÆ’Ã‚Âºblico anunciado para espectadores via internet (PUBLIC_URL).
+ * Ordem: PUBLIC_ANNOUNCED_IP ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DNS externo do hostname de PUBLIC_URL.
  */
 export async function resolvePublicAnnouncedIp(lanIp) {
   const explicit = (process.env.PUBLIC_ANNOUNCED_IP || config.publicAnnouncedIp || '').trim();
@@ -122,8 +121,12 @@ export async function resolvePublicAnnouncedIp(lanIp) {
 }
 
 export function buildIceListenIps(lanIp, publicIp) {
-  const listenIps = [{ ip: '0.0.0.0', announcedIp: lanIp }];
-  if (publicIp && publicIp !== lanIp && !isBadLanIp(publicIp)) {
+  const lanCandidates = config.dev
+    ? getLanIPv4Candidates(lanIp)
+    : [lanIp].filter((ip) => ip && !isBadLanIp(ip));
+  const listenIps = lanCandidates.map((announcedIp) => ({ ip: '0.0.0.0', announcedIp }));
+  if (!listenIps.length) listenIps.push({ ip: '0.0.0.0', announcedIp: '127.0.0.1' });
+  if (publicIp && !lanCandidates.includes(publicIp) && !isBadLanIp(publicIp)) {
     listenIps.push({ ip: '0.0.0.0', announcedIp: publicIp });
   }
   return listenIps;

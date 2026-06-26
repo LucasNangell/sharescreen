@@ -1,10 +1,30 @@
+import os from 'os';
+
 /**
- * Configuração padrão — ajuste para sua LAN.
+ * ConfiguraÃƒÂ§ÃƒÂ£o padrÃƒÂ£o Ã¢â‚¬â€ ajuste para sua LAN.
  *
- * Produção (padrão): 10.1.1.73
+ * ProduÃƒÂ§ÃƒÂ£o (padrÃƒÂ£o): 10.1.1.73
  * Desenvolvimento:     $env:SHARESCREEN_SERVER_HOST="10.120.1.12" antes de npm start
  */
 const PROD_HOST = '10.1.1.73';
+const isDevRuntime = process.env.SHARESCREEN_DEV === '1' || process.argv.includes('--dev');
+
+function detectLanIPv4() {
+  const interfaces = os.networkInterfaces();
+  for (const list of Object.values(interfaces)) {
+    for (const iface of list || []) {
+      if (iface.family !== 'IPv4' || iface.internal) continue;
+      if (!iface.address || iface.address.startsWith('169.254.')) continue;
+      return iface.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+function isLocalhost(value) {
+  const host = String(value || '').trim().toLowerCase();
+  return host === '127.0.0.1' || host === 'localhost';
+}
 
 const config = {
   httpsPort: 3443,
@@ -15,17 +35,19 @@ const config = {
   rtcMaxPort: 40100,
 
   /** IP nas URLs (Chrome/agente) */
-  serverHost: process.env.SHARESCREEN_SERVER_HOST || PROD_HOST,
+  serverHost: isDevRuntime && isLocalhost(process.env.SHARESCREEN_SERVER_HOST)
+    ? detectLanIPv4()
+    : process.env.SHARESCREEN_SERVER_HOST || (isDevRuntime ? detectLanIPv4() : PROD_HOST),
   /**
    * IP anunciado no WebRTC (ICE). null = detecta automaticamente a LAN.
-   * Produção: start-producao.bat define ANNOUNCED_IP=10.1.1.73
+   * ProduÃƒÂ§ÃƒÂ£o: start-producao.bat define ANNOUNCED_IP=10.1.1.73
    */
   announcedIp: process.env.ANNOUNCED_IP || null,
-  /** IP público nos candidatos ICE quando PUBLIC_URL está ativo (link /meet/) */
+  /** IP pÃƒÂºblico nos candidatos ICE quando PUBLIC_URL estÃƒÂ¡ ativo (link /meet/) */
   publicAnnouncedIp: process.env.PUBLIC_ANNOUNCED_IP || '',
 
   preferredVideoCodec: 'video/H264',
-  /** LAN: bitrate alto desde o início evita ramp-up visível */
+  /** LAN: bitrate alto desde o inÃƒÂ­cio evita ramp-up visÃƒÂ­vel */
   initialVideoBitrate: 32_000_000,
   maxVideoBitrate: 32_000_000,
   maxIncomingBitrate: 40_000_000,
@@ -46,12 +68,12 @@ const config = {
   certCrt: 'certs/server.crt',
 
   /**
-   * Integração auxiliar_agent.py — abre Google Chrome (não main.py).
+   * IntegraÃƒÂ§ÃƒÂ£o auxiliar_agent.py Ã¢â‚¬â€ abre Google Chrome (nÃƒÂ£o main.py).
    */
-  /** Gravações do painel host (UNC no cgrafsysvm) */
+  /** GravaÃƒÂ§ÃƒÂµes do painel host (UNC no cgrafsysvm) */
   recordingsDir:
     process.env.SHARESCREEN_RECORDINGS_DIR ||
-    '\\\\cgrafsysvm\\ApogeeFiles\\Gravaçoes Treinamento',
+    (isDevRuntime ? '_dev_recordings' : '\\\\cgrafsysvm\\ApogeeFiles\\GravaÃƒÂ§oes Treinamento'),
 
   agent: {
     dbPath:
@@ -68,8 +90,8 @@ const config = {
     onlineMaxAgeSeconds: 20
   },
 
-  /** DEV / segurança — vazio = sem PIN (compatível com deploy legado) */
-  dev: process.env.SHARESCREEN_DEV === '1',
+  /** DEV / seguranÃƒÂ§a Ã¢â‚¬â€ vazio = sem PIN (compatÃƒÂ­vel com deploy legado) */
+  dev: isDevRuntime,
   roomPin: process.env.SHARESCREEN_ROOM_PIN || '',
   hostToken: process.env.SHARESCREEN_HOST_TOKEN || '',
   trustProxy: process.env.TRUST_PROXY === '1',

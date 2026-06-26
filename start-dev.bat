@@ -9,12 +9,6 @@ REM  NAO grava na UNC real. NAO usa IP 10.1.1.73 de producao.
 REM ============================================================
 
 set SHARESCREEN_DEV=1
-set SHARESCREEN_SERVER_HOST=127.0.0.1
-set SHARESCREEN_ICE_LOCALHOST=1
-REM Para LAN use o IP da máquina (ex.: 10.120.1.12) e desative loopback:
-REM set SHARESCREEN_SERVER_HOST=10.120.1.12
-REM set ANNOUNCED_IP=10.120.1.12
-REM set SHARESCREEN_ICE_LOCALHOST=
 set SHARESCREEN_RECORDINGS_DIR=%~dp0_dev_recordings
 set LOG_LEVEL=debug
 REM Opcional: descomente para exigir PIN em DEV
@@ -29,6 +23,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set SHARESCREEN_DEV_IP=
+for /f "usebackq tokens=*" %%i in (`node -e "const os=require('os');let ip='';for(const list of Object.values(os.networkInterfaces())){for(const item of list||[]){if(item.family==='IPv4'&&!item.internal&&!item.address.startsWith('169.254.')){ip=item.address;break;}}if(ip)break;}if(ip)console.log(ip);"`) do set SHARESCREEN_DEV_IP=%%i
+if "%SHARESCREEN_DEV_IP%"=="" set SHARESCREEN_DEV_IP=127.0.0.1
+set SHARESCREEN_SERVER_HOST=%SHARESCREEN_DEV_IP%
+set ANNOUNCED_IP=%SHARESCREEN_DEV_IP%
+set SHARESCREEN_ICE_LOCALHOST=
 if not exist "node_modules\mediasoup\package.json" (
     echo [AVISO DEV] Dependencias ausentes. Execute: npm install
     pause
@@ -52,9 +52,10 @@ if errorlevel 1 (
 echo.
 echo ========================================
 echo  ShareScreen LAN - DESENVOLVIMENTO
-echo  Host:   https://127.0.0.1:3443/host
-echo  Client: https://127.0.0.1:3443/client
-echo  ICE WebRTC: 127.0.0.1 (UDP 40000-40100)
+echo  Host:   https://%SHARESCREEN_DEV_IP%:3443/host
+echo  Client: https://%SHARESCREEN_DEV_IP%:3443/client
+echo  Local:  https://127.0.0.1:3443/host
+echo  ICE WebRTC: %ANNOUNCED_IP% (UDP 40000-40100)
 echo  Gravacoes DEV: %SHARESCREEN_RECORDINGS_DIR%
 echo ========================================
 echo  PRODUCAO NAO AFETADA

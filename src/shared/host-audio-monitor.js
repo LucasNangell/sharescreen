@@ -230,30 +230,34 @@ export class HostAudioMonitor {
     if (!el) return;
 
     const tracksToPlay = [];
+    const directTracks = [];
     let hasDsp = false;
 
     for (const ch of this.channels.values()) {
       const track = ch.consumer?.track;
       if (!track || track.readyState !== 'live') continue;
+      directTracks.push(track);
 
-      // Sempre usamos o grafo DSP para evitar quedas e estalos ao ligar/desligar filtros
       hasDsp = true;
       this._setupChannelDsp(ch, track);
     }
 
     if (hasDsp) {
       this._ensureAudioContext();
-      if (this.dest) {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+      if (this.dest && this.ctx?.state !== 'suspended') {
         const dspTracks = this.dest.stream.getAudioTracks();
         if (dspTracks.length > 0) {
           tracksToPlay.push(dspTracks[0]);
         }
       }
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().catch(() => {});
-      }
     }
 
+    if (!tracksToPlay.length) {
+      tracksToPlay.push(...directTracks);
+    }
     if (el.srcObject !== this.stream) {
       el.srcObject = this.stream;
     }
