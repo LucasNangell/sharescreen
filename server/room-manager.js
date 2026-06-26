@@ -83,6 +83,7 @@ export class Peer {
     this.lastError = null;
     this.isCoHost = false;
     this.replacingProducers = new Set();
+    this.cleaningUpMedia = false;
   }
 
   getProducerIds() {
@@ -482,6 +483,13 @@ export class RoomManager {
         } catch (_) {}
         if (old.hasAudioProducer()) audioSourcesChanged = true;
         this.cleanupPeerMedia(old);
+        if (this.selectedPeerId === old.id) {
+          this.selectedPeerId = null;
+          this.transmissionPaused = false;
+          this.interrompidaPor = null;
+          this.finalizadaPor = null;
+          this.broadcastActiveProducer();
+        }
         this.peers.delete(old.id);
       }
     }
@@ -598,6 +606,7 @@ export class RoomManager {
   }
 
   async cleanupPeerMedia(peer) {
+    peer.cleaningUpMedia = true;
     try {
       this.closeProducer(peer, 'video');
       for (const slot of AUDIO_PRODUCER_SLOTS) {
@@ -619,6 +628,8 @@ export class RoomManager {
       peer.recvTransports?.clear();
     } catch (err) {
       logger.warn('Erro ao limpar mÃ­dia do peer', { peerId: peer.id, err: err.message });
+    } finally {
+      peer.cleaningUpMedia = false;
     }
     peer.sendTransport = null;
     peer.recvTransport = null;
@@ -930,6 +941,7 @@ export class RoomManager {
       if (peer.producers[slot]?.id === producer.id) {
         peer.producers[slot] = null;
       }
+      if (peer.cleaningUpMedia || isReplacing) return;
       if (!peer.hasVideoProducer()) {
         peer.status = 'conectado';
         this.displayControllerIds.delete(peer.id);
