@@ -88,7 +88,7 @@ function mergeSourceWithTransmission(source, tx, { isSelected = false } = {}) {
       video: videoId || source.producerIds?.video || source.producerId || null
     },
     producerId: videoId || source.producerIds?.video || source.producerId || null,
-    selecionado: isSelected || !!source.selecionado,
+    selecionado: !!isSelected,
     pausado: isSelected ? normalized.paused : source.pausado
   };
 }
@@ -109,7 +109,7 @@ export function enrichRoomSourcesState(estado = {}, transmission) {
     if (videoId && (c.producerIds?.video === videoId || c.producerId === videoId)) {
       return mergeSourceWithTransmission(c, tx);
     }
-    return c;
+    return selectedId ? { ...c, selecionado: false } : c;
   });
 
   let selecionado = estado.selecionado;
@@ -145,12 +145,12 @@ export function enrichDisplaySources(sources, transmission) {
 
   return sources.map((s) => {
     if (selectedId && String(s.id) === String(selectedId)) {
-      return mergeSourceWithTransmission(s, tx, { isSelected: !!s.selecionado });
+      return mergeSourceWithTransmission(s, tx, { isSelected: true });
     }
     if (videoId && (s.producerIds?.video === videoId || s.producerId === videoId)) {
       return mergeSourceWithTransmission(s, tx);
     }
-    return s;
+    return selectedId ? { ...s, selecionado: false } : s;
   });
 }
 

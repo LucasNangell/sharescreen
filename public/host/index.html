@@ -184,8 +184,14 @@
 
   
   
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-06-26T17-19-28-z131pe";
+var BUILD_ID="2026-06-26T18-31-41-3bryv4";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -219,9 +225,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-06-26T17-19-28-z131pe" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-06-26T17-19-28-z131pe" />
-  <link rel="stylesheet" href="style.css?v=2026-06-26T17-19-28-z131pe" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-06-26T18-31-41-3bryv4" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-06-26T18-31-41-3bryv4" />
+  <link rel="stylesheet" href="style.css?v=2026-06-26T18-31-41-3bryv4" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -282,10 +288,19 @@ try{
     </section>
 
     <aside id="sidebar" class="sidebar" aria-label="Painel de controle" hidden>
-      <button type="button" id="btn-sidebar-collapse" class="sidebar-rail-toggle" aria-label="Recolher painel" aria-expanded="true" title="Recolher painel">
-        <svg class="icon-collapse" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-        <svg class="icon-expand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
+      <div class="sidebar-actions">
+        <button type="button" id="btn-external-link" class="sidebar-icon-btn" aria-label="Gerar link externo" title="Link externo">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+        <button type="button" id="btn-fullscreen" class="sidebar-icon-btn" aria-label="Tela cheia" title="Tela cheia">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+        <button type="button" id="btn-sidebar-collapse" class="sidebar-rail-toggle" aria-label="Recolher painel" aria-expanded="true" title="Recolher painel">
+          <svg class="icon-collapse" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg class="icon-expand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+      
       <div class="sidebar-inner">
         <!-- Seção Transmissão -->
         <section class="sidebar-section transmission-section">
@@ -438,15 +453,6 @@ try{
             </details>
           </div>
         </details>
-
-        <div class="sidebar-actions">
-          <button type="button" id="btn-external-link" class="sidebar-icon-btn" aria-label="Gerar link externo" title="Link externo">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </button>
-          <button type="button" id="btn-fullscreen" class="sidebar-icon-btn" aria-label="Tela cheia" title="Tela cheia">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-          </button>
-        </div>
       </div>
     </aside>
   </main>
@@ -703,6 +709,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-06-26T17-19-28-z131pe"></script>
+  <script src="app.bundle.js?v=2026-06-26T18-31-41-3bryv4"></script>
 </body>
 </html>

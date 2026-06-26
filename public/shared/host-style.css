@@ -171,7 +171,7 @@
 .sidebar-actions {
   display: flex;
   gap: var(--space-sm);
-  justify-content: center;
+  justify-content: right;
   padding-top: var(--space-sm);
   margin-top: auto;
   flex-shrink: 0;

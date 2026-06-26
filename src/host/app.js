@@ -1457,7 +1457,10 @@ function handleMessage(msg) {
 }
 
 function coHostHandleMessage(msg) {
-  if (msg.type === 'transmissaoAtiva') return;
+  if (msg.type === 'transmissaoAtiva') {
+    applyTransmission(msg.payload);
+    return;
+  }
   handleMessage(msg);
 }
 
