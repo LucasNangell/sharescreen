@@ -2178,12 +2178,12 @@
         }
         for (const extendedCodec of extendedRtpCapabilities.codecs) {
           const matchingLocalRtxCodec = localCaps.codecs.find((localCodec) => {
-            var _a55;
-            return isRtxCodec(localCodec) && ((_a55 = localCodec.parameters) == null ? void 0 : _a55["apt"]) === extendedCodec.localPayloadType;
+            var _a56;
+            return isRtxCodec(localCodec) && ((_a56 = localCodec.parameters) == null ? void 0 : _a56["apt"]) === extendedCodec.localPayloadType;
           });
           const matchingRemoteRtxCodec = remoteCaps.codecs.find((remoteCodec) => {
-            var _a55;
-            return isRtxCodec(remoteCodec) && ((_a55 = remoteCodec.parameters) == null ? void 0 : _a55["apt"]) === extendedCodec.remotePayloadType;
+            var _a56;
+            return isRtxCodec(remoteCodec) && ((_a56 = remoteCodec.parameters) == null ? void 0 : _a56["apt"]) === extendedCodec.remotePayloadType;
           });
           if (matchingLocalRtxCodec && matchingRemoteRtxCodec) {
             extendedCodec.localRtxPayloadType = matchingLocalRtxCodec.preferredPayloadType;
@@ -4075,12 +4075,12 @@
             this.safeEmit("open");
           });
           this._dataChannel.addEventListener("error", (event) => {
-            var _a55, _b;
+            var _a56, _b;
             if (this._closed) {
               return;
             }
             const error = event.error ?? new Error("unknown DataChannel error");
-            if (((_a55 = event.error) == null ? void 0 : _a55.errorDetail) === "sctp-failure") {
+            if (((_a56 = event.error) == null ? void 0 : _a56.errorDetail) === "sctp-failure") {
               logger.error("DataChannel SCTP error [sctpCauseCode:%s]: %s", (_b = event.error) == null ? void 0 : _b.sctpCauseCode, event.error.message);
             } else {
               logger.error('DataChannel "error" event: %o', error);
@@ -4255,12 +4255,12 @@
             this.safeEmit("open");
           });
           this._dataChannel.addEventListener("error", (event) => {
-            var _a55, _b;
+            var _a56, _b;
             if (this._closed) {
               return;
             }
             const error = event.error ?? new Error("unknown DataChannel error");
-            if (((_a55 = event.error) == null ? void 0 : _a55.errorDetail) === "sctp-failure") {
+            if (((_a56 = event.error) == null ? void 0 : _a56.errorDetail) === "sctp-failure") {
               logger.error("DataChannel SCTP error [sctpCauseCode:%s]: %s", (_b = event.error) == null ? void 0 : _b.sctpCauseCode, event.error.message);
             } else {
               logger.error('DataChannel "error" event: %o', error);
@@ -6052,8 +6052,8 @@
           this._mediaObject.direction = "recvonly";
         }
         muxSimulcastStreams(encodings) {
-          var _a55, _b;
-          if (!((_a55 = this._mediaObject.simulcast) == null ? void 0 : _a55.list1)) {
+          var _a56, _b;
+          if (!((_a56 = this._mediaObject.simulcast) == null ? void 0 : _a56.list1)) {
             return;
           }
           const layers = {};
@@ -6075,7 +6075,7 @@
       exports.AnswerMediaSection = AnswerMediaSection;
       var OfferMediaSection = class extends MediaSection {
         constructor({ iceParameters, iceCandidates, dtlsParameters, sctpParameters, plainRtpParameters, mid, kind, offerRtpParameters, streamId, trackId }) {
-          var _a55;
+          var _a56;
           super({ iceParameters, iceCandidates, dtlsParameters });
           this._mediaObject.mid = String(mid);
           this._mediaObject.type = kind;
@@ -6147,7 +6147,7 @@
               this._mediaObject.rtcpRsize = "rtcp-rsize";
               const encoding = offerRtpParameters.encodings[0];
               const ssrc = encoding.ssrc;
-              const rtxSsrc = (_a55 = encoding.rtx) == null ? void 0 : _a55.ssrc;
+              const rtxSsrc = (_a56 = encoding.rtx) == null ? void 0 : _a56.ssrc;
               this._mediaObject.ssrcs = [];
               this._mediaObject.ssrcGroups = [];
               if (ssrc && offerRtpParameters.rtcp.cname) {
@@ -6303,7 +6303,7 @@
           return { idx: this._mediaSections.length };
         }
         send({ offerMediaObject, reuseMid, offerRtpParameters, answerRtpParameters, codecOptions }) {
-          var _a55;
+          var _a56;
           const mediaSection = new MediaSection_1.AnswerMediaSection({
             iceParameters: this._iceParameters,
             iceCandidates: this._iceCandidates,
@@ -6317,7 +6317,7 @@
           const mediaObject = mediaSection.getObject();
           const ddCodec = mediaObject.rtp.find((rtp) => DependencyDescriptorCodecs.includes(rtp.codec.toLowerCase()));
           if (!ddCodec) {
-            mediaObject.ext = (_a55 = mediaObject.ext) == null ? void 0 : _a55.filter((extmap) => extmap.uri !== "https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension");
+            mediaObject.ext = (_a56 = mediaObject.ext) == null ? void 0 : _a56.filter((extmap) => extmap.uri !== "https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension");
           }
           if (reuseMid) {
             this.replaceMediaSection(mediaSection, reuseMid);
@@ -6598,7 +6598,7 @@
         return ssrcCnameLine.value;
       }
       function applyCodecParameters({ offerRtpParameters, answerMediaObject }) {
-        var _a55;
+        var _a56;
         for (const codec of offerRtpParameters.codecs) {
           const mimeType = codec.mimeType.toLowerCase();
           if (mimeType !== "audio/opus") {
@@ -6617,7 +6617,7 @@
           const parameters = sdpTransform.parseParams(fmtp.config);
           switch (mimeType) {
             case "audio/opus": {
-              const spropStereo = (_a55 = codec.parameters) == null ? void 0 : _a55["sprop-stereo"];
+              const spropStereo = (_a56 = codec.parameters) == null ? void 0 : _a56["sprop-stereo"];
               if (spropStereo !== void 0) {
                 parameters["stereo"] = Number(spropStereo) ? 1 : 0;
               }
@@ -6775,9 +6775,9 @@
       exports.addHeaderExtensionSupport = addHeaderExtensionSupport;
       exports.getMsidStreamIdAndTrackId = getMsidStreamIdAndTrackId;
       function addNackSupportForOpus(rtpCapabilities) {
-        var _a55;
+        var _a56;
         for (const codec of rtpCapabilities.codecs ?? []) {
-          if ((codec.mimeType.toLowerCase() === "audio/opus" || codec.mimeType.toLowerCase() === "audio/multiopus") && !((_a55 = codec.rtcpFeedback) == null ? void 0 : _a55.some((fb) => fb.type === "nack" && !fb.parameter))) {
+          if ((codec.mimeType.toLowerCase() === "audio/opus" || codec.mimeType.toLowerCase() === "audio/multiopus") && !((_a56 = codec.rtcpFeedback) == null ? void 0 : _a56.some((fb) => fb.type === "nack" && !fb.parameter))) {
             if (!codec.rtcpFeedback) {
               codec.rtcpFeedback = [];
             }
@@ -6786,9 +6786,9 @@
         }
       }
       function addHeaderExtensionSupport(rtpCapabilities, headerExtension) {
-        var _a55;
+        var _a56;
         let preferredId;
-        const existingHeaderExtension = (_a55 = rtpCapabilities.headerExtensions) == null ? void 0 : _a55.find((exten) => exten.uri === headerExtension.uri);
+        const existingHeaderExtension = (_a56 = rtpCapabilities.headerExtensions) == null ? void 0 : _a56.find((exten) => exten.uri === headerExtension.uri);
         if (existingHeaderExtension) {
           if (existingHeaderExtension.kind === headerExtension.kind) {
             return;
@@ -7314,7 +7314,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a55;
+          var _a56;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -7329,7 +7329,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a55 = rtpParameters.rtcp) == null ? void 0 : _a55.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a56 = rtpParameters.rtcp) == null ? void 0 : _a56.cname) ?? "-",
               trackId
             });
           }
@@ -7512,8 +7512,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a55;
-          return (_a55 = this._pc.sctp) == null ? void 0 : _a55.maxMessageSize;
+          var _a56;
+          return (_a56 = this._pc.sctp) == null ? void 0 : _a56.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -8084,7 +8084,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a55;
+          var _a56;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -8099,7 +8099,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a55 = rtpParameters.rtcp) == null ? void 0 : _a55.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a56 = rtpParameters.rtcp) == null ? void 0 : _a56.cname) ?? "-",
               trackId
             });
           }
@@ -8271,8 +8271,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a55;
-          return (_a55 = this._pc.sctp) == null ? void 0 : _a55.maxMessageSize;
+          var _a56;
+          return (_a56 = this._pc.sctp) == null ? void 0 : _a56.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -8809,7 +8809,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a55;
+          var _a56;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -8824,7 +8824,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a55 = rtpParameters.rtcp) == null ? void 0 : _a55.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a56 = rtpParameters.rtcp) == null ? void 0 : _a56.cname) ?? "-",
               trackId
             });
           }
@@ -8999,8 +8999,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a55;
-          return (_a55 = this._pc.sctp) == null ? void 0 : _a55.maxMessageSize;
+          var _a56;
+          return (_a56 = this._pc.sctp) == null ? void 0 : _a56.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -9565,7 +9565,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a55;
+          var _a56;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -9580,7 +9580,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a55 = rtpParameters.rtcp) == null ? void 0 : _a55.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a56 = rtpParameters.rtcp) == null ? void 0 : _a56.cname) ?? "-",
               trackId
             });
           }
@@ -9762,8 +9762,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a55;
-          return (_a55 = this._pc.sctp) == null ? void 0 : _a55.maxMessageSize;
+          var _a56;
+          return (_a56 = this._pc.sctp) == null ? void 0 : _a56.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -10348,7 +10348,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a55;
+          var _a56;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -10363,7 +10363,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a55 = rtpParameters.rtcp) == null ? void 0 : _a55.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a56 = rtpParameters.rtcp) == null ? void 0 : _a56.cname) ?? "-",
               trackId
             });
           }
@@ -10546,8 +10546,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a55;
-          return (_a55 = this._pc.sctp) == null ? void 0 : _a55.maxMessageSize;
+          var _a56;
+          return (_a56 = this._pc.sctp) == null ? void 0 : _a56.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -12815,8 +12815,8 @@
       return this._state;
     }
     get connected() {
-      var _a55;
-      return ((_a55 = this.ws) == null ? void 0 : _a55.readyState) === WebSocket.OPEN;
+      var _a56;
+      return ((_a56 = this.ws) == null ? void 0 : _a56.readyState) === WebSocket.OPEN;
     }
     setState(next) {
       if (this._state === next) return;
@@ -12884,10 +12884,10 @@
         const entry = {
           resolve,
           filter: (msg) => {
-            var _a55;
+            var _a56;
             if (msg.type === "erro") {
               clearTimeout(timer);
-              reject(new Error(((_a55 = msg.payload) == null ? void 0 : _a55.mensagem) || "Erro do servidor"));
+              reject(new Error(((_a56 = msg.payload) == null ? void 0 : _a56.mensagem) || "Erro do servidor"));
               return true;
             }
             return msg.type === type && filter(msg);
@@ -12915,7 +12915,7 @@
       const socket = new WebSocket(this.url);
       this.ws = socket;
       socket.onopen = () => {
-        var _a55;
+        var _a56;
         if (this.ws !== socket) return;
         this.reconnectAttempt = 0;
         this.authenticated = false;
@@ -12931,7 +12931,7 @@
           }
         });
         this._flushCriticalQueue();
-        (_a55 = this.onOpen) == null ? void 0 : _a55.call(this);
+        (_a56 = this.onOpen) == null ? void 0 : _a56.call(this);
       };
       socket.onmessage = (ev) => {
         if (this.ws !== socket) return;
@@ -12943,13 +12943,13 @@
         }
       };
       socket.onclose = (ev) => {
-        var _a55;
+        var _a56;
         if (this.ws !== socket) return;
         this.authenticated = false;
         this._lastCloseCode = (ev == null ? void 0 : ev.code) ?? null;
         this._lastCloseReason = (ev == null ? void 0 : ev.reason) || "";
         this.setState(ConnectionState.DISCONNECTED);
-        (_a55 = this.onClose) == null ? void 0 : _a55.call(this, this._lastCloseCode, this._lastCloseReason);
+        (_a56 = this.onClose) == null ? void 0 : _a56.call(this, this._lastCloseCode, this._lastCloseReason);
         if (!this.intentionalClose && this.enableReconnect) {
           this.scheduleReconnect();
         }
@@ -13156,8 +13156,8 @@
     return base;
   }
   function pickScreenCodec(device, preferH264 = true) {
-    var _a55;
-    if (!((_a55 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a55.codecs)) return null;
+    var _a56;
+    if (!((_a56 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a56.codecs)) return null;
     const codecs = device.rtpCapabilities.codecs;
     if (preferH264) {
       return codecs.find((c) => c.mimeType.toLowerCase() === "video/h264") || codecs.find((c) => c.mimeType.toLowerCase() === "video/vp8");
@@ -13191,14 +13191,14 @@
     return opts;
   }
   function buildAudioProduceOptions(device, quality = {}) {
-    var _a55, _b;
+    var _a56, _b;
     const maxBitrate = quality.maxAudioBitrate ?? 128e3;
     const opts = {
       track: null,
       encodings: [{ maxBitrate }],
       appData: { mediaTag: "audio" }
     };
-    const opus = (_b = (_a55 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a55.codecs) == null ? void 0 : _b.find(
+    const opus = (_b = (_a56 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a56.codecs) == null ? void 0 : _b.find(
       (c) => c.mimeType.toLowerCase() === "audio/opus"
     );
     if (opus) opts.codec = opus;
@@ -13241,7 +13241,7 @@
     const reader = processor.readable.getReader();
     const scratch = new Float32Array(2048);
     const pump = async () => {
-      var _a55;
+      var _a56;
       while (!stopped) {
         let value = null;
         try {
@@ -13258,7 +13258,7 @@
         } catch (e) {
           break;
         } finally {
-          (_a55 = value == null ? void 0 : value.close) == null ? void 0 : _a55.call(value);
+          (_a56 = value == null ? void 0 : value.close) == null ? void 0 : _a56.call(value);
         }
       }
     };
@@ -13375,10 +13375,10 @@
   async function listMicrophoneDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices.filter((d) => d.kind === "audioinput" && d.deviceId).map((d, i) => {
-      var _a55;
+      var _a56;
       return {
         deviceId: d.deviceId,
-        label: ((_a55 = d.label) == null ? void 0 : _a55.trim()) || `Microfone ${i + 1}`
+        label: ((_a56 = d.label) == null ? void 0 : _a56.trim()) || `Microfone ${i + 1}`
       };
     });
   }
@@ -13426,17 +13426,17 @@
       this.onLevel = onLevel;
       this.stopMeter = startTrackLevelMeter(track, {
         onLevel: (smoothed) => {
-          var _a55;
+          var _a56;
           this.level = Math.min(100, Math.round(smoothed * 115));
-          (_a55 = this.onLevel) == null ? void 0 : _a55.call(this, this.level);
+          (_a56 = this.onLevel) == null ? void 0 : _a56.call(this, this.level);
         }
       });
     }
     async resume() {
     }
     detach() {
-      var _a55;
-      (_a55 = this.stopMeter) == null ? void 0 : _a55.call(this);
+      var _a56;
+      (_a56 = this.stopMeter) == null ? void 0 : _a56.call(this);
       this.stopMeter = null;
       this.level = 0;
     }
@@ -13495,11 +13495,11 @@
     }
   }
   function normalizeRemoteAudioSources(sources, { excludePeerId = null } = {}) {
-    var _a55;
+    var _a56;
     const byProducer = /* @__PURE__ */ new Map();
     for (const raw of sources || []) {
       const peerId2 = (raw == null ? void 0 : raw.peerId) || (raw == null ? void 0 : raw.id);
-      const producerId = (raw == null ? void 0 : raw.producerId) || ((_a55 = raw == null ? void 0 : raw.producerIds) == null ? void 0 : _a55.audio);
+      const producerId = (raw == null ? void 0 : raw.producerId) || ((_a56 = raw == null ? void 0 : raw.producerIds) == null ? void 0 : _a56.audio);
       const source = normalizeAudioSource((raw == null ? void 0 : raw.source) || "microphone", "microphone");
       if (!peerId2 || !producerId) continue;
       if (excludePeerId && String(peerId2) === String(excludePeerId)) continue;
@@ -13541,6 +13541,163 @@
   }
 
   // src/shared/media-client.js
+  var MIC_FILTER_DEFAULTS = {
+    gain: 1,
+    bass: 0,
+    treble: 0,
+    highpass: false,
+    highpassFreq: 80,
+    peaking: false,
+    peakingFreq: 3e3,
+    peakingGain: 3,
+    compressor: false,
+    noiseGate: false,
+    noiseGateThreshold: -45,
+    micCaptureDistance: 6
+  };
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function normalizeMicrophoneFilterPrefs(prefs = {}) {
+    const merged = { ...MIC_FILTER_DEFAULTS, ...prefs || {} };
+    return {
+      gain: clamp(Number(merged.gain ?? 1), 0, 3),
+      bass: clamp(Number(merged.bass ?? 0), -12, 12),
+      treble: clamp(Number(merged.treble ?? 0), -12, 12),
+      highpass: !!merged.highpass,
+      highpassFreq: clamp(Number(merged.highpassFreq ?? 80), 50, 300),
+      peaking: !!merged.peaking,
+      peakingFreq: clamp(Number(merged.peakingFreq ?? 3e3), 1e3, 5e3),
+      peakingGain: clamp(Number(merged.peakingGain ?? 3), 0, 12),
+      compressor: !!merged.compressor,
+      noiseGate: !!merged.noiseGate,
+      noiseGateThreshold: clamp(Number(merged.noiseGateThreshold ?? -45), -70, -20),
+      micCaptureDistance: clamp(Number(merged.micCaptureDistance ?? 6), 1, 10)
+    };
+  }
+  function hasActiveMicrophoneFilter(prefs) {
+    const p = normalizeMicrophoneFilterPrefs(prefs);
+    return Math.abs(p.gain - 1) > 0.01 || Math.abs(p.bass) > 0.01 || Math.abs(p.treble) > 0.01 || p.highpass || p.peaking || p.compressor || p.noiseGate;
+  }
+  function closeMicrophoneFilterGraph(graph) {
+    var _a56, _b, _c;
+    if (!graph) return;
+    if (graph.rafId) cancelAnimationFrame(graph.rafId);
+    for (const node of graph.nodes || []) {
+      try {
+        (_a56 = node.disconnect) == null ? void 0 : _a56.call(node);
+      } catch (_) {
+      }
+    }
+    for (const track of graph.outputTracks || []) {
+      try {
+        track.stop();
+      } catch (_) {
+      }
+    }
+    try {
+      (_c = (_b = graph.ctx) == null ? void 0 : _b.close) == null ? void 0 : _c.call(_b);
+    } catch (_) {
+    }
+  }
+  function gateThresholdDb(prefs) {
+    const distanceShift = (6 - prefs.micCaptureDistance) * 3;
+    return clamp(prefs.noiseGateThreshold + distanceShift, -70, -18);
+  }
+  function createMicrophoneFilterGraph(inputTrack, prefs) {
+    const normalized = normalizeMicrophoneFilterPrefs(prefs);
+    if (!inputTrack || inputTrack.readyState !== "live" || !hasActiveMicrophoneFilter(normalized)) {
+      return { track: inputTrack, graph: null };
+    }
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return { track: inputTrack, graph: null };
+    try {
+      const ctx = new AudioContextCtor({ latencyHint: "interactive" });
+      const inputStream = new MediaStream([inputTrack]);
+      const sourceNode = ctx.createMediaStreamSource(inputStream);
+      const highpassNode = ctx.createBiquadFilter();
+      const bassNode = ctx.createBiquadFilter();
+      const trebleNode = ctx.createBiquadFilter();
+      const peakingNode = ctx.createBiquadFilter();
+      const compressorNode = ctx.createDynamicsCompressor();
+      const gateGainNode = ctx.createGain();
+      const gainNode = ctx.createGain();
+      const analyserNode = ctx.createAnalyser();
+      const dest = ctx.createMediaStreamDestination();
+      highpassNode.type = "highpass";
+      highpassNode.frequency.value = normalized.highpass ? normalized.highpassFreq : 20;
+      bassNode.type = "lowshelf";
+      bassNode.frequency.value = 150;
+      bassNode.gain.value = normalized.bass;
+      trebleNode.type = "highshelf";
+      trebleNode.frequency.value = 4e3;
+      trebleNode.gain.value = normalized.treble;
+      peakingNode.type = "peaking";
+      peakingNode.frequency.value = normalized.peakingFreq;
+      peakingNode.Q.value = 1.2;
+      peakingNode.gain.value = normalized.peaking ? normalized.peakingGain : 0;
+      compressorNode.threshold.value = normalized.compressor ? -26 : 0;
+      compressorNode.knee.value = normalized.compressor ? 24 : 0;
+      compressorNode.ratio.value = normalized.compressor ? 5 : 1;
+      compressorNode.attack.value = 4e-3;
+      compressorNode.release.value = 0.16;
+      gateGainNode.gain.value = 1;
+      gainNode.gain.value = normalized.gain;
+      analyserNode.fftSize = 512;
+      analyserNode.smoothingTimeConstant = 0.55;
+      sourceNode.connect(highpassNode);
+      highpassNode.connect(bassNode);
+      bassNode.connect(trebleNode);
+      trebleNode.connect(peakingNode);
+      peakingNode.connect(compressorNode);
+      compressorNode.connect(analyserNode);
+      compressorNode.connect(gateGainNode);
+      gateGainNode.connect(gainNode);
+      gainNode.connect(dest);
+      const graph = {
+        ctx,
+        nodes: [sourceNode, highpassNode, bassNode, trebleNode, peakingNode, compressorNode, analyserNode, gateGainNode, gainNode],
+        outputTracks: dest.stream.getAudioTracks(),
+        rafId: null
+      };
+      if (normalized.noiseGate) {
+        const data = new Uint8Array(analyserNode.fftSize);
+        let gateOpen = true;
+        let lastOpenAt = performance.now();
+        const openDb = gateThresholdDb(normalized);
+        const closeDb = openDb - 8;
+        const holdMs = 180;
+        const tick = () => {
+          analyserNode.getByteTimeDomainData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            const n = (data[i] - 128) / 128;
+            sum += n * n;
+          }
+          const rms = Math.sqrt(sum / data.length) || 1e-6;
+          const db = 20 * Math.log10(rms);
+          const now = performance.now();
+          if (db >= openDb) {
+            gateOpen = true;
+            lastOpenAt = now;
+            gateGainNode.gain.setTargetAtTime(1, ctx.currentTime, 0.015);
+          } else if (gateOpen && db < closeDb && now - lastOpenAt > holdMs) {
+            gateOpen = false;
+            gateGainNode.gain.setTargetAtTime(0, ctx.currentTime, 0.045);
+          }
+          gainNode.gain.setTargetAtTime(normalized.gain, ctx.currentTime, 0.02);
+          graph.rafId = requestAnimationFrame(tick);
+        };
+        tick();
+      }
+      if (ctx.state === "suspended") ctx.resume().catch(() => {
+      });
+      return { track: graph.outputTracks[0] || inputTrack, graph };
+    } catch (err) {
+      console.warn("[MediaClient] Filtro de microfone indisponivel, publicando audio original:", err);
+      return { track: inputTrack, graph: null };
+    }
+  }
   var MediaClient = class {
     constructor(signaling3, { onLog, onIceState, splitRecvTransports = false } = {}) {
       this.signaling = signaling3;
@@ -13562,6 +13719,8 @@
       this.consumeGeneration = 0;
       this.localScreenStream = null;
       this._micTrack = null;
+      this._micFilterPrefs = normalizeMicrophoneFilterPrefs();
+      this._micFilterGraph = null;
       this.localMicTracks = [];
       this.videoQuality = {};
       this.capturePrefs = { systemAudio: true, microphone: false };
@@ -13574,14 +13733,14 @@
       return this.producers[key] || null;
     }
     hasPublishedMicrophone() {
-      var _a55;
+      var _a56;
       const producer = this.producers.microphone;
-      return !!(producer && !producer.closed && ((_a55 = producer.track) == null ? void 0 : _a55.readyState) === "live");
+      return !!(producer && !producer.closed && ((_a56 = producer.track) == null ? void 0 : _a56.readyState) === "live");
     }
     hasPublishedSystemAudio() {
-      var _a55;
+      var _a56;
       const producer = this.producers.system;
-      return !!(producer && !producer.closed && ((_a55 = producer.track) == null ? void 0 : _a55.readyState) === "live");
+      return !!(producer && !producer.closed && ((_a56 = producer.track) == null ? void 0 : _a56.readyState) === "live");
     }
     hasPublishedAudio() {
       return this.hasPublishedMicrophone() || this.hasPublishedSystemAudio() || !!(this.producers.mixed && !this.producers.mixed.closed);
@@ -13599,8 +13758,8 @@
       return this.setPublishedAudioMuted(!this.isPublishedAudioMuted());
     }
     getLocalMicrophoneTrack() {
-      var _a55, _b;
-      const published = (_a55 = this.producers.microphone) == null ? void 0 : _a55.track;
+      var _a56, _b;
+      const published = (_a56 = this.producers.microphone) == null ? void 0 : _a56.track;
       if ((published == null ? void 0 : published.readyState) === "live") return published;
       if (((_b = this._micTrack) == null ? void 0 : _b.readyState) === "live") return this._micTrack;
       return this.localMicTracks.find((t) => t.readyState === "live") || null;
@@ -13647,8 +13806,8 @@
       const createdPromise = this.signaling.onceType(
         "transporteCriado",
         (m) => {
-          var _a55, _b;
-          return ((_a55 = m.payload) == null ? void 0 : _a55.direction) === direction && (((_b = m.payload) == null ? void 0 : _b.tag) || "default") === recvTag;
+          var _a56, _b;
+          return ((_a56 = m.payload) == null ? void 0 : _a56.direction) === direction && (((_b = m.payload) == null ? void 0 : _b.tag) || "default") === recvTag;
         }
       );
       this.signaling.send("criarTransporte", {
@@ -13675,8 +13834,8 @@
           const connectedPromise = this.signaling.onceType(
             "transporteConectado",
             (m) => {
-              var _a55;
-              return ((_a55 = m.payload) == null ? void 0 : _a55.transportId) === transport.id;
+              var _a56;
+              return ((_a56 = m.payload) == null ? void 0 : _a56.transportId) === transport.id;
             }
           );
           this.signaling.send("conectarTransporte", {
@@ -13690,11 +13849,11 @@
         }
       });
       transport.on("connectionstatechange", (state) => {
-        var _a55, _b, _c, _d, _e;
+        var _a56, _b, _c, _d, _e;
         const level = state === "failed" ? "error" : "info";
         let msg = `Transport ${direction}${recvTag !== "default" ? `/${recvTag}` : ""}: ${state}`;
         if (state === "failed") {
-          const ice = ((_a55 = transport.iceCandidates) == null ? void 0 : _a55.map((c) => c.ip).filter(Boolean).join(", ")) || ((_b = this.videoQuality) == null ? void 0 : _b.serverHost) || "?";
+          const ice = ((_a56 = transport.iceCandidates) == null ? void 0 : _a56.map((c) => c.ip).filter(Boolean).join(", ")) || ((_b = this.videoQuality) == null ? void 0 : _b.serverHost) || "?";
           const ports = ((_c = this.videoQuality) == null ? void 0 : _c.rtcPortRange) || "40000-40100";
           msg += ` i?,???? verifique firewall UDP ${ports} em ${ice}`;
           (_d = this.onIceState) == null ? void 0 : _d.call(this, "failed", direction);
@@ -13710,8 +13869,8 @@
             const producedPromise = this.signaling.onceType(
               "produzido",
               (m) => {
-                var _a55, _b;
-                if (((_a55 = m.payload) == null ? void 0 : _a55.kind) !== kind) return false;
+                var _a56, _b;
+                if (((_a56 = m.payload) == null ? void 0 : _a56.kind) !== kind) return false;
                 if (kind === "audio" && source) {
                   return ((_b = m.payload) == null ? void 0 : _b.source) === source;
                 }
@@ -13775,9 +13934,9 @@
       return this.recvTransports.get(tag);
     }
     hasVideoProducer() {
-      var _a55;
+      var _a56;
       const producer = this.producers.video;
-      return !!(producer && !producer.closed && ((_a55 = producer.track) == null ? void 0 : _a55.readyState) === "live");
+      return !!(producer && !producer.closed && ((_a56 = producer.track) == null ? void 0 : _a56.readyState) === "live");
     }
     isSharingVideo() {
       return this.hasVideoProducer();
@@ -13798,17 +13957,21 @@
       this.localMicTracks = kept;
     }
     async _closeAudioProducerBySource(source, { stopMicTrack = false } = {}) {
-      var _a55;
+      var _a56;
       const key = normalizeAudioSource(source, "mixed");
       const producer = this.producers[key];
       if (producer && !producer.closed) {
         audioTrace("producer fechado", {
           source: key,
-          producerId: (_a55 = producer.id) == null ? void 0 : _a55.slice(0, 8)
+          producerId: (_a56 = producer.id) == null ? void 0 : _a56.slice(0, 8)
         });
         producer.close();
       }
       this.producers[key] = null;
+      if (key === "microphone") {
+        closeMicrophoneFilterGraph(this._micFilterGraph);
+        this._micFilterGraph = null;
+      }
       if (key === "microphone" && stopMicTrack) {
         if (this._micTrack) {
           try {
@@ -13821,15 +13984,20 @@
       }
     }
     async _publishAudioTrack(audioTrack, source) {
-      var _a55, _b, _c;
+      var _a56, _b, _c;
       const key = normalizeAudioSource(source, "mixed");
       if (!audioTrack || audioTrack.readyState !== "live") return false;
       await this.ensureSendTransport();
       const existing = this.producers[key];
-      if (existing && !existing.closed && existing.track === audioTrack && ((_a55 = existing.track) == null ? void 0 : _a55.readyState) === "live") {
+      if (existing && !existing.closed && existing.track === audioTrack && ((_a56 = existing.track) == null ? void 0 : _a56.readyState) === "live") {
         return true;
       }
       if (existing && !existing.closed) {
+        if (key === "microphone" && typeof existing.replaceTrack === "function") {
+          await existing.replaceTrack({ track: audioTrack });
+          if (key === "microphone" && this._publishedMicMuted) audioTrack.enabled = false;
+          return true;
+        }
         existing.close();
         this.producers[key] = null;
       }
@@ -13864,12 +14032,26 @@
       if (!this.localMicTracks.includes(track)) {
         this.localMicTracks.push(track);
       }
-      const ok = await this._publishAudioTrack(track, "microphone");
-      if (ok) this.onLog("Microfone publicado", "info");
-      if (!ok) {
+      const prepared = createMicrophoneFilterGraph(track, this._micFilterPrefs);
+      const previousGraph = this._micFilterGraph;
+      const ok = await this._publishAudioTrack(prepared.track, "microphone");
+      if (ok) {
+        this._micFilterGraph = prepared.graph;
+        closeMicrophoneFilterGraph(previousGraph);
+        this.onLog(prepared.graph ? "Microfone publicado com filtros" : "Microfone publicado", "info");
+      } else {
+        closeMicrophoneFilterGraph(prepared.graph);
         throw new Error("Falha ao publicar microfone no servidor");
       }
       return ok;
+    }
+    async setMicrophoneFilterPrefs(prefs) {
+      var _a56, _b;
+      this._micFilterPrefs = normalizeMicrophoneFilterPrefs(prefs || {});
+      if (((_a56 = this.capturePrefs) == null ? void 0 : _a56.microphone) && ((_b = this._micTrack) == null ? void 0 : _b.readyState) === "live") {
+        return this.publishMicrophone({ ...this.capturePrefs, microphone: true });
+      }
+      return true;
     }
     async stopMicrophone() {
       await this._closeAudioProducerBySource("microphone", { stopMicTrack: true });
@@ -13950,7 +14132,7 @@
       return navigator.mediaDevices.getDisplayMedia(constraints);
     }
     async publishDisplayStream(displayStream, capturePrefs2) {
-      var _a55;
+      var _a56;
       if (!displayStream) throw new Error("Nenhuma captura de tela fornecida");
       this.setCapturePrefs(capturePrefs2);
       await this.ensureSendTransport();
@@ -13974,7 +14156,7 @@
       this.localScreenStream = displayStream;
       try {
         applyContentHint(videoTrack, this.videoQuality.contentHint || "detail");
-        const settings = ((_a55 = videoTrack.getSettings) == null ? void 0 : _a55.call(videoTrack)) || {};
+        const settings = ((_a56 = videoTrack.getSettings) == null ? void 0 : _a56.call(videoTrack)) || {};
         if (settings.width && settings.height) {
           this.onLog(
             `Captura: ${settings.width}?f??"${settings.height} @ ${settings.frameRate || "?"}fps`,
@@ -14046,8 +14228,8 @@
         const resumePromise = this.signaling.onceType(
           "consumerRetomado",
           (m) => {
-            var _a55;
-            return ((_a55 = m.payload) == null ? void 0 : _a55.consumerId) === consumer.id;
+            var _a56;
+            return ((_a56 = m.payload) == null ? void 0 : _a56.consumerId) === consumer.id;
           }
         );
         this.signaling.send("retomarConsumer", { consumerId: consumer.id });
@@ -14070,16 +14252,16 @@
           reject(new Error(`Timeout aguardando: consumido (${producerId.slice(0, 8)})`));
         }, 25e3);
         const onConsumido = (msg) => {
-          var _a55;
+          var _a56;
           if (msg.type !== "consumido") return;
-          if (((_a55 = msg.payload) == null ? void 0 : _a55.producerId) !== producerId) return;
+          if (((_a56 = msg.payload) == null ? void 0 : _a56.producerId) !== producerId) return;
           cleanup();
           resolve(msg.payload);
         };
         const onErro = (msg) => {
-          var _a55, _b;
+          var _a56, _b;
           if (msg.type !== "erro") return;
-          const text = String(((_a55 = msg.payload) == null ? void 0 : _a55.mensagem) || "").toLowerCase();
+          const text = String(((_a56 = msg.payload) == null ? void 0 : _a56.mensagem) || "").toLowerCase();
           const consumeRelated = text.includes("consumir") || text.includes("producer") || text.includes("capacidades") || text.includes("transport");
           if (!consumeRelated) return;
           cleanup();
@@ -14196,13 +14378,13 @@
     async closeAuxiliaryAudio(peerId2, source = null) {
       return this._runMediaOp(async () => {
         const closeEntry = (key, entry) => {
-          var _a55;
+          var _a56;
           if (!entry || entry.consumer.closed) return;
           const { source: entrySource } = parseAudioChannelKey(key);
           audioTrace("consumer fechado", {
             peerId: String(peerId2).slice(0, 8),
             source: entrySource,
-            consumerId: (_a55 = entry.consumer.id) == null ? void 0 : _a55.slice(0, 8)
+            consumerId: (_a56 = entry.consumer.id) == null ? void 0 : _a56.slice(0, 8)
           });
           entry.consumer.close();
           try {
@@ -14236,7 +14418,7 @@
     }
     async consumeAuxiliaryAudio(peerId2, producerId, source = "microphone") {
       return this._runMediaOp(async () => {
-        var _a55;
+        var _a56;
         const channelKey = `${String(peerId2)}:${normalizeAudioSource(source, "microphone")}`;
         const existing = this.auxAudioConsumers.get(channelKey);
         if (existing && !existing.consumer.closed && existing.producerId === producerId) {
@@ -14268,17 +14450,17 @@
           peerId: String(peerId2).slice(0, 8),
           producerId: String(producerId).slice(0, 8),
           source: normalizeAudioSource(source, "microphone"),
-          consumerId: (_a55 = consumer.id) == null ? void 0 : _a55.slice(0, 8)
+          consumerId: (_a56 = consumer.id) == null ? void 0 : _a56.slice(0, 8)
         });
         return consumer;
       });
     }
     async consumeRemoteMedia(producerIds, { videoEl: videoEl2 = null, audioEl = null, ownProducerIds = null } = {}) {
       return this._runMediaOp(async () => {
-        var _a55, _b;
+        var _a56, _b;
         if ((producerIds == null ? void 0 : producerIds.video) && videoEl2) {
           const ownVideoIds = new Set(
-            [ownProducerIds == null ? void 0 : ownProducerIds.video, (_a55 = this.producers.video) == null ? void 0 : _a55.id].filter(Boolean)
+            [ownProducerIds == null ? void 0 : ownProducerIds.video, (_a56 = this.producers.video) == null ? void 0 : _a56.id].filter(Boolean)
           );
           if (ownVideoIds.has(producerIds.video)) {
             this.onLog("Ignorando consumo do proprio producer de video", "warn");
@@ -14389,11 +14571,11 @@
       });
     }
     detachMedia({ videoEl: videoEl2 = null, audioEl = null } = {}) {
-      var _a55;
+      var _a56;
       if (videoEl2) videoEl2.srcObject = null;
       if (audioEl) {
         audioEl.srcObject = null;
-        (_a55 = audioEl.pause) == null ? void 0 : _a55.call(audioEl);
+        (_a56 = audioEl.pause) == null ? void 0 : _a56.call(audioEl);
       }
       return this.closeRemoteConsumers();
     }
@@ -14411,14 +14593,14 @@
       return !!consumer && !consumer.closed && consumer.paused;
     }
     getRecordableStream({ hostPeerId: hostPeerId2, selectedPeerId } = {}) {
-      var _a55;
+      var _a56;
       const own = hostPeerId2 && selectedPeerId && String(selectedPeerId) === String(hostPeerId2);
       if (own && this.localScreenStream) {
         const vt = this.localScreenStream.getVideoTracks()[0];
         if ((vt == null ? void 0 : vt.readyState) === "live") return this.localScreenStream;
       }
       const tracks = [];
-      const rv = (_a55 = this.remoteConsumers.video) == null ? void 0 : _a55.track;
+      const rv = (_a56 = this.remoteConsumers.video) == null ? void 0 : _a56.track;
       const audioConsumer = this.remoteConsumers.audio;
       const ra = audioConsumer == null ? void 0 : audioConsumer.track;
       if ((rv == null ? void 0 : rv.readyState) === "live") tracks.push(rv);
@@ -14470,7 +14652,7 @@
       }
     }
     async dispose({ notifyServer = false, keepLocalScreenStream = false, keepMicTrack = false } = {}) {
-      var _a55;
+      var _a56;
       if (keepLocalScreenStream) {
         await this.detachProducers({ notifyServer, keepMicTrack });
       } else {
@@ -14478,7 +14660,7 @@
       }
       await this.closeRemoteConsumers();
       await this.closeAllAuxiliaryAudio();
-      (_a55 = this.sendTransport) == null ? void 0 : _a55.close();
+      (_a56 = this.sendTransport) == null ? void 0 : _a56.close();
       for (const transport of this.recvTransports.values()) {
         transport == null ? void 0 : transport.close();
       }
@@ -14510,11 +14692,11 @@
     return !!producerIds.video;
   }
   function parseRoomSnapshot(snapshot = {}) {
-    var _a55;
+    var _a56;
     const transmission = normalizeTransmission(
       snapshot.transmission || snapshot.transmissaoAtiva || snapshot
     );
-    const audioSources = snapshot.audioSources || snapshot.audioProducers || ((_a55 = snapshot.fontesAudio) == null ? void 0 : _a55.sources) || [];
+    const audioSources = snapshot.audioSources || snapshot.audioProducers || ((_a56 = snapshot.fontesAudio) == null ? void 0 : _a56.sources) || [];
     return {
       transmission,
       audioSources,
@@ -14526,33 +14708,33 @@
     };
   }
   function roomSnapshotMediaKey(snapshot = {}) {
-    var _a55;
+    var _a56;
     const { transmission, audioSources } = parseRoomSnapshot(snapshot);
-    const videoId = ((_a55 = transmission.producerIds) == null ? void 0 : _a55.video) || "";
+    const videoId = ((_a56 = transmission.producerIds) == null ? void 0 : _a56.video) || "";
     const audioIds = (audioSources || []).map((s) => `${s.peerId || s.id}:${s.producerId}`).sort().join("|");
     return `${transmission.selectedPeerId || ""}:${videoId}:${transmission.paused ? "1" : "0"}:${audioIds}`;
   }
   function activeVideoTransmissionKey(transmission) {
-    var _a55;
+    var _a56;
     const t = normalizeTransmission(transmission);
-    return `${t.selectedPeerId || ""}:${((_a55 = t.producerIds) == null ? void 0 : _a55.video) || ""}:${t.paused ? "1" : "0"}`;
+    return `${t.selectedPeerId || ""}:${((_a56 = t.producerIds) == null ? void 0 : _a56.video) || ""}:${t.paused ? "1" : "0"}`;
   }
   function remoteVideoConsumeNeeded(transmission, { currentProducerId = null, isSelfSelected = false, hasVideoElement = false, consumerClosed = false } = {}) {
-    var _a55;
+    var _a56;
     const tx = normalizeTransmission(transmission);
     if (isSelfSelected) return false;
     if (!hasActiveVideo(tx) || tx.paused) return false;
-    const nextId = (_a55 = tx.producerIds) == null ? void 0 : _a55.video;
+    const nextId = (_a56 = tx.producerIds) == null ? void 0 : _a56.video;
     if (!nextId) return false;
     if (consumerClosed || !currentProducerId || currentProducerId !== nextId) return true;
     return !hasVideoElement;
   }
   function mergeSourceWithTransmission(source, tx, { isSelected = false } = {}) {
-    var _a55, _b, _c;
+    var _a56, _b, _c;
     if (!source) return source;
     const normalized = normalizeTransmission(tx);
     if (!hasActiveVideo(normalized)) return source;
-    const videoId = ((_a55 = normalized.producerIds) == null ? void 0 : _a55.video) || null;
+    const videoId = ((_a56 = normalized.producerIds) == null ? void 0 : _a56.video) || null;
     return {
       ...source,
       isProducing: true,
@@ -14567,18 +14749,18 @@
     };
   }
   function enrichRoomSourcesState(estado2 = {}, transmission) {
-    var _a55;
+    var _a56;
     if (!estado2) return estado2;
     const tx = normalizeTransmission(transmission || {});
     if (!hasActiveVideo(tx)) return { ...estado2 };
     const selectedId = tx.selectedPeerId;
-    const videoId = (_a55 = tx.producerIds) == null ? void 0 : _a55.video;
+    const videoId = (_a56 = tx.producerIds) == null ? void 0 : _a56.video;
     const clients = (estado2.clients || []).map((c) => {
-      var _a56;
+      var _a57;
       if (selectedId && String(c.id) === String(selectedId)) {
         return mergeSourceWithTransmission(c, tx, { isSelected: true });
       }
-      if (videoId && (((_a56 = c.producerIds) == null ? void 0 : _a56.video) === videoId || c.producerId === videoId)) {
+      if (videoId && (((_a57 = c.producerIds) == null ? void 0 : _a57.video) === videoId || c.producerId === videoId)) {
         return mergeSourceWithTransmission(c, tx);
       }
       return c;
@@ -14602,29 +14784,29 @@
     return { ...estado2, clients, selecionado };
   }
   function enrichDisplaySources(sources, transmission) {
-    var _a55;
+    var _a56;
     if (!(sources == null ? void 0 : sources.length) || !transmission) return sources || [];
     const tx = normalizeTransmission(transmission);
     if (!hasActiveVideo(tx)) return sources;
     const selectedId = tx.selectedPeerId;
-    const videoId = (_a55 = tx.producerIds) == null ? void 0 : _a55.video;
+    const videoId = (_a56 = tx.producerIds) == null ? void 0 : _a56.video;
     return sources.map((s) => {
-      var _a56;
+      var _a57;
       if (selectedId && String(s.id) === String(selectedId)) {
         return mergeSourceWithTransmission(s, tx, { isSelected: !!s.selecionado });
       }
-      if (videoId && (((_a56 = s.producerIds) == null ? void 0 : _a56.video) === videoId || s.producerId === videoId)) {
+      if (videoId && (((_a57 = s.producerIds) == null ? void 0 : _a57.video) === videoId || s.producerId === videoId)) {
         return mergeSourceWithTransmission(s, tx);
       }
       return s;
     });
   }
   function transmissionSelectionKey(tx) {
-    var _a55;
+    var _a56;
     const n = normalizeTransmission(tx);
     return [
       n.selectedPeerId || "",
-      ((_a55 = n.producerIds) == null ? void 0 : _a55.video) || "",
+      ((_a56 = n.producerIds) == null ? void 0 : _a56.video) || "",
       n.paused ? "1" : "0"
     ].join(":");
   }
@@ -14679,14 +14861,14 @@
       this._appliedVideoKey = "";
     }
     _needsVideoSync(tx, force) {
-      var _a55, _b, _c;
+      var _a56, _b, _c;
       if (force) return true;
       const media3 = this.getMedia();
       if (!media3) return false;
       const activeKey = activeVideoTransmissionKey(tx);
       const peerId2 = this.getPeerId();
       const videoEl2 = this.getVideoEl();
-      const currentProducerId = media3.currentActiveVideoProducerId || ((_b = (_a55 = media3.remoteConsumers) == null ? void 0 : _a55.video) == null ? void 0 : _b.producerId) || null;
+      const currentProducerId = media3.currentActiveVideoProducerId || ((_b = (_a56 = media3.remoteConsumers) == null ? void 0 : _a56.video) == null ? void 0 : _b.producerId) || null;
       const isSelfSelected = String(normalizeTransmission(tx).selectedPeerId) === String(peerId2);
       const needsConsume = remoteVideoConsumeNeeded(tx, {
         currentProducerId,
@@ -14709,17 +14891,17 @@
       }
       const gen = ++this._generation;
       this._work = this._work.then(() => this._runApply(tx, gen)).catch((e) => {
-        var _a55;
-        (_a55 = this.onError) == null ? void 0 : _a55.call(this, e);
+        var _a56;
+        (_a56 = this.onError) == null ? void 0 : _a56.call(this, e);
         throw e;
       });
       return this._work;
     }
     onConsumerClosed(consumerId) {
-      var _a55, _b;
+      var _a56, _b;
       const media3 = this.getMedia();
       if (!media3) return this._work;
-      const wasVideoConsumer = ((_b = (_a55 = media3.remoteConsumers) == null ? void 0 : _a55.video) == null ? void 0 : _b.id) === consumerId;
+      const wasVideoConsumer = ((_b = (_a56 = media3.remoteConsumers) == null ? void 0 : _a56.video) == null ? void 0 : _b.id) === consumerId;
       if (wasVideoConsumer) {
         media3.remoteConsumers.video = null;
         media3.currentActiveVideoProducerId = null;
@@ -14741,7 +14923,7 @@
       return this._work;
     }
     async _runApply(tx, gen) {
-      var _a55, _b, _c, _d, _e, _f, _g, _h, _i;
+      var _a56, _b, _c, _d, _e, _f, _g, _h, _i;
       if (gen !== this._generation) return;
       const media3 = this.getMedia();
       const videoEl2 = this.getVideoEl();
@@ -14784,7 +14966,7 @@
           this.onStatus(
             tx.paused ? "Transmissao pausada pelo host" : `Assistindo: ${tx.peerName || "fonte"}`
           );
-          const nextVideoProducer = (_a55 = tx.producerIds) == null ? void 0 : _a55.video;
+          const nextVideoProducer = (_a56 = tx.producerIds) == null ? void 0 : _a56.video;
           if (nextVideoProducer && !tx.paused && media3) {
             if (gen !== this._generation) return;
             const ownProducerId = ((_c = (_b = media3.producers) == null ? void 0 : _b.video) == null ? void 0 : _c.id) || null;
@@ -15034,17 +15216,17 @@
       this.peerNames = /* @__PURE__ */ new Map();
     }
     _log(event, data = {}) {
-      var _a55, _b;
+      var _a56, _b;
       audioTrace(event, data);
-      (_b = (_a55 = this.opts).onLog) == null ? void 0 : _b.call(_a55, event, data);
+      (_b = (_a56 = this.opts).onLog) == null ? void 0 : _b.call(_a56, event, data);
     }
     setManualMuted(mutedPeerIds) {
-      var _a55;
+      var _a56;
       this._mutedPeerIds = new Set(
         [...mutedPeerIds || []].map((id) => String(id))
       );
       for (const ch of this.channels.values()) {
-        const track = (_a55 = ch.consumer) == null ? void 0 : _a55.track;
+        const track = (_a56 = ch.consumer) == null ? void 0 : _a56.track;
         if (track) {
           const silenced = this._isChannelMuted(ch.peerId);
           track.enabled = !silenced;
@@ -15076,7 +15258,7 @@
       await this._tryPlayOutput();
     }
     async _tryPlayOutput() {
-      var _a55, _b;
+      var _a56, _b;
       const el = this.outputEl;
       if (!el || !this.channels.size) return;
       try {
@@ -15088,29 +15270,29 @@
         if ((err == null ? void 0 : err.name) === "NotAllowedError" || /autoplay/i.test(String((err == null ? void 0 : err.message) || ""))) {
           this._autoplayBlocked = true;
           this._log("autoplay bloqueado", { channels: this.channels.size });
-          (_b = (_a55 = this.opts).onAutoplayBlocked) == null ? void 0 : _b.call(_a55, err);
+          (_b = (_a56 = this.opts).onAutoplayBlocked) == null ? void 0 : _b.call(_a56, err);
         }
       }
     }
     getOutputTrack() {
-      var _a55;
+      var _a56;
       for (const ch of this.channels.values()) {
-        const track = (_a55 = ch.consumer) == null ? void 0 : _a55.track;
+        const track = (_a56 = ch.consumer) == null ? void 0 : _a56.track;
         if ((track == null ? void 0 : track.readyState) === "live") return track;
       }
       return null;
     }
     getMixedOutputTrack() {
-      var _a55, _b, _c;
+      var _a56, _b, _c;
       this._ensureAudioContext();
       this._refreshDirectOutput();
-      const track = (_c = (_b = (_a55 = this.dest) == null ? void 0 : _a55.stream) == null ? void 0 : _b.getAudioTracks) == null ? void 0 : _c.call(_b)[0];
+      const track = (_c = (_b = (_a56 = this.dest) == null ? void 0 : _a56.stream) == null ? void 0 : _b.getAudioTracks) == null ? void 0 : _c.call(_b)[0];
       return (track == null ? void 0 : track.readyState) === "live" ? track : null;
     }
     _startLevelsLoop() {
       if (this._levelsRaf) return;
       const tick = () => {
-        var _a55;
+        var _a56;
         const levels = /* @__PURE__ */ new Map();
         for (const ch of this.channels.values()) {
           if (ch.analyserNode) {
@@ -15133,7 +15315,7 @@
             speaking: (ch.rawLevel || 0) > 0.04 || (ch.smoothedLevel || 0) > 0.05
           });
         }
-        if (levels.size) (_a55 = this.onLevels) == null ? void 0 : _a55.call(this, levels);
+        if (levels.size) (_a56 = this.onLevels) == null ? void 0 : _a56.call(this, levels);
         this._levelsRaf = requestAnimationFrame(tick);
       };
       tick();
@@ -15144,8 +15326,8 @@
       this._levelsRaf = null;
     }
     _startChannelMeter(ch) {
-      var _a55, _b;
-      (_a55 = ch.stopMeter) == null ? void 0 : _a55.call(ch);
+      var _a56, _b;
+      (_a56 = ch.stopMeter) == null ? void 0 : _a56.call(ch);
       const track = (_b = ch.consumer) == null ? void 0 : _b.track;
       if (!track) return;
       ch.stopMeter = startTrackLevelMeter(track, {
@@ -15165,14 +15347,14 @@
       }
     }
     _refreshDirectOutput() {
-      var _a55, _b;
+      var _a56, _b;
       const el = this.outputEl;
       if (!el) return;
       const tracksToPlay = [];
       const directTracks = [];
       let hasDsp = false;
       for (const ch of this.channels.values()) {
-        const track = (_a55 = ch.consumer) == null ? void 0 : _a55.track;
+        const track = (_a56 = ch.consumer) == null ? void 0 : _a56.track;
         if (!track || track.readyState !== "live") continue;
         directTracks.push(track);
         hasDsp = true;
@@ -15305,7 +15487,8 @@
           peakingGain: 3,
           compressor: false,
           noiseGate: false,
-          noiseGateThreshold: -45
+          noiseGateThreshold: -45,
+          micCaptureDistance: 6
         });
       }
       return this.filterPrefs.get(key);
@@ -15418,8 +15601,9 @@
     _startNoiseGateLoop(ch) {
       if (ch.gateInterval) clearInterval(ch.gateInterval);
       let isOpen = true;
+      let lastOpenAt = performance.now();
       ch.gateInterval = setInterval(() => {
-        if (!ch.gainNode) return;
+        if (!ch.gainNode || !this.ctx) return;
         const isMuted = this._isChannelMuted(ch.peerId);
         if (isMuted) {
           ch.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.01);
@@ -15429,27 +15613,26 @@
         const prefs = this.getFilterPrefs(ch.peerId);
         const targetGain = prefs.gain !== void 0 ? prefs.gain : 1;
         if (!prefs.noiseGate) {
-          if (!isOpen) {
-            ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
-            isOpen = true;
-          }
+          if (!isOpen) isOpen = true;
+          ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
           return;
         }
-        const threshDb = prefs.noiseGateThreshold !== void 0 ? prefs.noiseGateThreshold : -45;
-        const threshAmp = Math.pow(10, threshDb / 20);
-        const currentLevel = ch.rawLevel || 0;
-        if (currentLevel < threshAmp) {
-          if (isOpen) {
-            ch.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.04);
-            isOpen = false;
-          }
-        } else {
-          if (!isOpen) {
-            ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.02);
-            isOpen = true;
-          }
+        const distance = Math.max(1, Math.min(10, Number(prefs.micCaptureDistance || 6)));
+        const baseDb = prefs.noiseGateThreshold !== void 0 ? Number(prefs.noiseGateThreshold) : -45;
+        const openDb = Math.max(-70, Math.min(-18, baseDb + (6 - distance) * 3));
+        const closeDb = openDb - 8;
+        const currentLevel = Math.max(ch.rawLevel || 0, 1e-6);
+        const currentDb = 20 * Math.log10(currentLevel);
+        const now = performance.now();
+        if (currentDb >= openDb) {
+          isOpen = true;
+          lastOpenAt = now;
+          ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.02);
+        } else if (isOpen && currentDb < closeDb && now - lastOpenAt > 180) {
+          isOpen = false;
+          ch.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
         }
-      }, 50);
+      }, 35);
     }
     async syncFromSources(sources) {
       if (!this.media) return;
@@ -15501,7 +15684,7 @@
       return this.syncFromSources(sources);
     }
     async _addChannel(channelKey, peerId2, producerId, source = "microphone", attempt = 0) {
-      var _a55, _b, _c, _d;
+      var _a56, _b, _c, _d;
       const existing = this.channels.get(channelKey);
       if (existing && existing.producerId === producerId && existing.consumer && !existing.consumer.closed) {
         return;
@@ -15517,7 +15700,7 @@
           source
         });
         track.enabled = true;
-        await ((_b = (_a55 = this.media)._resumeRemoteConsumer) == null ? void 0 : _b.call(_a55, consumer));
+        await ((_b = (_a56 = this.media)._resumeRemoteConsumer) == null ? void 0 : _b.call(_a56, consumer));
         if (consumer.paused) await consumer.resume();
         const onProducerClosed = () => {
           this._log("producer fechado", {
@@ -15557,8 +15740,8 @@
         wireMeter();
         track.addEventListener("unmute", wireMeter, { once: false });
         track.addEventListener("ended", () => {
-          var _a56;
-          (_a56 = ch.stopMeter) == null ? void 0 : _a56.call(ch);
+          var _a57;
+          (_a57 = ch.stopMeter) == null ? void 0 : _a57.call(ch);
           this._removeChannel(channelKey).catch(() => {
           });
         }, { once: true });
@@ -15573,10 +15756,10 @@
       }
     }
     async removeByConsumerId(consumerId) {
-      var _a55;
+      var _a56;
       if (!consumerId) return;
       for (const [channelKey, ch] of this.channels.entries()) {
-        if (((_a55 = ch.consumer) == null ? void 0 : _a55.id) === consumerId) {
+        if (((_a56 = ch.consumer) == null ? void 0 : _a56.id) === consumerId) {
           await this._removeChannel(channelKey);
           return;
         }
@@ -15586,10 +15769,10 @@
       return !!this._autoplayBlocked;
     }
     async _removeChannel(channelKey) {
-      var _a55, _b, _c, _d;
+      var _a56, _b, _c, _d;
       const ch = this.channels.get(channelKey);
       if (!ch) return;
-      (_a55 = ch.stopMeter) == null ? void 0 : _a55.call(ch);
+      (_a56 = ch.stopMeter) == null ? void 0 : _a56.call(ch);
       this._clearChannelDsp(ch);
       if (ch.consumer && ch._onProducerClosed) {
         try {
@@ -15634,8 +15817,8 @@
 
   // src/shared/display-sources.js
   function isSelectableSource(client) {
-    var _a55;
-    return !!((client == null ? void 0 : client.isProducing) || (client == null ? void 0 : client.hasVideo) || ((_a55 = client == null ? void 0 : client.producerIds) == null ? void 0 : _a55.video) || (client == null ? void 0 : client.producerId) || (client == null ? void 0 : client.status) === "transmitindo");
+    var _a56;
+    return !!((client == null ? void 0 : client.isProducing) || (client == null ? void 0 : client.hasVideo) || ((_a56 = client == null ? void 0 : client.producerIds) == null ? void 0 : _a56.video) || (client == null ? void 0 : client.producerId) || (client == null ? void 0 : client.status) === "transmitindo");
   }
   function sortDisplaySources(clients) {
     return [...clients || []].sort((a, b) => {
@@ -15649,8 +15832,8 @@
 
   // src/shared/source-cards.js
   function hasVideoAvailable(c) {
-    var _a55;
-    return !!((c == null ? void 0 : c.isProducing) || (c == null ? void 0 : c.hasVideo) || ((_a55 = c == null ? void 0 : c.producerIds) == null ? void 0 : _a55.video) || (c == null ? void 0 : c.producerId) || (c == null ? void 0 : c.status) === "transmitindo");
+    var _a56;
+    return !!((c == null ? void 0 : c.isProducing) || (c == null ? void 0 : c.hasVideo) || ((_a56 = c == null ? void 0 : c.producerIds) == null ? void 0 : _a56.video) || (c == null ? void 0 : c.producerId) || (c == null ? void 0 : c.status) === "transmitindo");
   }
   function isConnectedPeer(c) {
     return !!(c == null ? void 0 : c.id) && (c == null ? void 0 : c.status) !== "desconectado";
@@ -15720,7 +15903,7 @@
     return bar;
   }
   function buildDisplaySourceCard(c, onSelect, options = {}) {
-    var _a55, _b;
+    var _a56, _b;
     const cardState = getSourceCardState(c);
     const li = document.createElement("li");
     li.className = "card card-selectable source-card";
@@ -15735,7 +15918,7 @@
     if (cardState.kind === "available") li.classList.add("available");
     const body = document.createElement("div");
     body.className = "source-card-body";
-    (_a55 = options.decorateBody) == null ? void 0 : _a55.call(options, body, c);
+    (_a56 = options.decorateBody) == null ? void 0 : _a56.call(options, body, c);
     const nameWrap = document.createElement("div");
     nameWrap.className = "source-name-wrap";
     const name = document.createElement("div");
@@ -15833,8 +16016,8 @@
       return "video/webm";
     }
     start(stream, quality = {}) {
-      var _a55, _b;
-      if (!((_a55 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a55.call(stream).length)) {
+      var _a56, _b;
+      if (!((_a56 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a56.call(stream).length)) {
         throw new Error("Nenhum v\xEDdeo dispon\xEDvel para gravar");
       }
       const liveVideo = stream.getVideoTracks().some((t) => t.readyState === "live");
@@ -15851,8 +16034,8 @@
         videoBitsPerSecond: vbps
       });
       this.mediaRecorder.ondataavailable = (e) => {
-        var _a56;
-        if (((_a56 = e.data) == null ? void 0 : _a56.size) > 0) {
+        var _a57;
+        if (((_a57 = e.data) == null ? void 0 : _a57.size) > 0) {
           this.chunks.push(e.data);
           this._approxBytes += e.data.size;
         }
@@ -15900,8 +16083,8 @@
       this.setState(RecordingState.IDLE);
     }
     isRecording() {
-      var _a55;
-      return ((_a55 = this.mediaRecorder) == null ? void 0 : _a55.state) === "recording";
+      var _a56;
+      return ((_a56 = this.mediaRecorder) == null ? void 0 : _a56.state) === "recording";
     }
     async upload(blob, filename = formatRecordingFilename(/* @__PURE__ */ new Date()), customDir = "") {
       if (!(blob == null ? void 0 : blob.size)) throw new Error("Grava\xE7\xE3o vazia");
@@ -16000,13 +16183,13 @@
 
   // src/shared/recording-compositor.js
   function getLiveVideoTrack(stream) {
-    var _a55;
-    return ((_a55 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a55.call(stream).find((track) => track.readyState === "live")) || null;
+    var _a56;
+    return ((_a56 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a56.call(stream).find((track) => track.readyState === "live")) || null;
   }
   function getVideoDimensions(videoEl2, fallbackStream) {
-    var _a55;
+    var _a56;
     const fallbackTrack = getLiveVideoTrack(fallbackStream);
-    const settings = ((_a55 = fallbackTrack == null ? void 0 : fallbackTrack.getSettings) == null ? void 0 : _a55.call(fallbackTrack)) || {};
+    const settings = ((_a56 = fallbackTrack == null ? void 0 : fallbackTrack.getSettings) == null ? void 0 : _a56.call(fallbackTrack)) || {};
     const width = (videoEl2 == null ? void 0 : videoEl2.videoWidth) || settings.width || 1280;
     const height = (videoEl2 == null ? void 0 : videoEl2.videoHeight) || settings.height || 720;
     return {
@@ -16142,9 +16325,9 @@
     list.push({ track: live });
   }
   function collectOwnAudioTracks(media3) {
-    var _a55, _b, _c, _d, _e, _f, _g;
+    var _a56, _b, _c, _d, _e, _f, _g;
     const tracks = [];
-    addTrackOnce(tracks, (_b = (_a55 = media3 == null ? void 0 : media3.producers) == null ? void 0 : _a55.system) == null ? void 0 : _b.track);
+    addTrackOnce(tracks, (_b = (_a56 = media3 == null ? void 0 : media3.producers) == null ? void 0 : _a56.system) == null ? void 0 : _b.track);
     addTrackOnce(tracks, (_d = (_c = media3 == null ? void 0 : media3.localScreenStream) == null ? void 0 : _c.getAudioTracks) == null ? void 0 : _d.call(_c)[0]);
     addTrackOnce(tracks, (_f = (_e = media3 == null ? void 0 : media3.producers) == null ? void 0 : _e.microphone) == null ? void 0 : _f.track);
     addTrackOnce(tracks, (_g = media3 == null ? void 0 : media3.getLocalMicrophoneTrack) == null ? void 0 : _g.call(media3));
@@ -16152,8 +16335,8 @@
   }
   var RecordingAudioMixer = {
     async build({ hostAudioMonitor: hostAudioMonitor2, media: media3, own = false } = {}) {
-      var _a55, _b;
-      await ((_a55 = hostAudioMonitor2 == null ? void 0 : hostAudioMonitor2.resume) == null ? void 0 : _a55.call(hostAudioMonitor2));
+      var _a56, _b;
+      await ((_a56 = hostAudioMonitor2 == null ? void 0 : hostAudioMonitor2.resume) == null ? void 0 : _a56.call(hostAudioMonitor2));
       const sources = [];
       addTrackOnce(sources, (_b = hostAudioMonitor2 == null ? void 0 : hostAudioMonitor2.getMixedOutputTrack) == null ? void 0 : _b.call(hostAudioMonitor2));
       if (own) {
@@ -16283,7 +16466,7 @@
   // src/shared/stats-collector.js
   var prevSamples = /* @__PURE__ */ new WeakMap();
   async function collectWebRtcStats(mediaClient) {
-    var _a55;
+    var _a56;
     const out = {
       bitrateKbps: null,
       packetLoss: null,
@@ -16291,7 +16474,7 @@
       fps: null,
       timestamp: Date.now()
     };
-    const targets = ((_a55 = mediaClient == null ? void 0 : mediaClient.getStatsTargets) == null ? void 0 : _a55.call(mediaClient)) || [];
+    const targets = ((_a56 = mediaClient == null ? void 0 : mediaClient.getStatsTargets) == null ? void 0 : _a56.call(mediaClient)) || [];
     if (!targets.length) return out;
     let packetsLost = 0;
     let packetsReceived = 0;
@@ -16411,9 +16594,9 @@
     showToast(message, type, durationMs);
   }
   function readQueryParam(key) {
-    var _a55;
+    var _a56;
     try {
-      return ((_a55 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a55.trim()) || "";
+      return ((_a56 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a56.trim()) || "";
     } catch {
       return "";
     }
@@ -16520,7 +16703,7 @@
   if (readQueryParam("nome")) localStorage.setItem(STORAGE_HOST_NAME, readQueryParam("nome"));
   function promptHostEntry(roomPinRequired) {
     return new Promise((resolve) => {
-      var _a55, _b, _c;
+      var _a56, _b, _c;
       if (els.hostNameInput && hostDisplayName) {
         els.hostNameInput.value = hostDisplayName;
       }
@@ -16531,8 +16714,8 @@
         els.hostEntryModal.hidden = false;
       }
       const submit = () => {
-        var _a56, _b2, _c2, _d;
-        const name = ((_a56 = els.hostNameInput) == null ? void 0 : _a56.value.trim()) || "";
+        var _a57, _b2, _c2, _d;
+        const name = ((_a57 = els.hostNameInput) == null ? void 0 : _a57.value.trim()) || "";
         if (!name) {
           showToast2("Informe seu nome para aparecer no painel", "warn");
           (_b2 = els.hostNameInput) == null ? void 0 : _b2.focus();
@@ -16552,7 +16735,7 @@
         resolve();
       };
       els.btnHostEntrySubmit.onclick = submit;
-      (_a55 = els.hostNameInput) == null ? void 0 : _a55.addEventListener("keydown", (e) => {
+      (_a56 = els.hostNameInput) == null ? void 0 : _a56.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           submit();
@@ -16597,8 +16780,8 @@
     return (verify == null ? void 0 : verify.tabId) === HOST_TAB_ID;
   }
   function refreshHostLock() {
-    var _a55;
-    if (((_a55 = readHostLock()) == null ? void 0 : _a55.tabId) !== HOST_TAB_ID) return;
+    var _a56;
+    if (((_a56 = readHostLock()) == null ? void 0 : _a56.tabId) !== HOST_TAB_ID) return;
     localStorage.setItem(HOST_LOCK_KEY, JSON.stringify({ tabId: HOST_TAB_ID, ts: Date.now() }));
   }
   function releaseHostLock() {
@@ -16635,8 +16818,8 @@
     els.qualityPreset.addEventListener("change", () => applyHostQuality(els.qualityPreset.value));
   }
   function updateQualityHint() {
-    var _a55;
-    const preset = getPreset(((_a55 = els.qualityPreset) == null ? void 0 : _a55.value) || loadPresetId());
+    var _a56;
+    const preset = getPreset(((_a56 = els.qualityPreset) == null ? void 0 : _a56.value) || loadPresetId());
     if (els.qualityHint) {
       els.qualityHint.textContent = `${preset.description} - ate ${bitrateMbps(preset)} Mbps`;
     }
@@ -16669,10 +16852,10 @@
   var _a2;
   (_a2 = els.hostChkSystem) == null ? void 0 : _a2.addEventListener("change", () => onHostAudioPrefsChange());
   async function onHostAudioPrefsChange() {
-    var _a55, _b;
+    var _a56, _b;
     saveCapturePrefs(getHostCapturePrefs());
     if (els.hostMicWrap) {
-      els.hostMicWrap.hidden = !((_a55 = els.hostChkMic) == null ? void 0 : _a55.checked);
+      els.hostMicWrap.hidden = !((_a56 = els.hostChkMic) == null ? void 0 : _a56.checked);
     }
     updateHostMicUi();
     if (!media || !hostReady) return;
@@ -16713,14 +16896,14 @@
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
   function log(msg, level = "info") {
-    var _a55;
+    var _a56;
     if (!els.logs) return;
     const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-BR");
     const line = document.createElement("div");
     line.className = `log-line log-${level}`;
     line.textContent = `[${time}] ${msg}`;
     els.logs.prepend(line);
-    while (els.logs.children.length > 150) (_a55 = els.logs.lastChild) == null ? void 0 : _a55.remove();
+    while (els.logs.children.length > 150) (_a56 = els.logs.lastChild) == null ? void 0 : _a56.remove();
     if (level === "error") console.error(msg);
   }
   function setStatus(text) {
@@ -16732,9 +16915,9 @@
     els.statusBadge.className = `badge badge-${type}`;
   }
   function getHostCapturePrefs() {
-    var _a55, _b, _c;
+    var _a56, _b, _c;
     return {
-      systemAudio: ((_a55 = els.hostChkSystem) == null ? void 0 : _a55.checked) !== false,
+      systemAudio: ((_a56 = els.hostChkSystem) == null ? void 0 : _a56.checked) !== false,
       microphone: !!((_b = els.hostChkMic) == null ? void 0 : _b.checked),
       microphoneDeviceId: ((_c = els.hostMicSelect) == null ? void 0 : _c.value) || ""
     };
@@ -16844,10 +17027,10 @@
     return card;
   }
   function updateHostMicUi() {
-    var _a55, _b;
+    var _a56, _b;
     const btn = els.btnHostMic;
     if (!btn) return;
-    const micPublished = (_a55 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a55.call(media);
+    const micPublished = (_a56 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a56.call(media);
     const show = micPublished || hostMicAutoplayNeeded;
     btn.hidden = !show;
     if (!show) return;
@@ -16862,13 +17045,13 @@
     syncLocalHostVu();
   }
   async function onHostMicClick() {
-    var _a55, _b;
+    var _a56, _b;
     if (!els.btnHostMic) return;
     try {
       if (hostMicAutoplayNeeded) {
         await (hostAudioMonitor == null ? void 0 : hostAudioMonitor.resume());
         hostAudioMonitor == null ? void 0 : hostAudioMonitor.connectOutput(els.previewAudio);
-        await ((_a55 = els.previewAudio) == null ? void 0 : _a55.play());
+        await ((_a56 = els.previewAudio) == null ? void 0 : _a56.play());
         hostMicAutoplayNeeded = false;
         updateHostMicUi();
         return;
@@ -16912,13 +17095,13 @@
     col.classList.toggle("is-active", active);
   }
   function syncLocalHostVu() {
-    var _a55;
+    var _a56;
     localHostVuStop == null ? void 0 : localHostVuStop();
     localHostVuStop = null;
     if (!hostPeerId) return;
     const list = cardVuElements.get(String(hostPeerId));
     if (!list || !list.length) return;
-    const track = (_a55 = media == null ? void 0 : media.getLocalAudioTrack) == null ? void 0 : _a55.call(media);
+    const track = (_a56 = media == null ? void 0 : media.getLocalAudioTrack) == null ? void 0 : _a56.call(media);
     if (!track || track.readyState !== "live") return;
     localHostVuStop = startTrackLevelMeter(track, {
       onLevel: (level) => {
@@ -16985,20 +17168,21 @@
       return syncAudioMonitorPromise;
     }
     syncAudioMonitorPromise = (async () => {
-      var _a55, _b, _c;
+      var _a56, _b, _c;
       do {
         syncAudioMonitorPending = false;
         if (!media || !hostPeerId) return;
         await media.ensureRecvTransport(media._audioRecvTag());
         const monitor = ensureHostAudioMonitor();
         if (!monitor) return;
-        monitor.setMasterVolume(Number(((_a55 = els.volumeSlider) == null ? void 0 : _a55.value) || 100) / 100);
+        monitor.setMasterVolume(Number(((_a56 = els.volumeSlider) == null ? void 0 : _a56.value) || 100) / 100);
         monitor.setManualMuted(mutedClients);
         if (sources == null ? void 0 : sources.length) {
           lastAudioSources = sources;
         }
         const audioSources = buildHostAudioSources();
         await monitor.syncFromSources(audioSources);
+        syncPublishedAudioFiltersToClients(audioSources);
         if (audioSources.length && monitor.channelCount === 0) {
           log(
             `Audio remoto: ${audioSources.length} fonte(s) detectada(s), 0 canal ativo - tentando novamente...`,
@@ -17128,18 +17312,18 @@
     if (!fs) closeFsSourceMenu();
   }
   function closeFsSourceMenu() {
-    var _a55;
+    var _a56;
     if (!els.fsSourceMenu) return;
     els.fsSourceMenu.hidden = true;
-    (_a55 = els.btnFsSources) == null ? void 0 : _a55.setAttribute("aria-expanded", "false");
+    (_a56 = els.btnFsSources) == null ? void 0 : _a56.setAttribute("aria-expanded", "false");
   }
   function toggleFsSourceMenu() {
-    var _a55;
+    var _a56;
     if (!els.fsSourceMenu || !isPreviewFullscreen()) return;
     const open = els.fsSourceMenu.hidden;
     if (open) renderFsSourceMenu();
     els.fsSourceMenu.hidden = !open;
-    (_a55 = els.btnFsSources) == null ? void 0 : _a55.setAttribute("aria-expanded", String(open));
+    (_a56 = els.btnFsSources) == null ? void 0 : _a56.setAttribute("aria-expanded", String(open));
   }
   function updateTransmissionCard() {
     if (!els.transmissionCardContainer) return;
@@ -17157,7 +17341,7 @@
     }
   }
   function renderLista() {
-    var _a55;
+    var _a56;
     if (!els.lista) return;
     els.lista.innerHTML = "";
     cardVuElements.clear();
@@ -17187,7 +17371,7 @@
     }
     ui.set({
       hasSelection: !!estado.selecionado,
-      isPaused: !!((_a55 = estado.selecionado) == null ? void 0 : _a55.pausado)
+      isPaused: !!((_a56 = estado.selecionado) == null ? void 0 : _a56.pausado)
     });
     updatePreviewOverlays();
   }
@@ -17217,7 +17401,7 @@
     }
   }
   async function runTransmission(raw, gen = transmissionGeneration) {
-    var _a55, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
+    var _a56, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
     if (gen !== transmissionGeneration) return;
     const tx = normalizeTransmission(raw);
     lastActiveTransmission = tx;
@@ -17230,7 +17414,7 @@
           hasVideo: hasActiveVideo(tx) || client.hasVideo,
           producerIds: {
             ...client.producerIds || {},
-            video: ((_a55 = tx.producerIds) == null ? void 0 : _a55.video) || ((_b = client.producerIds) == null ? void 0 : _b.video) || client.producerId || null
+            video: ((_a56 = tx.producerIds) == null ? void 0 : _a56.video) || ((_b = client.producerIds) == null ? void 0 : _b.video) || client.producerId || null
           },
           producerId: ((_c = tx.producerIds) == null ? void 0 : _c.video) || ((_d = client.producerIds) == null ? void 0 : _d.video) || client.producerId || null,
           selecionado: true,
@@ -17337,9 +17521,9 @@
     queueTransmission(raw);
   }
   function shouldHostApplyActiveVideo(tx) {
-    var _a55, _b, _c, _d;
+    var _a56, _b, _c, _d;
     const activeKey = activeVideoTransmissionKey(tx);
-    const currentProducerId = (media == null ? void 0 : media.currentActiveVideoProducerId) || ((_b = (_a55 = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _a55.video) == null ? void 0 : _b.producerId) || null;
+    const currentProducerId = (media == null ? void 0 : media.currentActiveVideoProducerId) || ((_b = (_a56 = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _a56.video) == null ? void 0 : _b.producerId) || null;
     const isOwn = String(normalizeTransmission(tx).selectedPeerId) === String(hostPeerId);
     const needsConsume = remoteVideoConsumeNeeded(tx, {
       currentProducerId,
@@ -17353,7 +17537,7 @@
     return keyChanged || needsConsume;
   }
   async function applyRoomSnapshot(snapshot, { force = false } = {}) {
-    var _a55, _b, _c, _d, _e, _f, _g;
+    var _a56, _b, _c, _d, _e, _f, _g;
     if (!snapshot) return;
     const parsed = parseRoomSnapshot(snapshot);
     if (parsed.mutedPeerIds) {
@@ -17367,7 +17551,7 @@
     const activeKey = activeVideoTransmissionKey(parsed.transmission);
     debugHostLog("H1", "[ROOM_STATE] snapshot recebido", {
       activeKey,
-      producerVideo: ((_c = (_b = (_a55 = parsed.transmission) == null ? void 0 : _a55.producerIds) == null ? void 0 : _b.video) == null ? void 0 : _c.slice(0, 8)) || null,
+      producerVideo: ((_c = (_b = (_a56 = parsed.transmission) == null ? void 0 : _a56.producerIds) == null ? void 0 : _b.video) == null ? void 0 : _c.slice(0, 8)) || null,
       clients: (snapshot.clients || parsed.peers || []).length
     });
     if (!hostReady || joinInProgress) {
@@ -17500,8 +17684,8 @@
     }
   }
   function applyVolumeFromSlider() {
-    var _a55;
-    const vol = Number(((_a55 = els.volumeSlider) == null ? void 0 : _a55.value) || 100) / 100;
+    var _a56;
+    const vol = Number(((_a56 = els.volumeSlider) == null ? void 0 : _a56.value) || 100) / 100;
     hostAudioMonitor == null ? void 0 : hostAudioMonitor.setMasterVolume(audioMuted ? 0 : vol);
     if (els.previewAudio) {
       els.previewAudio.volume = audioMuted ? 0 : vol;
@@ -17509,12 +17693,12 @@
     }
   }
   function stopRecordingCapture() {
-    var _a55;
-    (_a55 = recordingCapture == null ? void 0 : recordingCapture.stop) == null ? void 0 : _a55.call(recordingCapture);
+    var _a56;
+    (_a56 = recordingCapture == null ? void 0 : recordingCapture.stop) == null ? void 0 : _a56.call(recordingCapture);
     recordingCapture = null;
   }
   async function getRecordingStream() {
-    var _a55, _b, _c, _d;
+    var _a56, _b, _c, _d;
     const selected = estado.selecionado;
     const selectedPeerId = selected == null ? void 0 : selected.id;
     const own = hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
@@ -17526,7 +17710,7 @@
       badgeText: (selected == null ? void 0 : selected.displayName) || "Fonte",
       visible: !!selected && !(selected == null ? void 0 : selected.pausado)
     });
-    const videoTrack = (_b = (_a55 = compositor == null ? void 0 : compositor.stream) == null ? void 0 : _a55.getVideoTracks) == null ? void 0 : _b.call(_a55)[0];
+    const videoTrack = (_b = (_a56 = compositor == null ? void 0 : compositor.stream) == null ? void 0 : _a56.getVideoTracks) == null ? void 0 : _b.call(_a56)[0];
     if ((videoTrack == null ? void 0 : videoTrack.readyState) !== "live") {
       (_c = compositor == null ? void 0 : compositor.stop) == null ? void 0 : _c.call(compositor);
       return null;
@@ -17549,21 +17733,21 @@
     recordingCapture = {
       stream,
       stop() {
-        var _a56;
+        var _a57;
         compositor.stop();
-        (_a56 = mixer == null ? void 0 : mixer.stop) == null ? void 0 : _a56.call(mixer);
+        (_a57 = mixer == null ? void 0 : mixer.stop) == null ? void 0 : _a57.call(mixer);
       }
     };
     return stream;
   }
   function handleMessage(msg) {
-    var _a55, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
+    var _a56, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     if (msg.type === "estadoSala") {
       applyRoomSnapshot(msg.payload).catch((e) => errors.handle(e, "estado-sala"));
       return;
     }
     if (msg.type === "clientesSilenciados") {
-      const mutedIds = ((_a55 = msg.payload) == null ? void 0 : _a55.mutedPeerIds) || [];
+      const mutedIds = ((_a56 = msg.payload) == null ? void 0 : _a56.mutedPeerIds) || [];
       mutedClients.clear();
       for (const id of mutedIds) {
         mutedClients.add(String(id));
@@ -17586,12 +17770,12 @@
         isCoHostInstance = !!me.isCoHost;
       }
       const videoProducers = (estado.clients || []).filter((c) => {
-        var _a56;
-        return c.hasVideo || c.isProducing || ((_a56 = c.producerIds) == null ? void 0 : _a56.video);
+        var _a57;
+        return c.hasVideo || c.isProducing || ((_a57 = c.producerIds) == null ? void 0 : _a57.video);
       }).map((c) => {
-        var _a56, _b2, _c2, _d2;
+        var _a57, _b2, _c2, _d2;
         return {
-          peerId: (_a56 = c.id) == null ? void 0 : _a56.slice(0, 8),
+          peerId: (_a57 = c.id) == null ? void 0 : _a57.slice(0, 8),
           producerId: ((_c2 = (_b2 = c.producerIds) == null ? void 0 : _b2.video) == null ? void 0 : _c2.slice(0, 8)) || ((_d2 = c.producerId) == null ? void 0 : _d2.slice(0, 8)) || null,
           name: c.displayName
         };
@@ -17940,9 +18124,9 @@ ${entry.technical}`;
   (_a7 = els.btnPararGravar) == null ? void 0 : _a7.addEventListener("click", () => pararGravacao());
   var _a8;
   (_a8 = els.btnPlayPause) == null ? void 0 : _a8.addEventListener("click", () => {
-    var _a55, _b;
+    var _a56, _b;
     if (ui._flags.isPaused) {
-      (_a55 = els.btnRetomar) == null ? void 0 : _a55.click();
+      (_a56 = els.btnRetomar) == null ? void 0 : _a56.click();
     } else {
       (_b = els.btnPausar) == null ? void 0 : _b.click();
     }
@@ -17969,8 +18153,8 @@ ${entry.technical}`;
     els.btnMute.innerHTML = audioMuted ? `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>` : `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
   }
   function toggleSidebarCollapsed() {
-    var _a55, _b, _c, _d, _e, _f;
-    const collapsed = !((_a55 = els.sidebar) == null ? void 0 : _a55.classList.contains("is-collapsed"));
+    var _a56, _b, _c, _d, _e, _f;
+    const collapsed = !((_a56 = els.sidebar) == null ? void 0 : _a56.classList.contains("is-collapsed"));
     (_b = els.sidebar) == null ? void 0 : _b.classList.toggle("is-collapsed", collapsed);
     (_c = els.appMain) == null ? void 0 : _c.classList.toggle("sidebar-collapsed", collapsed);
     (_d = els.btnSidebarCollapse) == null ? void 0 : _d.setAttribute("aria-expanded", String(!collapsed));
@@ -18044,21 +18228,21 @@ ${entry.technical}`;
   var _a16;
   (_a16 = els.btnCopyHost) == null ? void 0 : _a16.addEventListener("click", () => copyUrl("/host"));
   function openExternalLinkModal() {
-    var _a55;
+    var _a56;
     if (!canHostCommand()) {
       showToast2("Aguarde o painel conectar ao servidor", "warn");
       return;
     }
     if (els.externalGuestName) els.externalGuestName.value = "";
     if (els.externalLinkModal) els.externalLinkModal.hidden = false;
-    (_a55 = els.externalGuestName) == null ? void 0 : _a55.focus();
+    (_a56 = els.externalGuestName) == null ? void 0 : _a56.focus();
   }
   function closeExternalLinkModal() {
     if (els.externalLinkModal) els.externalLinkModal.hidden = true;
   }
   async function submitExternalLink() {
-    var _a55, _b;
-    const nome = ((_a55 = els.externalGuestName) == null ? void 0 : _a55.value.trim()) || "";
+    var _a56, _b;
+    const nome = ((_a56 = els.externalGuestName) == null ? void 0 : _a56.value.trim()) || "";
     if (!nome) {
       showToast2("Informe o nome do convidado", "warn");
       (_b = els.externalGuestName) == null ? void 0 : _b.focus();
@@ -18082,9 +18266,9 @@ ${entry.technical}`;
   });
   var _a21;
   (_a21 = els.btnFullscreen) == null ? void 0 : _a21.addEventListener("click", () => {
-    var _a55, _b;
+    var _a56, _b;
     if (document.fullscreenElement) document.exitFullscreen();
-    else (_b = (_a55 = els.previewArea) == null ? void 0 : _a55.requestFullscreen) == null ? void 0 : _b.call(_a55);
+    else (_b = (_a56 = els.previewArea) == null ? void 0 : _a56.requestFullscreen) == null ? void 0 : _b.call(_a56);
   });
   var _a22;
   (_a22 = els.btnFsSources) == null ? void 0 : _a22.addEventListener("click", (e) => {
@@ -18093,8 +18277,8 @@ ${entry.technical}`;
   });
   document.addEventListener("fullscreenchange", syncFsSourceUi);
   document.addEventListener("click", (e) => {
-    var _a55, _b, _c;
-    if ((_a55 = els.fsSourceMenu) == null ? void 0 : _a55.hidden) return;
+    var _a56, _b, _c;
+    if ((_a56 = els.fsSourceMenu) == null ? void 0 : _a56.hidden) return;
     if (e.target === els.btnFsSources || ((_b = els.btnFsSources) == null ? void 0 : _b.contains(e.target))) return;
     if ((_c = els.fsSourceMenu) == null ? void 0 : _c.contains(e.target)) return;
     closeFsSourceMenu();
@@ -18102,7 +18286,7 @@ ${entry.technical}`;
   var _a23;
   (_a23 = els.btnHostMic) == null ? void 0 : _a23.addEventListener("click", () => onHostMicClick());
   window.addEventListener("sharescreen-ended", async () => {
-    var _a55;
+    var _a56;
     if (recorder.isRecording()) pararGravacao();
     try {
       await (media == null ? void 0 : media.stopVideoShare());
@@ -18111,7 +18295,7 @@ ${entry.technical}`;
     ui.set({ isSharing: false });
     updateHostMicUi();
     signaling == null ? void 0 : signaling.send("status", {
-      status: ((_a55 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a55.call(media)) ? "transmitindo" : "conectado"
+      status: ((_a56 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a56.call(media)) ? "transmitindo" : "conectado"
     });
   });
   window.addEventListener("beforeunload", () => {
@@ -18186,7 +18370,7 @@ ${entry.technical}`;
     }
   }
   function setupRecordingsDirInput() {
-    var _a55, _b;
+    var _a56, _b;
     if (!els.recordingsDirInput) return;
     els.recordingsDirInput.value = localStorage.getItem(STORAGE_RECORDINGS_DIR) || "";
     els.recordingsDirInput.addEventListener("input", () => {
@@ -18198,7 +18382,7 @@ ${entry.technical}`;
       if (pickerModal) pickerModal.hidden = false;
       loadDir(els.recordingsDirInput.value.trim());
     });
-    (_a55 = document.getElementById("btn-dir-picker-cancel")) == null ? void 0 : _a55.addEventListener("click", () => {
+    (_a56 = document.getElementById("btn-dir-picker-cancel")) == null ? void 0 : _a56.addEventListener("click", () => {
       if (pickerModal) pickerModal.hidden = true;
     });
     (_b = document.getElementById("btn-dir-picker-select")) == null ? void 0 : _b.addEventListener("click", () => {
@@ -18239,9 +18423,9 @@ ${entry.technical}`;
     setupRecordingsDirInput();
     setupSettingsInteraction();
     installAudioUnlock(() => {
-      var _a55, _b, _c;
+      var _a56, _b, _c;
       hostAudioMonitor == null ? void 0 : hostAudioMonitor.resume();
-      (_b = (_a55 = els.previewAudio) == null ? void 0 : _a55.play) == null ? void 0 : _b.call(_a55).catch(() => {
+      (_b = (_a56 = els.previewAudio) == null ? void 0 : _a56.play) == null ? void 0 : _b.call(_a56).catch(() => {
       });
       if (hostAudioMonitor && !((_c = hostAudioMonitor.isAutoplayBlocked) == null ? void 0 : _c.call(hostAudioMonitor))) {
         hostMicAutoplayNeeded = false;
@@ -18299,19 +18483,58 @@ ${entry.technical}`;
   });
   var originalAudioFilterPrefs = null;
   var saveTimeout = null;
+  var sentAudioFilterKeys = /* @__PURE__ */ new Map();
   function saveAudioFiltersPresetDebounced(name, prefs) {
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
       savePresetToLocalStorage(name, prefs);
     }, 1e3);
   }
+  function normalizeAudioFilterPrefsForClient(prefs = {}) {
+    return {
+      gain: Number(prefs.gain !== void 0 ? prefs.gain : 1),
+      bass: Number(prefs.bass || 0),
+      treble: Number(prefs.treble || 0),
+      highpass: !!prefs.highpass,
+      highpassFreq: Number(prefs.highpassFreq || 80),
+      peaking: !!prefs.peaking,
+      peakingFreq: Number(prefs.peakingFreq || 3e3),
+      peakingGain: Number(prefs.peakingGain !== void 0 ? prefs.peakingGain : 3),
+      compressor: !!prefs.compressor,
+      noiseGate: !!prefs.noiseGate,
+      noiseGateThreshold: Number(prefs.noiseGateThreshold !== void 0 ? prefs.noiseGateThreshold : -45),
+      micCaptureDistance: Number(prefs.micCaptureDistance || 6)
+    };
+  }
+  function sendAudioFiltersToClient(client, prefs, { force = false } = {}) {
+    if (!(client == null ? void 0 : client.id) || !signaling || !hostReady) return;
+    if (String(client.id) === String(hostPeerId)) return;
+    const normalized = normalizeAudioFilterPrefsForClient(prefs);
+    const key = JSON.stringify(normalized);
+    const id = String(client.id);
+    if (!force && sentAudioFilterKeys.get(id) === key) return;
+    sentAudioFilterKeys.set(id, key);
+    signaling.send("definirFiltroAudioClient", { peerId: client.id, prefs: normalized });
+  }
+  function syncPublishedAudioFiltersToClients(audioSources = []) {
+    const monitor = hostAudioMonitor;
+    if (!monitor) return;
+    const sent = /* @__PURE__ */ new Set();
+    for (const source of audioSources || []) {
+      if (!(source == null ? void 0 : source.peerId) || source.source !== "microphone") continue;
+      const id = String(source.peerId);
+      if (sent.has(id)) continue;
+      sent.add(id);
+      sendAudioFiltersToClient({ id }, monitor.getFilterPrefs(id));
+    }
+  }
   function applyAudioFiltersFromUi() {
-    var _a55, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    var _a56, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     const client = activeAudioFiltersClient;
     const monitor = hostAudioMonitor;
     if (!client || !monitor) return;
     const prefs = {
-      gain: Number(((_a55 = $("audio-gain")) == null ? void 0 : _a55.value) !== void 0 ? (_b = $("audio-gain")) == null ? void 0 : _b.value : 1),
+      gain: Number(((_a56 = $("audio-gain")) == null ? void 0 : _a56.value) !== void 0 ? (_b = $("audio-gain")) == null ? void 0 : _b.value : 1),
       bass: Number(((_c = $("audio-bass")) == null ? void 0 : _c.value) || 0),
       treble: Number(((_d = $("audio-treble")) == null ? void 0 : _d.value) || 0),
       highpass: !!((_e = $("audio-hp-enabled")) == null ? void 0 : _e.checked),
@@ -18321,9 +18544,11 @@ ${entry.technical}`;
       peakingGain: Number(((_i = $("audio-peak-gain")) == null ? void 0 : _i.value) || 3),
       compressor: !!((_j = $("audio-comp-enabled")) == null ? void 0 : _j.checked),
       noiseGate: !!((_k = $("audio-gate-enabled")) == null ? void 0 : _k.checked),
-      noiseGateThreshold: Number(((_l = $("audio-gate-threshold")) == null ? void 0 : _l.value) || -45)
+      noiseGateThreshold: Number(((_l = $("audio-gate-threshold")) == null ? void 0 : _l.value) || -45),
+      micCaptureDistance: Number(((_m = $("audio-capture-distance")) == null ? void 0 : _m.value) || 6)
     };
     monitor.setFilterPrefs(client.id, prefs);
+    sendAudioFiltersToClient(client, prefs, { force: true });
     saveAudioFiltersPresetDebounced(client.displayName, prefs);
   }
   function openAudioFiltersModal(client) {
@@ -18388,6 +18613,12 @@ ${entry.technical}`;
       const gateThreshVal = $("audio-gate-thresh-val");
       if (gateThreshVal) gateThreshVal.textContent = `${gateThresh.value} dB`;
     }
+    const captureDistance = $("audio-capture-distance");
+    if (captureDistance) {
+      captureDistance.value = prefs.micCaptureDistance !== void 0 ? prefs.micCaptureDistance : 6;
+      const captureDistanceVal = $("audio-capture-distance-val");
+      if (captureDistanceVal) captureDistanceVal.textContent = `${captureDistance.value}/10`;
+    }
     const modal = $("audio-filters-modal");
     if (modal) modal.hidden = false;
   }
@@ -18409,6 +18640,7 @@ ${entry.technical}`;
     const monitor = hostAudioMonitor;
     if (revert && client && monitor && originalAudioFilterPrefs) {
       monitor.setFilterPrefs(client.id, originalAudioFilterPrefs);
+      sendAudioFiltersToClient(client, originalAudioFilterPrefs, { force: true });
       savePresetToLocalStorage(client.displayName, originalAudioFilterPrefs);
     }
     activeAudioFiltersClient = null;
@@ -18465,7 +18697,13 @@ ${entry.technical}`;
     applyAudioFiltersFromUi();
   });
   var _a38;
-  (_a38 = $("btn-audio-filters-reset")) == null ? void 0 : _a38.addEventListener("click", () => {
+  (_a38 = $("audio-capture-distance")) == null ? void 0 : _a38.addEventListener("input", (e) => {
+    const el = $("audio-capture-distance-val");
+    if (el) el.textContent = `${e.target.value}/10`;
+    applyAudioFiltersFromUi();
+  });
+  var _a39;
+  (_a39 = $("btn-audio-filters-reset")) == null ? void 0 : _a39.addEventListener("click", () => {
     const client = activeAudioFiltersClient;
     if (!client) return;
     const gain = $("audio-gain");
@@ -18504,18 +18742,22 @@ ${entry.technical}`;
     if (gateThresh) gateThresh.value = -45;
     const gateThreshVal = $("audio-gate-thresh-val");
     if (gateThreshVal) gateThreshVal.textContent = "-45 dB";
+    const captureDistance = $("audio-capture-distance");
+    if (captureDistance) captureDistance.value = 6;
+    const captureDistanceVal = $("audio-capture-distance-val");
+    if (captureDistanceVal) captureDistanceVal.textContent = "6/10";
     applyAudioFiltersFromUi();
   });
-  var _a39;
-  (_a39 = $("ctx-audio")) == null ? void 0 : _a39.addEventListener("click", () => {
+  var _a40;
+  (_a40 = $("ctx-audio")) == null ? void 0 : _a40.addEventListener("click", () => {
     const client = activeContextClient;
     closeContextMenu();
     if (client) openAudioFiltersModal(client);
   });
-  var _a40;
-  (_a40 = $("btn-audio-filters-cancel")) == null ? void 0 : _a40.addEventListener("click", () => closeAudioFiltersModal(true));
   var _a41;
-  (_a41 = $("btn-audio-filters-save")) == null ? void 0 : _a41.addEventListener("click", saveAudioFiltersModal);
+  (_a41 = $("btn-audio-filters-cancel")) == null ? void 0 : _a41.addEventListener("click", () => closeAudioFiltersModal(true));
+  var _a42;
+  (_a42 = $("btn-audio-filters-save")) == null ? void 0 : _a42.addEventListener("click", saveAudioFiltersModal);
   document.addEventListener("click", (e) => {
     const menu = $("custom-context-menu");
     if (menu && !menu.hidden) {
@@ -18526,22 +18768,22 @@ ${entry.technical}`;
     }
   });
   function initCoHost(clientSignaling, clientMedia, clientPeerId) {
-    var _a55;
+    var _a56;
     signaling = clientSignaling;
     media = clientMedia;
     hostPeerId = clientPeerId;
     isCoHostInstance = true;
     hostReady = true;
     if (els.sidebar) els.sidebar.hidden = false;
-    (_a55 = els.appMain) == null ? void 0 : _a55.classList.add("sidebar-open");
+    (_a56 = els.appMain) == null ? void 0 : _a56.classList.add("sidebar-open");
     updateRecordingUi(RecordingState.IDLE);
     updateMuteButtonIcon();
     setupRecordingsDirInput();
     setupSettingsInteraction();
     installAudioUnlock(() => {
-      var _a56, _b, _c;
+      var _a57, _b, _c;
       hostAudioMonitor == null ? void 0 : hostAudioMonitor.resume();
-      (_b = (_a56 = els.previewAudio) == null ? void 0 : _a56.play) == null ? void 0 : _b.call(_a56).catch(() => {
+      (_b = (_a57 = els.previewAudio) == null ? void 0 : _a57.play) == null ? void 0 : _b.call(_a57).catch(() => {
       });
       if (hostAudioMonitor && !((_c = hostAudioMonitor.isAutoplayBlocked) == null ? void 0 : _c.call(hostAudioMonitor))) {
         hostMicAutoplayNeeded = false;
@@ -18560,9 +18802,9 @@ ${entry.technical}`;
   var STORAGE_NAME = "sharescreen_client_name";
   var STORAGE_MACHINE = "sharescreen_agent_hostname";
   function readQueryParam2(key) {
-    var _a55;
+    var _a56;
     try {
-      return ((_a55 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a55.trim()) || "";
+      return ((_a56 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a56.trim()) || "";
     } catch {
       return "";
     }
@@ -18631,6 +18873,7 @@ ${entry.technical}`;
   var pendingTransmission = null;
   var pendingAudioSources = null;
   var pendingRoomSnapshot2 = null;
+  var pendingMicrophoneFilterPrefs = null;
   var sessionStarted = false;
   var sessionReady = false;
   var viewerOnly = false;
@@ -18728,22 +18971,22 @@ ${entry.technical}`;
     onLog: setStatus2,
     onError: (m) => showErro(m)
   });
-  var _a42;
-  (_a42 = els2.micSelect) == null ? void 0 : _a42.addEventListener("change", () => {
+  var _a43;
+  (_a43 = els2.micSelect) == null ? void 0 : _a43.addEventListener("change", () => {
     saveCapturePrefs(getCapturePrefsFromUi());
     releaseClientMicTrack();
     attachVuMeterIfNeeded();
   });
-  var _a43;
-  (_a43 = els2.chkMicrophone) == null ? void 0 : _a43.addEventListener("change", () => {
-    var _a55;
+  var _a44;
+  (_a44 = els2.chkMicrophone) == null ? void 0 : _a44.addEventListener("change", () => {
+    var _a56;
     saveCapturePrefs(getCapturePrefsFromUi());
-    if (!((_a55 = els2.chkMicrophone) == null ? void 0 : _a55.checked)) releaseClientMicTrack();
+    if (!((_a56 = els2.chkMicrophone) == null ? void 0 : _a56.checked)) releaseClientMicTrack();
     updateClientMicUi();
     attachVuMeterIfNeeded();
   });
-  var _a44;
-  (_a44 = els2.chkSystemAudio) == null ? void 0 : _a44.addEventListener("change", () => saveCapturePrefs(getCapturePrefsFromUi()));
+  var _a45;
+  (_a45 = els2.chkSystemAudio) == null ? void 0 : _a45.addEventListener("change", () => saveCapturePrefs(getCapturePrefsFromUi()));
   setupMicrophonePicker({
     checkbox: els2.settingsChkMic,
     wrap: els2.settingsMicWrap,
@@ -18754,10 +18997,10 @@ ${entry.technical}`;
     onError: (m) => showErro(m)
   });
   function updateClientMicUi() {
-    var _a55, _b;
+    var _a56, _b;
     const btn = els2.btnClientMic;
     if (!btn) return;
-    const micPublished = (_a55 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a55.call(media2);
+    const micPublished = (_a56 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a56.call(media2);
     const show = micPublished || clientMicAutoplayNeeded;
     btn.hidden = !show;
     if (!show) return;
@@ -18775,13 +19018,13 @@ ${entry.technical}`;
     }
   }
   async function onClientMicClick() {
-    var _a55, _b;
+    var _a56, _b;
     if (!els2.btnClientMic) return;
     try {
       if (clientMicAutoplayNeeded) {
         await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.resume());
         roomAudioMonitor == null ? void 0 : roomAudioMonitor.connectOutput(els2.audio);
-        await ((_a55 = els2.audio) == null ? void 0 : _a55.play());
+        await ((_a56 = els2.audio) == null ? void 0 : _a56.play());
         clientMicAutoplayNeeded = false;
         updateClientMicUi();
         showToast("Audio ativado", "success");
@@ -18837,9 +19080,9 @@ ${entry.technical}`;
     if (els2.settingsModal) els2.settingsModal.hidden = true;
   }
   function saveSettingsModal() {
-    var _a55, _b;
+    var _a56, _b;
     const prefs = getSettingsPrefsFromModal();
-    const newName = (_b = (_a55 = els2.settingsNomeInput) == null ? void 0 : _a55.value) == null ? void 0 : _b.trim();
+    const newName = (_b = (_a56 = els2.settingsNomeInput) == null ? void 0 : _a56.value) == null ? void 0 : _b.trim();
     if (newName) {
       displayName = newName;
       localStorage.setItem(STORAGE_NAME, newName);
@@ -18889,7 +19132,7 @@ ${entry.technical}`;
       return syncClientAudioPromise;
     }
     syncClientAudioPromise = (async () => {
-      var _a55, _b;
+      var _a56, _b;
       do {
         syncClientAudioPending = false;
         if (!media2 || !peerId) return;
@@ -18904,7 +19147,7 @@ ${entry.technical}`;
         await monitor.syncFromSources(list);
         monitor.connectOutput(els2.audio);
         await monitor.resume();
-        if (((_a55 = monitor.isAutoplayBlocked) == null ? void 0 : _a55.call(monitor)) || monitor.channelCount > 0 && ((_b = els2.audio) == null ? void 0 : _b.paused)) {
+        if (((_a56 = monitor.isAutoplayBlocked) == null ? void 0 : _a56.call(monitor)) || monitor.channelCount > 0 && ((_b = els2.audio) == null ? void 0 : _b.paused)) {
           onRemoteAudioAutoplayBlocked();
         } else if (!monitor.channelCount) {
           clientMicAutoplayNeeded = false;
@@ -18938,9 +19181,9 @@ ${entry.technical}`;
     clientMicTrack = null;
   }
   async function ensureClientMicTrack(deviceId = "") {
-    var _a55;
+    var _a56;
     if ((clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live") {
-      const activeId = ((_a55 = clientMicTrack.getSettings) == null ? void 0 : _a55.call(clientMicTrack).deviceId) || "";
+      const activeId = ((_a56 = clientMicTrack.getSettings) == null ? void 0 : _a56.call(clientMicTrack).deviceId) || "";
       if (!deviceId || !activeId || activeId === deviceId) {
         return clientMicTrack;
       }
@@ -18950,7 +19193,7 @@ ${entry.technical}`;
     return clientMicTrack;
   }
   async function teardownClientSession({ keepDisplayStream = false, keepMicTrack = false } = {}) {
-    var _a55;
+    var _a56;
     await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.dispose());
     roomAudioMonitor = null;
     await (media2 == null ? void 0 : media2.dispose({
@@ -18968,7 +19211,7 @@ ${entry.technical}`;
     joinInFlight = false;
     txSync.reset();
     if (!keepDisplayStream) {
-      (_a55 = clientDisplayStream == null ? void 0 : clientDisplayStream.getTracks) == null ? void 0 : _a55.call(clientDisplayStream).forEach((t) => t.stop());
+      (_a56 = clientDisplayStream == null ? void 0 : clientDisplayStream.getTracks) == null ? void 0 : _a56.call(clientDisplayStream).forEach((t) => t.stop());
       clientDisplayStream = null;
       onboardStep = "identify";
     }
@@ -18977,8 +19220,8 @@ ${entry.technical}`;
     }
   }
   function hasPendingDisplayStream() {
-    var _a55;
-    return (_a55 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a55.call(clientDisplayStream).some((t) => t.readyState === "live");
+    var _a56;
+    return (_a56 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a56.call(clientDisplayStream).some((t) => t.readyState === "live");
   }
   function showIdentifyStep() {
     onboardStep = "identify";
@@ -19034,8 +19277,8 @@ ${entry.technical}`;
     return navigator.mediaDevices.getDisplayMedia(constraints);
   }
   async function captureScreenFirst() {
-    var _a55;
-    if (!((_a55 = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _a55.call(media2))) {
+    var _a56;
+    if (!((_a56 = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _a56.call(media2))) {
       await teardownClientSession({ keepDisplayStream: false });
     }
     clientJoinInProgress = true;
@@ -19168,8 +19411,8 @@ Detalhe: ${technical}` : msg;
     return null;
   }
   function getNome() {
-    var _a55;
-    return (((_a55 = els2.nomeInput) == null ? void 0 : _a55.value) || displayName || "").trim();
+    var _a56;
+    return (((_a56 = els2.nomeInput) == null ? void 0 : _a56.value) || displayName || "").trim();
   }
   function getCapturePrefsFromUi() {
     return {
@@ -19192,7 +19435,7 @@ Detalhe: ${technical}` : msg;
     if (els2.btnEditarNome) els2.btnEditarNome.hidden = true;
   }
   async function initOnboarding() {
-    var _a55, _b;
+    var _a56, _b;
     resetClientPageState();
     await teardownClientSession({ keepDisplayStream: false });
     if (!window.isSecureContext && els2.insecureWarning) {
@@ -19217,7 +19460,7 @@ Detalhe: ${technical}` : msg;
         return;
       }
       showIdentifyStep();
-      (_a55 = els2.nomeInput) == null ? void 0 : _a55.focus();
+      (_a56 = els2.nomeInput) == null ? void 0 : _a56.focus();
       return;
     }
     if (autoViewerEntry) {
@@ -19261,12 +19504,12 @@ Detalhe: ${technical}` : msg;
     if (!displayName) (_b = els2.nomeInput) == null ? void 0 : _b.focus();
   }
   async function salvarEIniciar(asViewer = false) {
-    var _a55, _b, _c, _d, _e;
+    var _a56, _b, _c, _d, _e;
     if (clientJoinInProgress) return;
     const nome = getNome();
     if (!nome) {
       showToast("Informe um nome para este computador", "error");
-      (_a55 = els2.nomeInput) == null ? void 0 : _a55.focus();
+      (_a56 = els2.nomeInput) == null ? void 0 : _a56.focus();
       return;
     }
     displayName = nome;
@@ -19311,27 +19554,27 @@ Detalhe: ${technical}` : msg;
     }
     await captureScreenFirst();
   }
-  var _a45;
-  (_a45 = els2.btnSalvarNome) == null ? void 0 : _a45.addEventListener("click", () => salvarEIniciar(false));
   var _a46;
-  (_a46 = els2.btnViewerEnter) == null ? void 0 : _a46.addEventListener("click", () => salvarEIniciar(true));
+  (_a46 = els2.btnSalvarNome) == null ? void 0 : _a46.addEventListener("click", () => salvarEIniciar(false));
   var _a47;
-  (_a47 = els2.nomeInput) == null ? void 0 : _a47.addEventListener("keydown", (e) => {
-    var _a55;
+  (_a47 = els2.btnViewerEnter) == null ? void 0 : _a47.addEventListener("click", () => salvarEIniciar(true));
+  var _a48;
+  (_a48 = els2.nomeInput) == null ? void 0 : _a48.addEventListener("keydown", (e) => {
+    var _a56;
     if (e.key === "Enter") {
       e.preventDefault();
-      salvarEIniciar(!!((_a55 = els2.chkViewerOnly) == null ? void 0 : _a55.checked));
+      salvarEIniciar(!!((_a56 = els2.chkViewerOnly) == null ? void 0 : _a56.checked));
     }
   });
-  var _a48;
-  (_a48 = els2.btnEditarNome) == null ? void 0 : _a48.addEventListener("click", () => {
+  var _a49;
+  (_a49 = els2.btnEditarNome) == null ? void 0 : _a49.addEventListener("click", () => {
     if (els2.nomeInput) els2.nomeInput.value = displayName;
     showOverlay();
   });
   async function attachVuMeterIfNeeded() {
-    var _a55, _b, _c;
+    var _a56, _b, _c;
     vu.detach();
-    if (!((_a55 = els2.chkMicrophone) == null ? void 0 : _a55.checked)) return;
+    if (!((_a56 = els2.chkMicrophone) == null ? void 0 : _a56.checked)) return;
     try {
       const track = ((_b = media2 == null ? void 0 : media2.getLocalAudioTrack) == null ? void 0 : _b.call(media2)) || await ensureClientMicTrack(((_c = els2.micSelect) == null ? void 0 : _c.value) || "");
       if (!track || track.readyState !== "live") return;
@@ -19392,7 +19635,7 @@ Detalhe: ${technical}` : msg;
     updateClientStates("sharing");
   }
   async function applyRoomSnapshot2(snapshot, { force = false } = {}) {
-    var _a55, _b, _c, _d, _e, _f;
+    var _a56, _b, _c, _d, _e, _f;
     if (!snapshot) return;
     const parsed = parseRoomSnapshot(snapshot);
     if (parsed.mutedPeerIds) {
@@ -19405,7 +19648,7 @@ Detalhe: ${technical}` : msg;
     if (parsed.displayControl) {
       applyDisplayControlUpdate(parsed.displayControl);
     }
-    if ((_a55 = parsed.audioSources) == null ? void 0 : _a55.length) {
+    if ((_a56 = parsed.audioSources) == null ? void 0 : _a56.length) {
       lastAudioSources2 = parsed.audioSources;
     }
     debugClientLog("H1", "[ROOM_STATE] snapshot recebido", {
@@ -19570,6 +19813,7 @@ Detalhe: ${technical}` : msg;
       await media2.loadDevice(payload.rtpCapabilities);
       media2.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
       await media2.ensureRecvTransport();
+      await applyPendingMicrophoneFilters();
       if (!viewerOnly) {
         assertSecureContext();
         await media2.ensureSendTransport();
@@ -19623,7 +19867,7 @@ Detalhe: ${technical}` : msg;
     }
   }
   async function rejoinSession() {
-    var _a55, _b, _c;
+    var _a56, _b, _c;
     if (joinInFlight || clientJoinInProgress || bootstrapping) return;
     joinInFlight = true;
     sessionReady = false;
@@ -19631,7 +19875,7 @@ Detalhe: ${technical}` : msg;
     try {
       const prefs = getCapturePrefsFromUi();
       const publishPrefs = prefs.microphone && (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live" ? { ...prefs, prefetchedMicTrack: clientMicTrack } : prefs;
-      const stream = ((_a55 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a55.call(clientDisplayStream).some((t) => t.readyState === "live")) ? clientDisplayStream : ((_c = (_b = media2 == null ? void 0 : media2.localScreenStream) == null ? void 0 : _b.getVideoTracks) == null ? void 0 : _c.call(_b).some((t) => t.readyState === "live")) ? media2.localScreenStream : null;
+      const stream = ((_a56 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a56.call(clientDisplayStream).some((t) => t.readyState === "live")) ? clientDisplayStream : ((_c = (_b = media2 == null ? void 0 : media2.localScreenStream) == null ? void 0 : _b.getVideoTracks) == null ? void 0 : _c.call(_b).some((t) => t.readyState === "live")) ? media2.localScreenStream : null;
       await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.dispose());
       roomAudioMonitor = null;
       await (media2 == null ? void 0 : media2.dispose({
@@ -19662,6 +19906,7 @@ Detalhe: ${technical}` : msg;
       await media2.loadDevice(payload.rtpCapabilities);
       media2.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
       await media2.ensureRecvTransport();
+      await applyPendingMicrophoneFilters();
       if (!viewerOnly) {
         await media2.ensureSendTransport();
       }
@@ -19712,18 +19957,18 @@ Detalhe: ${technical}` : msg;
     if (!show) closeFsSourceMenu2();
   }
   function closeFsSourceMenu2() {
-    var _a55;
+    var _a56;
     if (!els2.fsSourceMenu) return;
     els2.fsSourceMenu.hidden = true;
-    (_a55 = els2.btnFsSources) == null ? void 0 : _a55.setAttribute("aria-expanded", "false");
+    (_a56 = els2.btnFsSources) == null ? void 0 : _a56.setAttribute("aria-expanded", "false");
   }
   function toggleFsSourceMenu2() {
-    var _a55;
+    var _a56;
     if (!els2.fsSourceMenu || !displayControlActive) return;
     const open = els2.fsSourceMenu.hidden;
     if (open) renderFsSourceMenu2();
     els2.fsSourceMenu.hidden = !open;
-    (_a55 = els2.btnFsSources) == null ? void 0 : _a55.setAttribute("aria-expanded", String(open));
+    (_a56 = els2.btnFsSources) == null ? void 0 : _a56.setAttribute("aria-expanded", String(open));
   }
   function renderFsSourceMenu2() {
     if (!els2.fsSourceList) return;
@@ -19761,14 +20006,27 @@ Detalhe: ${technical}` : msg;
       errors2.handle(e, "selecionar-fonte");
     }
   }
+  async function applyPendingMicrophoneFilters() {
+    if (!media2 || !pendingMicrophoneFilterPrefs) return;
+    await media2.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs);
+  }
   async function handleServerMessage(msg) {
-    var _a55, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    var _a56, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     if (msg.type === "estadoSala") {
       await applyRoomSnapshot2(msg.payload);
       return;
     }
+    if (msg.type === "filtroAudioAtualizado") {
+      pendingMicrophoneFilterPrefs = ((_a56 = msg.payload) == null ? void 0 : _a56.prefs) || {};
+      if (media2) {
+        await media2.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs).catch(
+          (e) => errors2.handle(e, "audio-filters")
+        );
+      }
+      return;
+    }
     if (msg.type === "clientesSilenciados") {
-      const mutedIds = ((_a55 = msg.payload) == null ? void 0 : _a55.mutedPeerIds) || [];
+      const mutedIds = ((_b = msg.payload) == null ? void 0 : _b.mutedPeerIds) || [];
       mutedClients2.clear();
       for (const id of mutedIds) {
         mutedClients2.add(String(id));
@@ -19777,7 +20035,7 @@ Detalhe: ${technical}` : msg;
       return;
     }
     if (msg.type === "fontesAudio") {
-      const sources = ((_b = msg.payload) == null ? void 0 : _b.sources) || [];
+      const sources = ((_c = msg.payload) == null ? void 0 : _c.sources) || [];
       lastAudioSources2 = sources;
       if (!sessionReady) {
         pendingAudioSources = sources;
@@ -19788,8 +20046,8 @@ Detalhe: ${technical}` : msg;
     if (msg.type === "transmissaoAtiva") {
       const tx = normalizeTransmission(msg.payload);
       debugClientLog("H2", "[ACTIVE_VIDEO] transmissao ativa recebida", {
-        selectedPeerId: ((_c = tx.selectedPeerId) == null ? void 0 : _c.slice(0, 8)) || null,
-        producerVideo: ((_e = (_d = tx.producerIds) == null ? void 0 : _d.video) == null ? void 0 : _e.slice(0, 8)) || null
+        selectedPeerId: ((_d = tx.selectedPeerId) == null ? void 0 : _d.slice(0, 8)) || null,
+        producerVideo: ((_f = (_e = tx.producerIds) == null ? void 0 : _e.video) == null ? void 0 : _f.slice(0, 8)) || null
       });
       if (!sessionReady) {
         pendingTransmission = msg.payload;
@@ -19802,15 +20060,15 @@ Detalhe: ${technical}` : msg;
       return;
     }
     if (msg.type === "erro" && sessionReady) {
-      errors2.handle(new Error((_f = msg.payload) == null ? void 0 : _f.mensagem), "servidor");
-      showErro((_g = msg.payload) == null ? void 0 : _g.mensagem);
+      errors2.handle(new Error((_g = msg.payload) == null ? void 0 : _g.mensagem), "servidor");
+      showErro((_h = msg.payload) == null ? void 0 : _h.mensagem);
     }
     if (msg.type === "consumerFechado") {
-      const consumerId = (_h = msg.payload) == null ? void 0 : _h.consumerId;
+      const consumerId = (_i = msg.payload) == null ? void 0 : _i.consumerId;
       if (consumerId) {
         await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.removeByConsumerId(consumerId));
       }
-      const wasVideoConsumer = ((_j = (_i = media2 == null ? void 0 : media2.remoteConsumers) == null ? void 0 : _i.video) == null ? void 0 : _j.id) === consumerId;
+      const wasVideoConsumer = ((_k = (_j = media2 == null ? void 0 : media2.remoteConsumers) == null ? void 0 : _j.video) == null ? void 0 : _k.id) === consumerId;
       if (wasVideoConsumer) {
         debugClientLog("H3", "[CLIENT_CONSUME] consumer de video fechado", {
           consumerId: (consumerId == null ? void 0 : consumerId.slice(0, 8)) || null
@@ -19824,7 +20082,7 @@ Detalhe: ${technical}` : msg;
       return;
     }
     if (msg.type === "qualidadeAtualizada") {
-      const presetId = (_k = msg.payload) == null ? void 0 : _k.presetId;
+      const presetId = (_l = msg.payload) == null ? void 0 : _l.presetId;
       if (!presetId) return;
       savePresetId(presetId);
       if (media2) {
@@ -19846,39 +20104,39 @@ Detalhe: ${technical}` : msg;
       const mainEl = els2.clientMain || document.querySelector(".client-main");
       mainEl == null ? void 0 : mainEl.classList.remove("sidebar-open");
       mainEl == null ? void 0 : mainEl.classList.remove("sidebar-collapsed");
-      (_l = els2.sidebar) == null ? void 0 : _l.classList.remove("is-collapsed");
+      (_m = els2.sidebar) == null ? void 0 : _m.classList.remove("is-collapsed");
     }
   }
-  var _a49;
-  (_a49 = els2.btnSettings) == null ? void 0 : _a49.addEventListener("click", () => openSettingsModal());
   var _a50;
-  (_a50 = els2.btnSettingsSave) == null ? void 0 : _a50.addEventListener("click", () => saveSettingsModal());
+  (_a50 = els2.btnSettings) == null ? void 0 : _a50.addEventListener("click", () => openSettingsModal());
   var _a51;
-  (_a51 = els2.btnSettingsClose) == null ? void 0 : _a51.addEventListener("click", () => closeSettingsModal());
+  (_a51 = els2.btnSettingsSave) == null ? void 0 : _a51.addEventListener("click", () => saveSettingsModal());
   var _a52;
-  (_a52 = els2.btnClientMic) == null ? void 0 : _a52.addEventListener("click", () => onClientMicClick());
+  (_a52 = els2.btnSettingsClose) == null ? void 0 : _a52.addEventListener("click", () => closeSettingsModal());
   var _a53;
-  (_a53 = els2.btnFullscreen) == null ? void 0 : _a53.addEventListener("click", () => {
-    var _a55;
+  (_a53 = els2.btnClientMic) == null ? void 0 : _a53.addEventListener("click", () => onClientMicClick());
+  var _a54;
+  (_a54 = els2.btnFullscreen) == null ? void 0 : _a54.addEventListener("click", () => {
+    var _a56;
     const el = els2.clientMain || document.querySelector(".client-main");
     if (document.fullscreenElement) document.exitFullscreen();
-    else (_a55 = el == null ? void 0 : el.requestFullscreen) == null ? void 0 : _a55.call(el);
+    else (_a56 = el == null ? void 0 : el.requestFullscreen) == null ? void 0 : _a56.call(el);
   });
-  var _a54;
-  (_a54 = els2.btnFsSources) == null ? void 0 : _a54.addEventListener("click", (e) => {
+  var _a55;
+  (_a55 = els2.btnFsSources) == null ? void 0 : _a55.addEventListener("click", (e) => {
     e.stopPropagation();
     toggleFsSourceMenu2();
   });
   document.addEventListener("fullscreenchange", syncFsSourceUi2);
   document.addEventListener("click", (e) => {
-    var _a55, _b, _c;
-    if ((_a55 = els2.fsSourceMenu) == null ? void 0 : _a55.hidden) return;
+    var _a56, _b, _c;
+    if ((_a56 = els2.fsSourceMenu) == null ? void 0 : _a56.hidden) return;
     if (e.target === els2.btnFsSources || ((_b = els2.btnFsSources) == null ? void 0 : _b.contains(e.target))) return;
     if ((_c = els2.fsSourceMenu) == null ? void 0 : _c.contains(e.target)) return;
     closeFsSourceMenu2();
   });
   window.addEventListener("sharescreen-ended", async () => {
-    var _a55;
+    var _a56;
     const prefs = getCapturePrefsFromUi();
     try {
       await (media2 == null ? void 0 : media2.stopVideoShare());
@@ -19888,7 +20146,7 @@ Detalhe: ${technical}` : msg;
     clientDisplayStream = null;
     onboardStep = "identify";
     updateClientMicUi();
-    const micActive = (_a55 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a55.call(media2);
+    const micActive = (_a56 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a56.call(media2);
     signaling2 == null ? void 0 : signaling2.send("status", { status: micActive ? "transmitindo" : "conectado" });
     setStatus2(
       micActive ? "Microfone ativo - selecione a tela novamente para compartilhar" : "Compartilhamento encerrado - use o painel para compartilhar novamente"
@@ -19924,9 +20182,9 @@ Detalhe: ${technical}` : msg;
   });
   initOnboarding();
   installAudioUnlock(() => {
-    var _a55, _b, _c;
+    var _a56, _b, _c;
     roomAudioMonitor == null ? void 0 : roomAudioMonitor.resume();
-    (_b = (_a55 = els2.audio) == null ? void 0 : _a55.play) == null ? void 0 : _b.call(_a55).catch(() => {
+    (_b = (_a56 = els2.audio) == null ? void 0 : _a56.play) == null ? void 0 : _b.call(_a56).catch(() => {
     });
     if (roomAudioMonitor && !((_c = roomAudioMonitor.isAutoplayBlocked) == null ? void 0 : _c.call(roomAudioMonitor))) {
       clientMicAutoplayNeeded = false;

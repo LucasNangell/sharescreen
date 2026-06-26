@@ -355,7 +355,8 @@ export class HostAudioMonitor {
         peakingGain: 3,
         compressor: false,
         noiseGate: false,
-        noiseGateThreshold: -45
+        noiseGateThreshold: -45,
+        micCaptureDistance: 6
       });
     }
     return this.filterPrefs.get(key);
@@ -490,8 +491,9 @@ export class HostAudioMonitor {
   _startNoiseGateLoop(ch) {
     if (ch.gateInterval) clearInterval(ch.gateInterval);
     let isOpen = true;
+    let lastOpenAt = performance.now();
     ch.gateInterval = setInterval(() => {
-      if (!ch.gainNode) return;
+      if (!ch.gainNode || !this.ctx) return;
 
       const isMuted = this._isChannelMuted(ch.peerId);
       if (isMuted) {
@@ -504,31 +506,29 @@ export class HostAudioMonitor {
       const targetGain = prefs.gain !== undefined ? prefs.gain : 1.0;
 
       if (!prefs.noiseGate) {
-        if (!isOpen) {
-          ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
-          isOpen = true;
-        }
+        if (!isOpen) isOpen = true;
+        ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
         return;
       }
 
-      const threshDb = prefs.noiseGateThreshold !== undefined ? prefs.noiseGateThreshold : -45;
-      const threshAmp = Math.pow(10, threshDb / 20);
-      const currentLevel = ch.rawLevel || 0;
+      const distance = Math.max(1, Math.min(10, Number(prefs.micCaptureDistance || 6)));
+      const baseDb = prefs.noiseGateThreshold !== undefined ? Number(prefs.noiseGateThreshold) : -45;
+      const openDb = Math.max(-70, Math.min(-18, baseDb + (6 - distance) * 3));
+      const closeDb = openDb - 8;
+      const currentLevel = Math.max(ch.rawLevel || 0, 0.000001);
+      const currentDb = 20 * Math.log10(currentLevel);
+      const now = performance.now();
 
-      if (currentLevel < threshAmp) {
-        if (isOpen) {
-          ch.gainNode.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.04);
-          isOpen = false;
-        }
-      } else {
-        if (!isOpen) {
-          ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.02);
-          isOpen = true;
-        }
+      if (currentDb >= openDb) {
+        isOpen = true;
+        lastOpenAt = now;
+        ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.02);
+      } else if (isOpen && currentDb < closeDb && now - lastOpenAt > 180) {
+        isOpen = false;
+        ch.gainNode.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.05);
       }
-    }, 50);
+    }, 35);
   }
-
   async syncFromSources(sources) {
     if (!this.media) return;
 

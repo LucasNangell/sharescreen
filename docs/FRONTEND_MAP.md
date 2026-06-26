@@ -28,6 +28,7 @@ Os arquivos em [src/shared/](file:///e:/Projetos/Trabalho/Screen%20Share/src/sha
 
 * **Sinalização:** [signaling-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/signaling-client.js) — Conexão WebSocket e eventos de sala.
 * **WebRTC/Mediasoup:** [media-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/media-client.js) — Criação de transports, producers e consumers do `mediasoup-client`.
+* **Filtros de audio por client:** `src/host/app.js` envia preferencias salvas, `src/client/app.js` recebe e `src/shared/media-client.js` aplica o filtro de microfone antes do producer WebRTC; `src/shared/host-audio-monitor.js` mantem o monitor local do host.
 * **Gerenciador de Áudio:** [audio-manager.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/audio-manager.js) — Controle de dispositivos de áudio, microfone e áudio do sistema.
 * **Monitoramento de Áudio:** [host-audio-monitor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/host-audio-monitor.js) e [audio-level-meter.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/audio-level-meter.js) — Medidores VU no painel do host.
 * **Filtro Chroma Key (Lower Thirds):** [lt-chroma.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-chroma.js) — Algoritmo em canvas 2D que remove a cor verde (ou outra chroma configurada) do vídeo de Lower Thirds frame a frame.

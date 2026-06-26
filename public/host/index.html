@@ -172,16 +172,17 @@
 
 
 
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
   <script>(function(){
-var BUILD_ID="2026-06-26T16-08-00-ir746m";
+var BUILD_ID="2026-06-26T16-36-39-dosxpu";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -215,9 +216,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-06-26T16-08-00-ir746m" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-06-26T16-08-00-ir746m" />
-  <link rel="stylesheet" href="style.css?v=2026-06-26T16-08-00-ir746m" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-06-26T16-36-39-dosxpu" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-06-26T16-36-39-dosxpu" />
+  <link rel="stylesheet" href="style.css?v=2026-06-26T16-36-39-dosxpu" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -675,6 +676,13 @@ try{
               <strong id="audio-gate-thresh-val">-45 dB</strong>
             </div>
             <input id="audio-gate-threshold" type="range" min="-70" max="-20" step="1" value="-45" style="width: 100%; cursor: pointer;" />
+            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
+                <span>Alcance do microfone</span>
+                <strong id="audio-capture-distance-val">6/10</strong>
+              </div>
+              <input id="audio-capture-distance" type="range" min="1" max="10" step="1" value="6" style="width: 100%; cursor: pointer;" />
+            </div>
           </div>
         </fieldset>
       </div>
@@ -692,6 +700,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-06-26T16-08-00-ir746m"></script>
+  <script src="app.bundle.js?v=2026-06-26T16-36-39-dosxpu"></script>
 </body>
 </html>

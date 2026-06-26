@@ -103,6 +103,7 @@ let agentHostname = readQueryParam('maquina') || localStorage.getItem(STORAGE_MA
 let pendingTransmission = null;
 let pendingAudioSources = null;
 let pendingRoomSnapshot = null;
+let pendingMicrophoneFilterPrefs = null;
 let sessionStarted = false;
 let sessionReady = false;
 let viewerOnly = false;
@@ -1146,6 +1147,7 @@ async function executeJoinAndStart() {
     await media.loadDevice(payload.rtpCapabilities);
     media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
     await media.ensureRecvTransport();
+    await applyPendingMicrophoneFilters();
 
     if (!viewerOnly) {
       assertSecureContext();
@@ -1263,6 +1265,7 @@ async function rejoinSession() {
   await media.loadDevice(payload.rtpCapabilities);
   media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
   await media.ensureRecvTransport();
+  await applyPendingMicrophoneFilters();
 
   if (!viewerOnly) {
     await media.ensureSendTransport();
@@ -1378,9 +1381,22 @@ async function selecionarFonte(targetPeerId) {
   }
 }
 
+async function applyPendingMicrophoneFilters() {
+  if (!media || !pendingMicrophoneFilterPrefs) return;
+  await media.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs);
+}
 async function handleServerMessage(msg) {
   if (msg.type === 'estadoSala') {
     await applyRoomSnapshot(msg.payload);
+    return;
+  }
+  if (msg.type === 'filtroAudioAtualizado') {
+    pendingMicrophoneFilterPrefs = msg.payload?.prefs || {};
+    if (media) {
+      await media.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs).catch((e) =>
+        errors.handle(e, 'audio-filters')
+      );
+    }
     return;
   }
   if (msg.type === 'clientesSilenciados') {

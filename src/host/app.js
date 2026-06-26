@@ -681,6 +681,7 @@ async function syncHostAudioMonitor(sources = null) {
       }
       const audioSources = buildHostAudioSources();
       await monitor.syncFromSources(audioSources);
+      syncPublishedAudioFiltersToClients(audioSources);
       if (audioSources.length && monitor.channelCount === 0) {
         log(
           `Audio remoto: ${audioSources.length} fonte(s) detectada(s), 0 canal ativo - tentando novamente...`, 
@@ -2095,6 +2096,7 @@ $('ctx-troca-telas')?.addEventListener('click', () => {
 
 let originalAudioFilterPrefs = null;
 let saveTimeout = null;
+const sentAudioFilterKeys = new Map();
 
 function saveAudioFiltersPresetDebounced(name, prefs) {
   if (saveTimeout) clearTimeout(saveTimeout);
@@ -2103,6 +2105,46 @@ function saveAudioFiltersPresetDebounced(name, prefs) {
   }, 1000);
 }
 
+function normalizeAudioFilterPrefsForClient(prefs = {}) {
+  return {
+    gain: Number(prefs.gain !== undefined ? prefs.gain : 1),
+    bass: Number(prefs.bass || 0),
+    treble: Number(prefs.treble || 0),
+    highpass: !!prefs.highpass,
+    highpassFreq: Number(prefs.highpassFreq || 80),
+    peaking: !!prefs.peaking,
+    peakingFreq: Number(prefs.peakingFreq || 3000),
+    peakingGain: Number(prefs.peakingGain !== undefined ? prefs.peakingGain : 3),
+    compressor: !!prefs.compressor,
+    noiseGate: !!prefs.noiseGate,
+    noiseGateThreshold: Number(prefs.noiseGateThreshold !== undefined ? prefs.noiseGateThreshold : -45),
+    micCaptureDistance: Number(prefs.micCaptureDistance || 6)
+  };
+}
+
+function sendAudioFiltersToClient(client, prefs, { force = false } = {}) {
+  if (!client?.id || !signaling || !hostReady) return;
+  if (String(client.id) === String(hostPeerId)) return;
+  const normalized = normalizeAudioFilterPrefsForClient(prefs);
+  const key = JSON.stringify(normalized);
+  const id = String(client.id);
+  if (!force && sentAudioFilterKeys.get(id) === key) return;
+  sentAudioFilterKeys.set(id, key);
+  signaling.send('definirFiltroAudioClient', { peerId: client.id, prefs: normalized });
+}
+
+function syncPublishedAudioFiltersToClients(audioSources = []) {
+  const monitor = hostAudioMonitor;
+  if (!monitor) return;
+  const sent = new Set();
+  for (const source of audioSources || []) {
+    if (!source?.peerId || source.source !== 'microphone') continue;
+    const id = String(source.peerId);
+    if (sent.has(id)) continue;
+    sent.add(id);
+    sendAudioFiltersToClient({ id }, monitor.getFilterPrefs(id));
+  }
+}
 function applyAudioFiltersFromUi() {
   const client = activeAudioFiltersClient;
   const monitor = hostAudioMonitor;
@@ -2119,10 +2161,12 @@ function applyAudioFiltersFromUi() {
     peakingGain: Number($('audio-peak-gain')?.value || 3),
     compressor: !!$('audio-comp-enabled')?.checked,
     noiseGate: !!$('audio-gate-enabled')?.checked,
-    noiseGateThreshold: Number($('audio-gate-threshold')?.value || -45)
+    noiseGateThreshold: Number($('audio-gate-threshold')?.value || -45),
+    micCaptureDistance: Number($('audio-capture-distance')?.value || 6)
   };
 
   monitor.setFilterPrefs(client.id, prefs);
+  sendAudioFiltersToClient(client, prefs, { force: true });
   saveAudioFiltersPresetDebounced(client.displayName, prefs);
 }
 
@@ -2202,6 +2246,13 @@ function openAudioFiltersModal(client) {
     if (gateThreshVal) gateThreshVal.textContent = `${gateThresh.value} dB`;
   }
 
+  const captureDistance = $('audio-capture-distance');
+  if (captureDistance) {
+    captureDistance.value = prefs.micCaptureDistance !== undefined ? prefs.micCaptureDistance : 6;
+    const captureDistanceVal = $('audio-capture-distance-val');
+    if (captureDistanceVal) captureDistanceVal.textContent = `${captureDistance.value}/10`;
+  }
+
   const modal = $('audio-filters-modal');
   if (modal) modal.hidden = false;
 }
@@ -2228,6 +2279,7 @@ function closeAudioFiltersModal(revert = false) {
   const monitor = hostAudioMonitor;
   if (revert && client && monitor && originalAudioFilterPrefs) {
     monitor.setFilterPrefs(client.id, originalAudioFilterPrefs);
+    sendAudioFiltersToClient(client, originalAudioFilterPrefs, { force: true });
     savePresetToLocalStorage(client.displayName, originalAudioFilterPrefs);
   }
 
@@ -2274,6 +2326,11 @@ $('audio-gate-threshold')?.addEventListener('input', (e) => {
   if (el) el.textContent = `${e.target.value} dB`;
   applyAudioFiltersFromUi();
 });
+$('audio-capture-distance')?.addEventListener('input', (e) => {
+  const el = $('audio-capture-distance-val');
+  if (el) el.textContent = `${e.target.value}/10`;
+  applyAudioFiltersFromUi();
+});
 
 $('btn-audio-filters-reset')?.addEventListener('click', () => {
   const client = activeAudioFiltersClient;
@@ -2303,6 +2360,8 @@ $('btn-audio-filters-reset')?.addEventListener('click', () => {
   const gate = $('audio-gate-enabled'); if (gate) gate.checked = false;
   const gateThresh = $('audio-gate-threshold'); if (gateThresh) gateThresh.value = -45;
   const gateThreshVal = $('audio-gate-thresh-val'); if (gateThreshVal) gateThreshVal.textContent = '-45 dB';
+  const captureDistance = $('audio-capture-distance'); if (captureDistance) captureDistance.value = 6;
+  const captureDistanceVal = $('audio-capture-distance-val'); if (captureDistanceVal) captureDistanceVal.textContent = '6/10';
 
   applyAudioFiltersFromUi();
 });

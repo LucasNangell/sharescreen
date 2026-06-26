@@ -64,7 +64,8 @@ Arquivos envolvidos:
 
 1. Host ou Client conecta via WebSocket.
 2. A sinalização ouve eventos como `room:join`, `webrtc:create-transport`, `webrtc:connect-transport`, `webrtc:produce`, `webrtc:consume`.
-3. Atualiza o estado central em [room-manager.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/room-manager.js) notificando a sala quando há novos apresentadores ou saídas.
+3. `definirFiltroAudioClient` e repassado por WebSocket do host/co-host para o client alvo para atualizar filtros de microfone sem alterar producers de video, gravacao ou ICE.
+4. Atualiza o estado central em [room-manager.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/room-manager.js) notificando a sala quando há novos apresentadores ou saídas.
 
 ---
 

@@ -309,6 +309,18 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       break;
     }
 
+    case 'definirFiltroAudioClient': {
+      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode ajustar filtros de audio');
+      const { peerId, prefs } = msg.payload || {};
+      const target = room.peers.get(peerId);
+      if (!target || target.role !== 'client') {
+        enviar({ type: 'filtroAudioResultado', payload: { ok: false, erro: 'Client indisponivel', peerId } });
+        break;
+      }
+      target.send({ type: 'filtroAudioAtualizado', payload: { prefs: prefs || {} } });
+      enviar({ type: 'filtroAudioResultado', payload: { ok: true, peerId } });
+      break;
+    }
     case 'selecionarFonte': {
       if (!peer || peer.role !== 'client') throw new Error('Apenas clients podem usar este comando');
       const { peerId } = msg.payload || {};
