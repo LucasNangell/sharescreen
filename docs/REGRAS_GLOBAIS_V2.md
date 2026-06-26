@@ -1,0 +1,21 @@
+Estas regras devem ser consideradas obrigatórias para toda a recriação da V2:
+
+- Criar tudo dentro da pasta `screensharev2/`, dentro da pasta raiz do sistema atual.
+- Não alterar o sistema atual fora de `screensharev2/`, salvo leitura de arquivos para referência.
+- O sistema atual deve ser usado apenas como referência de layout, textos, funcionalidades, estrutura visual, assets e rotas esperadas.
+- Não copiar a lógica antiga de WebRTC/sinalização/áudio se ela estiver confusa ou acoplada.
+- Na V2, todo frontend deve ter fonte em `screensharev2/src/` e build para `screensharev2/public/`.
+- A V2 deve ser feita com arquitetura nova, limpa, previsível e testável.
+- Não implementar tudo de uma vez.
+- Ao final de cada fase, executar build/teste possível e documentar o resultado.
+- Não avançar para a próxima fase se a fase atual não compilar.
+- O client externo acessado por `/meet` deve se comportar como client local acessado por `/client`.
+- A rota `/meet` pode continuar sendo tratada pelo Nginx como equivalente de `/client`.
+- A ordem de entrada não pode importar: host antes do client, client antes do host, externo antes do host, externo depois da transmissão, tudo deve funcionar.
+- Snapshot inicial e eventos ao vivo devem usar a mesma semântica.
+- Todo consumo de mídia deve ser idempotente.
+- Microfone, tela e áudio do sistema devem ser producers independentes.
+- Não pode haver producer/consumer duplicado.
+- Não pode haver tela congelada após troca de transmissão.
+- Não pode haver eco local.
+- Filtros de áudio devem aplicar em tempo real sem reiniciar mídia.
