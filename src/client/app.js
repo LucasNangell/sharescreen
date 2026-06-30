@@ -1142,6 +1142,7 @@ async function executeJoinAndStart() {
 
     media = new MediaClient(signaling, {
       splitRecvTransports: false,
+      forceTurnRelay: !!viewerAccessToken,
       onLog: (m, l) => setStatus(m)
     });
     await media.loadDevice(payload.rtpCapabilities);
@@ -1260,6 +1261,7 @@ async function rejoinSession() {
 
   media = new MediaClient(signaling, {
     splitRecvTransports: false,
+    forceTurnRelay: !!viewerAccessToken,
     onLog: (m, l) => setStatus(m)
   });
   await media.loadDevice(payload.rtpCapabilities);

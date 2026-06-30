@@ -43,6 +43,7 @@ xcopy /E /I /Q /Y "config" "pacote-servidor\config\" >nul
 xcopy /E /I /Q /Y "public" "pacote-servidor\public\" >nul
 xcopy /E /I /Q /Y "server" "pacote-servidor\server\" >nul
 xcopy /E /I /Q /Y "scripts" "pacote-servidor\scripts\" >nul
+xcopy /E /I /Q /Y "turn" "pacote-servidor\turn\" >nul
 xcopy /E /I /Q /Y "node_modules" "pacote-servidor\node_modules\" >nul
 copy /Y "src\shared\recording-filename.js" "pacote-servidor\src\shared\" >nul
 copy /Y "package.json" "pacote-servidor\" >nul

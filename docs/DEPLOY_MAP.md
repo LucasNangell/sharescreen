@@ -66,7 +66,7 @@ As configurações são resolvidas no arquivo [default.js](file:///e:/Projetos/T
 | `SHARESCREEN_HOST_TOKEN` | Token exigido para que o host realize upload de Lower Thirds. | `*(Token seguro gerado)*` |
 | `TURN_USERNAME` | Nome de usuário configurado no TURN Server (se ativo). | `sharescreen` |
 | `TURN_PASSWORD` / `TURN_CREDENTIAL` | Senha correspondente para autenticar no TURN. | `*(Senha segura)*` |
-| `TURN_URLS` | Lista de servidores TURN separados por vírgula. | `turn:10.1.1.73:3478?transport=udp` |
+| `TURN_URLS` | Lista de servidores TURN separados por vírgula. | `turns:cgrafsysvm.camara.leg.br:443?transport=tcp` |
 
 ---
 
@@ -75,11 +75,72 @@ As configurações são resolvidas no arquivo [default.js](file:///e:/Projetos/T
 ### NGINX
 Os arquivos de configuração do servidor NGINX para hospedar a aplicação sob HTTPS reverso estão contidos na pasta [/nginx](file:///e:/Projetos/Trabalho/Screen%20Share/nginx):
 * [https-sharescreen.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/https-sharescreen.conf) — Configurações padrão de Proxy Pass para as portas 3443 e 3080.
-* [sharescreen-static-locations.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/sharescreen-static-locations.conf) — Mapeamento das pastas de arquivos estáticos públicas e de vídeos.
+* [sharescreen-static-locations.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/sharescreen-static-locations.conf) — Mapeamento LAN (rede interna): APIs, estáticos e gravação.
+* [cgrafsysvm-sharescreen-internet-locations.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/cgrafsysvm-sharescreen-internet-locations.conf) — Bloco internet (`cgrafsysvm.camara.leg.br`): `/meet` com token, `/ws`, `/api/info`, `/api/registro-cliente`, `/api/lower-third`, `/lt-videos/`; bloqueia `/host` e `/client`.
+* [sharescreen-turns-443-stream.inc](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/sharescreen-turns-443-stream.inc) — Demux TLS na 443 (HTTPS → 8443, TURN → eturnal 5349).
+* [nginx.conf.cgrafsysvm-producao.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/nginx.conf.cgrafsysvm-producao.conf) — Referência completa do `nginx.conf` de produção com demux.
 
-### TURN Server (Coturn)
-* Configuração padrão no arquivo: [turnserver.conf](file:///e:/Projetos/Trabalho/Screen%20Share/turn/turnserver.conf).
-* Para iniciar o servidor TURN local no Windows em paralelo com a aplicação, execute o arquivo: [start-turn.bat](file:///e:/Projetos/Trabalho/Screen%20Share/scripts/start-turn.bat).
+**Deploy NGINX:** copiar `nginx.conf.cgrafsysvm-producao.conf` para `\\cgrafsysvm\nginx\conf\nginx.conf` (ou aplicar o bloco `stream` + `listen 127.0.0.1:8443`) e executar:
+
+```powershell
+cd C:\nginx
+.\nginx.exe -t -p C:\nginx -c conf\nginx.conf
+.\nginx.exe -s reload -p C:\nginx -c conf\nginx.conf
+```
+
+### TURN Server — eturnal (Windows)
+
+O link externo precisa de **eturnal** (serviço Windows) + **ShareScreen (Node)**:
+
+| Programa | O que faz | Como iniciar |
+| --- | --- | --- |
+| **ShareScreen (Node)** | Página, API, WebSocket, vídeo na LAN | `start-producao.bat` |
+| **eturnal** | Relay TURN para convidados da internet (TURNS:443) | Serviço Windows em `C:\eturnal` |
+
+O Node **não** inicia o TURN. Sem eturnal ativo ou sem demux NGINX na 443, o convidado externo abre a página mas a mídia fica em "Conectando...".
+
+**Config:** [turn/eturnal.yml](file:///e:/Projetos/Trabalho/Screen%20Share/turn/eturnal.yml) → produção: `C:\eturnal\etc\eturnal.yml`  
+Certificados TLS: `C:\nginx\conf\ssl\cgrafsysvm-leg-chain.crt` e `.key`
+
+#### Instalação eturnal (já feita no cgrafsysvm)
+
+1. Binário em `C:\eturnal` (ou `\\cgrafsysvm\eturnal`)
+2. Editar `etc\eturnal.yml` (credentials, `relay_ipv4_addr`, TLS 5349, relay 49160–49252)
+3. Firewall interno: `scripts\setup-eturnal-firewall.ps1` (Administrador)
+4. Reiniciar serviço eturnal: `cd "C:\Program Files\eturnal\bin"` → `eturnal.cmd restart` (ou `scripts\start-eturnal.bat`)
+
+**Nota Windows:** `eturnalctl` e `reload` são scripts Linux; no Windows use **`eturnal.cmd restart`**.
+
+#### Demux NGINX (perímetro só 80/443)
+
+- Página/API/WSS: `https://cgrafsysvm.camara.leg.br` → NGINX `:8443` (ALPN h2/http1.1)
+- TURN: `turns:cgrafsysvm.camara.leg.br:443?transport=tcp` → eturnal `:5349` (TLS sem ALPN)
+- Demux por **ALPN** no mesmo hostname (não exige DNS `turn.*`)
+- Subdomínio `turn.cgrafsysvm.camara.leg.br` é opcional (só se infra criar DNS + cert)
+
+#### Ordem no cgrafsysvm
+
+1. Confirmar eturnal ativo (`Listening on ...:5349 (tls)` no log)
+2. Aplicar `nginx.conf` com demux e `nginx -t` + reload
+3. `start-producao.bat` (Node)
+4. `curl https://cgrafsysvm.camara.leg.br/api/info` → `"turnEnabled": true`
+
+**Atalho (Administrador no cgrafsysvm):** `scripts\aplicar-eturnal-producao.bat` — firewall, reload eturnal, `nginx -t` + reload e teste `/api/info`.
+
+**Legado:** scripts coturn (`start-turn.bat`, `build-coturn-windows.bat`, `turn/turnserver.conf`) — obsoletos; não usar.
+
+#### Opção alternativa — TURN na nuvem
+
+Substituir `TURN_URLS` por `TURN_SERVERS` (JSON) do provedor. Não requer eturnal local.
+
+### Perímetro apenas 80/443 (internet)
+| Camada | Porta | Observação |
+| --- | --- | --- |
+| URL, HTML, REST, WSS | 80 → 443 | NGINX proxy para Node `127.0.0.1:3443` |
+| Mídia WebRTC direta | UDP 40000–40100 | Não passa por proxy HTTP; `PUBLIC_ANNOUNCED_IP` no Node |
+| TURN relay | TURNS **443** TCP | `TURN_URLS=turns:cgrafsysvm.camara.leg.br:443?transport=tcp`; eturnal interno **5349** + demux NGINX (ver `sharescreen-turns-443-stream.inc`) |
+
+Sem TURN ativo ou sem demux na 443, o convidado externo conecta (sinalização) mas a mídia fica em "Conectando...". A LAN interna não é afetada.
 
 ---
 

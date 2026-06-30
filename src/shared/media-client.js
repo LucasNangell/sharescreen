@@ -9,7 +9,7 @@ import {
   acquireMicrophoneTrack
 } from './audio-manager.js';
 import { normalizeAudioSource, parseAudioChannelKey, audioTrace } from './audio-sources.js';
-import { buildIceServers, hasTurnServers } from './ice-servers.js';
+import { buildIceServers, buildTransportIceOptions, hasTurnServers } from './ice-servers.js';
 const MIC_FILTER_DEFAULTS = {
   gain: 1,
   bass: 0,
@@ -182,11 +182,12 @@ function createMicrophoneFilterGraph(inputTrack, prefs) {
  * Sess?fio mediasoup: transports, produce, consume, cleanup e baixa lat?fincia.
  */
 export class MediaClient {
-  constructor(signaling, { onLog, onIceState, splitRecvTransports = false } = {}) {
+  constructor(signaling, { onLog, onIceState, splitRecvTransports = false, forceTurnRelay = false } = {}) {
     this.signaling = signaling;
     this.onLog = onLog || (() => {});
     this.onIceState = onIceState || (() => {});
     this.splitRecvTransports = splitRecvTransports;
+    this.forceTurnRelay = forceTurnRelay;
     this.device = null;
     this.sendTransport = null;
     this.recvTransport = null;
@@ -318,10 +319,12 @@ export class MediaClient {
       iceCandidates: payload.iceCandidates,
       dtlsParameters: payload.dtlsParameters
     };
-    const iceServers = buildIceServers(this.videoQuality);
-    if (iceServers.length) {
-      transportOptions.iceServers = iceServers;
-    }
+    Object.assign(
+      transportOptions,
+      buildTransportIceOptions(this.videoQuality, {
+        forceRelay: this.forceTurnRelay && direction === 'recv'
+      })
+    );
 
     const transport =
       direction === 'send'
@@ -329,7 +332,12 @@ export class MediaClient {
         : this.device.createRecvTransport(transportOptions);
 
     if (hasTurnServers(this.videoQuality) && direction === 'recv') {
-      this.onLog('TURN dispon?fivel i?,???? fallback se conex?fio direta falhar', 'info');
+      this.onLog(
+        this.forceTurnRelay
+          ? 'Espectador externo: midia via TURN (443)'
+          : 'TURN disponivel — fallback se conexao direta falhar',
+        'info'
+      );
     }
 
     transport.on('connect', ({ dtlsParameters }, callback, errback) => {
@@ -353,12 +361,16 @@ export class MediaClient {
       const level = state === 'failed' ? 'error' : 'info';
       let msg = `Transport ${direction}${recvTag !== 'default' ? `/${recvTag}` : ''}: ${state}`;
       if (state === 'failed') {
-        const ice =
-          transport.iceCandidates?.map((c) => c.ip).filter(Boolean).join(', ') ||
-          this.videoQuality?.serverHost ||
-          '?';
-        const ports = this.videoQuality?.rtcPortRange || '40000-40100';
-        msg += ` i?,???? verifique firewall UDP ${ports} em ${ice}`;
+        if (hasTurnServers(this.videoQuality) && this.forceTurnRelay) {
+          msg += ' — verifique TURN (eturnal TURNS:443) e reinicie start-producao.bat';
+        } else {
+          const ice =
+            transport.iceCandidates?.map((c) => c.ip).filter(Boolean).join(', ') ||
+            this.videoQuality?.serverHost ||
+            '?';
+          const ports = this.videoQuality?.rtcPortRange || '40000-40100';
+          msg += ` — verifique firewall UDP ${ports} em ${ice}`;
+        }
         this.onIceState?.('failed', direction);
       } else if (state === 'connected') {
         this.onIceState?.('connected', direction);

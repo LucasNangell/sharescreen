@@ -89,7 +89,20 @@ del "data\.write-probe" >nul 2>&1
 
 echo [OK] Todos os arquivos necessarios estao presentes.
 echo.
+echo Variaveis de producao (start-producao.bat):
+echo   PUBLIC_URL=https://cgrafsysvm.camara.leg.br
+echo   TURN_URLS=turns:cgrafsysvm.camara.leg.br:443?transport=tcp
+echo.
 echo Inicie o servidor com: start-producao.bat
-echo URLs Nginx: http://cgrafsysvm/host/  e  http://cgrafsysvm/meet/
+echo TURN: eturnal em "C:\Program Files\eturnal" (TLS :5349, demux NGINX :443)
+if exist "C:\Program Files\eturnal\etc\eturnal.yml" (
+    echo [OK] eturnal.yml em C:\Program Files\eturnal\etc\
+) else (
+    echo [AVISO] eturnal.yml nao encontrado — confira instalacao eturnal
+)
+echo NGINX demux 443: cd C:\nginx ^&^& nginx.exe -t -p C:\nginx -c conf\nginx.conf
+echo URLs internas: https://cgrafsysvm.redecamara.camara.gov.br/host/ e /client/
+echo URL externa:    https://cgrafsysvm.camara.leg.br/meet/?token=...^&nome=...
+echo Verifique Node: GET https://cgrafsysvm.camara.leg.br/api/info -^> turnEnabled:true
 echo.
 pause

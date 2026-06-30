@@ -10,9 +10,11 @@ REM IP publico para candidatos ICE (espectadores externos). Obrigatorio se DNS a
 set PUBLIC_ANNOUNCED_IP=200.219.133.192
 set TRUST_PROXY=1
 
-REM TURN — relay para espectadores externos (rode scripts\start-turn.bat em paralelo)
+REM TURN — relay para espectadores externos (servico eturnal em C:\eturnal — ver DEPLOY_MAP)
 set TURN_USERNAME=sharescreen
 set TURN_PASSWORD=ShareScreenTurn2026!
+REM Periodo 80/443: TURNS na 443 (mesmo host; demux NGINX por ALPN — ver DEPLOY_MAP)
+set TURN_URLS=turns:cgrafsysvm.camara.leg.br:443?transport=tcp
 
 set SHARESCREEN_DEV=
 set SHARESCREEN_RECORDINGS_DIR=
@@ -60,7 +62,9 @@ echo ========================================
 echo  ShareScreen LAN - PRODUCAO
 echo  Host:   https://10.1.1.73:3443/host
 echo  Client: https://10.1.1.73:3443/client
-echo  Nginx:  http://cgrafsysvm/host/
+echo  Nginx:  https://cgrafsysvm.camara.leg.br/meet/ (externo, com token)
+echo  TURN:   eturnal ("C:\Program Files\eturnal") — TURNS:443 via demux NGINX
+echo  Verifique: GET /api/info -^> turnEnabled:true, publicAnnouncedIp preenchido
 echo ========================================
 echo  Ctrl+C para encerrar
 echo.
