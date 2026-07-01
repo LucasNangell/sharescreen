@@ -209,8 +209,11 @@
   
   
   
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T13-54-33-zjc243";
+var BUILD_ID="2026-07-01T14-20-29-nx50nj";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -244,9 +247,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T13-54-33-zjc243" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T13-54-33-zjc243" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T13-54-33-zjc243" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T14-20-29-nx50nj" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T14-20-29-nx50nj" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T14-20-29-nx50nj" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -483,8 +486,12 @@ try{
                 </div>
                 <div class="field recordings-filename-pattern-field" style="margin-top: var(--space-sm);">
                   <label for="recording-filename-pattern-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Padrão de nome do arquivo</label>
-                  <input id="recording-filename-pattern-input" type="text" placeholder="{YYYY} Mes{MM} {DD} {HH}h{NN} - Apogee" style="width: 100%; padding: 0.4rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); min-width: 0; box-sizing: border-box;" />
+                  <div style="display: flex; gap: var(--space-xs);">
+                    <input id="recording-filename-pattern-input" type="text" placeholder="{YYYY} Mes{MM} {DD} {HH}h{NN} - Apogee" style="flex: 1; padding: 0.4rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); min-width: 0; box-sizing: border-box;" />
+                    <button type="button" id="btn-save-filename-pattern" class="btn btn-secondary" style="padding: 0 0.8rem; font-size: 0.8rem; flex-shrink: 0;">Salvar</button>
+                  </div>
                   <p class="hint-text" style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">Variáveis: {DD} {MM} {YYYY} {HH} {NN} {MES}. Vazio = padrão atual do sistema.</p>
+                  <p id="recording-filename-pattern-status" class="hint-text" hidden style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;"></p>
                 </div>
                 <div class="field recordings-dir-field" style="margin-top: var(--space-sm);">
                   <label for="recordings-dir-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Destino da gravação</label>
@@ -753,6 +760,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T13-54-33-zjc243"></script>
+  <script src="app.bundle.js?v=2026-07-01T14-20-29-nx50nj"></script>
 </body>
 </html>

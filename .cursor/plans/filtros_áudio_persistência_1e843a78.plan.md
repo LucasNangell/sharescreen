@@ -1,15 +1,15 @@
 ---
 name: Filtros áudio persistência
-overview: Persistir presets de filtros de áudio (cliente e host) no SQLite com migração automática ao renomear, corrigir a gravação para usar as mesmas trilhas WebRTC que os clients ouvem (sem re-aplicar DSP do monitor), e documentar que eliminador de ecos customizado não é seguro nesta arquitetura.
+overview: Persistir presets de filtros de áudio (cliente e host) no SQLite com renomeação in-place ao mudar nome, corrigir a gravação para usar as mesmas trilhas WebRTC que os clients ouvem (sem re-aplicar DSP do monitor). Eliminador de eco fora do escopo.
 todos:
   - id: db-schema
-    content: Criar tabela audio_filter_presets + funções CRUD/migração em client-db.js
+    content: Criar tabela audio_filter_presets + funções CRUD/renomear em client-db.js
     status: pending
   - id: api-endpoints
     content: Adicionar GET/POST /api/audio-filter em index.js
     status: pending
   - id: signaling-persist
-    content: Persistir em definirFiltroAudioClient e migrar em atualizarNome (signaling.js)
+    content: Persistir em definirFiltroAudioClient e renomear preset em atualizarNome (signaling.js)
     status: pending
   - id: host-frontend
     content: Integrar load/save API em host/app.js + preset host completo + fallback localStorage
@@ -24,6 +24,21 @@ isProject: false
 ---
 
 # Plano: persistência de filtros de áudio + paridade gravação/clients
+
+## Resposta: a gravação usa filtros hoje?
+
+**Sim, mas de forma inconsistente — e não igual ao que os clients ouvem.**
+
+| Fonte na gravação | Filtros aplicados? | Igual ao que clients ouvem? |
+|-------------------|-------------------|----------------------------|
+| **Microfone do host** (`collectOwnAudioTracks`) | Sim — trilha publicada já passou por `mic-dsp.js` na captura | Sim |
+| **Áudio de system do host** | Não (trilha bruta do `getDisplayMedia`) | Sim |
+| **Microfones de outros clients** (cenário normal, com canais ativos) | **Sim, com dupla filtragem** — `collectMonitorAudioTracks` usa `getMixedOutputTrack()` quando `allChannelsRoutedToDest === true` (linhas 36–39 de `recording-audio-mixer.js`), que é o mix do monitor do host com DSP reaplicado sobre trilhas **já filtradas na publicação WebRTC** | **Não** — clients ouvem só a filtragem da publicação; a gravação soma a do monitor do host |
+| **Fallback** (sem mix unificado) | Parcial — canais **com** filtro ativo são **ignorados** (linha 50: `continue`); só entram trilhas sem filtro ou fallback genérico | Também diverge |
+
+**Resumo**: com participantes e filtros ativos, a gravação **não replica** fielmente o áudio dos clients. A correção prevista na seção 5 resolve isso usando as `consumer.track` WebRTC diretamente (uma única passagem de DSP, a da publicação).
+
+---
 
 ## Diagnóstico do estado atual
 
@@ -62,10 +77,8 @@ flowchart LR
 
 **Conclusão**: a gravação hoje tende a divergir do que os clients ouvem sempre que há filtros ativos em microfones de participantes.
 
-### Echo cancellation
-- Já habilitado na captura em [`audio-manager.js`](e:/Projetos/Trabalho/Screen%20Share/src/shared/audio-manager.js) (`echoCancellation: true`).
-- O eco residual vem do mix de **várias faixas** (system + mic + remotos) no playback — AEC do navegador não cancela isso de forma confiável.
-- **Eliminador customizado no mix** = alto risco de degradar compartilhamento de áudio; **não implementar na v1**.
+### Eliminador de eco — fora do escopo
+Não será implementado neste trabalho. O AEC nativo do navegador já está ativo na captura de microfone (`echoCancellation: true` em `audio-manager.js`); nenhuma alteração relacionada a eco entra no plano.
 
 ---
 
@@ -87,11 +100,16 @@ Criar tabela `audio_filter_presets`:
 - PK composta: `(subject_kind, subject_name)`.
 - Funções novas (espelhando padrão de `lower_thirds`):
   - `getAudioFilterPreset(kind, name)`
-  - `saveAudioFilterPreset(kind, name, prefs)`
-  - `migrateAudioFilterPreset(kind, oldName, newName)` — copia preset do nome antigo para o novo **somente se o novo ainda não tiver preset**; **não apaga** o antigo (preserva histórico).
+  - `saveAudioFilterPreset(kind, name, prefs)` — upsert; **sobrescreve** se já existir
+  - `renameAudioFilterPreset(kind, oldName, newName)` — ao renomear client:
+    1. Lê `prefs` do registro com `oldName`
+    2. Grava em `newName` via `saveAudioFilterPreset` (**sobrescreve** o destino se já houver preset)
+    3. **Remove** o registro de `oldName` (não cria linha duplicada; não preserva histórico)
 
-**Migração de nome** (em `registerClientByName`, ramo `update-by-ip`):
-- Antes do `UPDATE clients SET name = ?`, chamar `migrateAudioFilterPreset('client', byIp.name, trimmed)`.
+**Renomeação de nome** (em `registerClientByName`, ramo `update-by-ip`):
+- Antes do `UPDATE clients SET name = ?`, chamar `renameAudioFilterPreset('client', byIp.name, trimmed)`.
+
+No frontend (`localStorage`): ao detectar renomeação, mover a chave do preset (`delete` antiga, `set` nova) em vez de manter duas entradas.
 
 **Atualizar**: [`docs/DATABASE_MAP.md`](e:/Projetos/Trabalho/Screen%20Share/docs/DATABASE_MAP.md) (nova tabela).
 
@@ -116,7 +134,7 @@ Criar tabela `audio_filter_presets`:
 
 No handler `definirFiltroAudioClient` (após validar target):
 - Persistir com `saveAudioFilterPreset('client', target.displayName, prefs)` — side-effect leve, não altera producers/ICE/gravação.
-- Em `atualizarNome`: capturar `oldName = peer.displayName` antes de `updatePeerName`, depois `migrateAudioFilterPreset('client', oldName, nome)`.
+- Em `atualizarNome`: capturar `oldName = peer.displayName` antes de `updatePeerName`, depois `renameAudioFilterPreset('client', oldName, nome)` (sobrescreve destino, remove origem).
 
 **Não alterar**: `criarTransporte`, `produzir`, `consumir`, `splitRecvTransports`, `room-manager` audio broadcast.
 
@@ -156,25 +174,13 @@ Reescrever `collectMonitorAudioTracks` para:
 
 ---
 
-### 6. Echo eliminator — decisão
-
-| Opção | Risco | Decisão |
-|-------|-------|---------|
-| AEC customizado no mix Web Audio | Alto — pode cortar fala, causar artefatos, quebrar sync de faixas | **Não implementar** |
-| Reforçar AEC na captura | Baixo — já está `true` | Nenhuma mudança |
-| Documentar uso de fones | Nenhum | Mencionar no resumo de testes |
-
-Se no futuro for necessário, abordagem segura seria flag experimental **desligada por padrão**, isolada em módulo novo, sem tocar `media-client.js` nem `host-audio-monitor.js`.
-
----
-
 ## Arquivos tocados (resumo)
 
 | Arquivo | Ação | Motivo |
 |---------|------|--------|
-| `server/client-db.js` | Alterar | Schema + CRUD + migração por nome |
+| `server/client-db.js` | Alterar | Schema + CRUD + renomear preset in-place |
 | `server/index.js` | Alterar | Endpoints GET/POST |
-| `server/signaling.js` | Alterar | Persistir ao definir filtro; migrar ao renomear |
+| `server/signaling.js` | Alterar | Persistir ao definir filtro; renomear ao mudar nome |
 | `src/host/app.js` | Alterar | Load/save API; preset host completo |
 | `src/shared/recording-audio-mixer.js` | Alterar | Gravação = trilhas WebRTC (paridade clients) |
 | `src/shared/host-audio-monitor.js` | Alterar mínimo | Opcional: export helper de cache; sem mudar rotas de áudio |
@@ -185,6 +191,7 @@ Se no futuro for necessário, abordagem segura seria flag experimental **desliga
 **Explicitamente fora do escopo** (para preservar estabilidade):
 - `media-client.js`, `signaling-client.js`, `audio-manager.js`, `room-manager.js`, `mediasoup-manager.js`
 - Layout/HTML/CSS, autenticação, deploy, nginx
+- Eliminador de eco (qualquer implementação)
 
 ---
 
@@ -198,7 +205,7 @@ Se no futuro for necessário, abordagem segura seria flag experimental **desliga
 | Dois hosts com presets diferentes para o mesmo client | Baixa | Preset é por nome, não por sessão — alinhado ao pedido |
 | Host muda próprio nome | Baixa | Preset `kind=host` fica no nome antigo até reconfigurar; documentar |
 | Regressão no áudio ao vivo | **Alta se mexer no monitor** | **Não alterar** `_rebuildAudioRoutes` nem transports; mudança restrita ao collector da gravação |
-| Echo eliminator | **Alto** | Não implementar |
+| Renomear para nome que já tem preset | Baixa | Comportamento definido: **sobrescreve** o preset do nome novo com o do antigo |
 
 ---
 
@@ -206,7 +213,7 @@ Se no futuro for necessário, abordagem segura seria flag experimental **desliga
 
 1. `npm run build` e reiniciar servidor.
 2. **Persistência client**: configurar filtros para “João” → recarregar host → preset restaurado; verificar linha em `audio_filter_presets` no SQLite.
-3. **Renomear**: client “João” → “João Silva” → preset deve aparecer para o novo nome (API + modal).
+3. **Renomear**: client “João” → “João Silva” → preset migrado para o novo nome; registro “João” removido; se “João Silva” já existia, preset antigo de João **sobrescreve** o de João Silva.
 4. **Host**: ajustar ganho/EQ do host → recarregar → preset `kind=host` restaurado.
 5. **Paridade gravação**: com EQ/compressor ativo em um client, comparar áudio gravado vs áudio no client viewer — devem coincidir.
 6. **Regressão áudio ao vivo**: múltiplos participantes; host e clients ouvem system+mic+remotos; reconexão; co-host — comportamento idêntico ao atual.

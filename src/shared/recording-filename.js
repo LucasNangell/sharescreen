@@ -46,7 +46,8 @@ export function formatRecordingFilename(endDate = new Date(), pattern) {
   const vars = buildRecordingFilenameVars(endDate);
   let name = trimmed;
   for (const [key, value] of Object.entries(vars)) {
-    name = name.replaceAll(`{${key}}`, value);
+    const token = `{${key}}`;
+    name = name.split(token).join(value);
   }
   if (!name.toLowerCase().endsWith('.webm')) {
     name += '.webm';

@@ -25,6 +25,7 @@ export class UiStateMachine {
       isSharing: false,
       isRecording: false,
       isUploading: false,
+      isRecordingBusy: false,
       wsConnected: false,
       wsWasConnected: false,
       hasPreview: false

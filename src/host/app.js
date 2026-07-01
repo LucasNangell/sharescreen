@@ -10,7 +10,7 @@ import { UiStateMachine } from '../shared/ui-state.js';
 import { mergeServerQuality, loadPresetId, savePresetId, getPreset, bitrateMbps } from '../shared/quality-manager.js';
 import { showToast as originalShowToast } from '../shared/toast.js';
 import { collectWebRtcStats } from '../shared/stats-collector.js';
-import { formatRecordingFilename } from '../shared/recording-filename.js';
+import { formatRecordingFilename, isValidRecordingFilename } from '../shared/recording-filename.js';
 import { HostAudioMonitor, savePresetToLocalStorage } from '../shared/host-audio-monitor.js';
 import { normalizeRemoteAudioSources, audioSourcesSignature, audioTraceSync } from '../shared/audio-sources.js';
 import {
@@ -80,6 +80,8 @@ const els = {
   btnRecordingToggle: $('btn-gravacao-toggle'),
   recordingsDirInput: $('recordings-dir-input'),
   recordingFilenamePatternInput: $('recording-filename-pattern-input'),
+  btnSaveFilenamePattern: $('btn-save-filename-pattern'),
+  recordingFilenamePatternStatus: $('recording-filename-pattern-status'),
   transmissionCardContainer: $('transmission-card-container'),
   transmissionVuColumn: $('transmission-vu-column'),
   transmissionVuFill: $('transmission-vu-fill'),
@@ -474,7 +476,8 @@ function syncControlButtons() {
   // Sync merged Recording/Stop button
   if (els.btnRecordingToggle) {
     const isRec = ui._flags.isRecording;
-    els.btnRecordingToggle.disabled = isRec ? !ui.canStopRecord() : ui._flags.isUploading;
+    const busy = ui._flags.isUploading || ui._flags.isRecordingBusy;
+    els.btnRecordingToggle.disabled = isRec ? !ui.canStopRecord() : !ui.canRecord() || busy;
     els.btnRecordingToggle.title = isRec ? 'Parar gravacao' : 'Gravar transmissao';
     if (isRec) {
       els.btnRecordingToggle.classList.add('btn-danger');
@@ -1270,7 +1273,8 @@ function updateRecordingUi(state) {
   if (els.recordingStatus) els.recordingStatus.textContent = labels[state] || state;
   ui.set({
     isRecording: state === RecordingState.RECORDING,
-    isUploading: state === RecordingState.UPLOADING
+    isUploading: state === RecordingState.UPLOADING,
+    isRecordingBusy: state === RecordingState.FINALIZING || state === RecordingState.UPLOADING
   });
   if (els.uploadProgressWrap) els.uploadProgressWrap.hidden = state !== RecordingState.UPLOADING;
   if (state === RecordingState.IDLE) {
@@ -1279,7 +1283,7 @@ function updateRecordingUi(state) {
 }
 
 async function iniciarGravacao() {
-  if (ui._flags.isRecording || ui._flags.isUploading) return;
+  if (ui._flags.isRecording || ui._flags.isUploading || ui._flags.isRecordingBusy) return;
   try {
     const stream = await getRecordingStream();
     if (!stream) {
@@ -1304,10 +1308,16 @@ async function pararGravacao() {
     stopRecordingCapture();
     if (!blob) {
       showToast('Gravacao vazia', 'warn');
+      recorder.resetIdle();
       return;
     }
     const pattern = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
     const filename = formatRecordingFilename(new Date(), pattern);
+    if (!isValidRecordingFilename(filename)) {
+      showToast('Nome de arquivo invalido. Revise o padrao nas configuracoes.', 'warn');
+      recorder.resetIdle();
+      return;
+    }
     const customDir = localStorage.getItem(STORAGE_RECORDINGS_DIR) || '';
     const uploadResult = await recorder.upload(blob, filename, customDir);
     if (els.recordingFilename) {
@@ -2159,11 +2169,47 @@ function setupRecordingAudioPrefs() {
   });
 }
 
+let recordingFilenamePatternReady = false;
+
+function updateRecordingFilenamePatternStatus(pattern = '') {
+  if (!els.recordingFilenamePatternStatus) return;
+  const trimmed = String(pattern).trim();
+  if (!trimmed) {
+    els.recordingFilenamePatternStatus.textContent = `Padrao salvo: ${formatRecordingFilename(new Date())}`;
+  } else {
+    els.recordingFilenamePatternStatus.textContent = `Padrao salvo. Exemplo: ${formatRecordingFilename(new Date(), trimmed)}`;
+  }
+  els.recordingFilenamePatternStatus.hidden = false;
+}
+
+function saveRecordingFilenamePattern() {
+  const pattern = els.recordingFilenamePatternInput?.value.trim() || '';
+  if (pattern) {
+    localStorage.setItem(STORAGE_RECORDING_FILENAME_PATTERN, pattern);
+  } else {
+    localStorage.removeItem(STORAGE_RECORDING_FILENAME_PATTERN);
+  }
+  updateRecordingFilenamePatternStatus(pattern);
+  showToast(pattern ? 'Padrao de nome salvo' : 'Padrao de nome restaurado ao padrao do sistema', 'success');
+}
+
 function setupRecordingFilenamePattern() {
-  if (!els.recordingFilenamePatternInput) return;
-  els.recordingFilenamePatternInput.value = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
-  els.recordingFilenamePatternInput.addEventListener('input', () => {
-    localStorage.setItem(STORAGE_RECORDING_FILENAME_PATTERN, els.recordingFilenamePatternInput.value.trim());
+  if (!els.recordingFilenamePatternInput || recordingFilenamePatternReady) return;
+  recordingFilenamePatternReady = true;
+
+  const saved = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
+  els.recordingFilenamePatternInput.value = saved;
+  if (saved) updateRecordingFilenamePatternStatus(saved);
+
+  els.btnSaveFilenamePattern?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveRecordingFilenamePattern();
+  });
+  els.recordingFilenamePatternInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveRecordingFilenamePattern();
+    }
   });
 }
 
