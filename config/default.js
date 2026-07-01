@@ -105,51 +105,66 @@ const config = {
 };
 
 function parseTurnServers() {
-  const servers = [];
-
   if (process.env.TURN_SERVERS) {
     try {
       const parsed = JSON.parse(process.env.TURN_SERVERS);
-      if (Array.isArray(parsed)) servers.push(...parsed);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      /* ignore */
+      return [];
     }
   }
 
   const username = (process.env.TURN_USERNAME || '').trim();
   const credential = (process.env.TURN_PASSWORD || process.env.TURN_CREDENTIAL || '').trim();
-  if (username && credential) {
-    let urls = (process.env.TURN_URLS || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+  if (!username || !credential) return [];
 
-    if (!urls.length) {
-      const publicUrl = (process.env.PUBLIC_URL || '').trim();
-      if (publicUrl) {
-        try {
-          const host = new URL(publicUrl).hostname;
-          urls = [
-            `turn:${host}:3478?transport=udp`,
-            `turn:${host}:3478?transport=tcp`,
-            `turns:${host}:5349?transport=tcp`
-          ];
-        } catch {
-          /* ignore */
-        }
+  let urls = (process.env.TURN_URLS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (!urls.length) {
+    const publicUrl = (process.env.PUBLIC_URL || '').trim();
+    if (publicUrl) {
+      try {
+        const host = new URL(publicUrl).hostname;
+        urls = [
+          `turn:${host}:3478?transport=udp`,
+          `turn:${host}:3478?transport=tcp`,
+          `turns:${host}:5349?transport=tcp`
+        ];
+      } catch {
+        /* ignore */
       }
-    }
-
-    if (urls.length) {
-      servers.push({ urls, username, credential });
     }
   }
 
-  return servers;
+  if (!urls.length) return [];
+  return [{ urls, username, credential }];
 }
 
 export function getServerHost() {
   return config.serverHost;
+}
+
+export function getVideoQualityForClients() {
+  return {
+    maxBitrate: config.maxVideoBitrate,
+    startBitrateKbps: config.startBitrateKbps,
+    targetFrameRate: config.targetFrameRate,
+    maxFrameRate: config.maxFrameRate,
+    preferH264: config.preferredVideoCodec.toLowerCase().includes('h264'),
+    lowLatency: config.lowLatency !== false,
+    serverHost: config.serverHost,
+    rtcPortRange: `${config.rtcMinPort}-${config.rtcMaxPort}`,
+    audioEnabled: config.audio?.enabled !== false,
+    systemAudioDefault: config.audio?.systemAudioDefault !== false,
+    microphoneDefault: !!config.audio?.microphoneDefault,
+    maxAudioBitrate: config.audio?.maxBitrate ?? 128_000,
+    stunServers: config.stunServers,
+    turnServers: config.turnServers,
+    turnEnabled: config.turnServers.length > 0
+  };
 }
 
 export default config;

@@ -57,25 +57,6 @@ if not exist "src\shared\recording-filename.js" (
     exit /b 1
 )
 
-if not exist "src\shared\http-signaling-wire.js" (
-    echo [ERRO] src\shared\http-signaling-wire.js ausente.
-    echo        Rode preparar-deploy.bat no PC de desenvolvimento e copie o pacote de novo.
-    pause
-    exit /b 1
-)
-
-if not exist "server\signaling-http.js" (
-    echo [ERRO] server\signaling-http.js ausente.
-    pause
-    exit /b 1
-)
-
-if not exist "server\turn-servers.js" (
-    echo [ERRO] server\turn-servers.js ausente.
-    pause
-    exit /b 1
-)
-
 if not exist "server\client-db.js" (
     echo [ERRO] server\client-db.js ausente.
     pause
@@ -108,21 +89,7 @@ del "data\.write-probe" >nul 2>&1
 
 echo [OK] Todos os arquivos necessarios estao presentes.
 echo.
-echo Variaveis de producao (start-producao.bat):
-echo   PUBLIC_URL=https://cgrafsysvm.camara.leg.br
-echo   TURN_URLS=turns:cgrafsysvm.camara.leg.br:443 (Fase 2: turn.cgrafsysvm...)
-echo.
 echo Inicie o servidor com: start-producao.bat
-echo Verificacao WSS: scripts\verificar-wss-externo.bat
-echo TURN: eturnal em "C:\Program Files\eturnal" (TLS :5349, demux NGINX :443)
-if exist "C:\Program Files\eturnal\etc\eturnal.yml" (
-    echo [OK] eturnal.yml em C:\Program Files\eturnal\etc\
-) else (
-    echo [AVISO] eturnal.yml nao encontrado — confira instalacao eturnal
-)
-echo NGINX demux 443: cd C:\nginx ^&^& nginx.exe -t -p C:\nginx -c conf\nginx.conf
-echo URLs internas: https://cgrafsysvm.redecamara.camara.gov.br/host/ e /client/
-echo URL externa:    https://cgrafsysvm.camara.leg.br/meet/?token=...^&nome=...
-echo Verifique Node: GET https://cgrafsysvm.camara.leg.br/api/info -^> turnEnabled:true
+echo URLs Nginx: http://cgrafsysvm/host/  e  http://cgrafsysvm/meet/
 echo.
 pause

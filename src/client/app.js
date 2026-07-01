@@ -1,11 +1,4 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
-import {
-  createSignalingClient as buildSignalingClient,
-  isMeetRoute,
-  isPublicInternetHost,
-  shouldUseHttpSignalingOnly,
-  signalingSend
-} from '../shared/signaling-factory.js';
 import { MediaClient } from '../shared/media-client.js';
 import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, TransmissionSync, enrichDisplaySources } from '../shared/transmission.js';
 import {
@@ -69,7 +62,6 @@ const els = {
   stateSelected: $('state-selected'),
   stateWatching: $('state-watching'),
   stateWaiting: $('state-waiting'),
-  btnShareScreenWaiting: $('btn-share-screen-waiting'),
   statePaused: $('state-paused'),
   stateInterrupted: $('state-interrupted'),
   interruptedMessage: $('interrupted-message'),
@@ -133,51 +125,11 @@ let roomPin = readQueryParam('pin') || '';
 let displayControlActive = false;
 let displaySources = [];
 const viewerAccessToken = readQueryParam('token') || '';
-const isMeetPublicRoute = isMeetRoute(location.pathname);
-const isExternalInternetClient =
-  isPublicInternetHost(location.hostname) || !!viewerAccessToken;
-let useHttpSignalingOnly = shouldUseHttpSignalingOnly({
-  hostname: location.hostname,
-  token: viewerAccessToken
-});
 const hasExternalAccessToken = !!viewerAccessToken;
 const autoViewerEntry =
-  !isMeetPublicRoute &&
-  !isExternalInternetClient &&
+  !hasExternalAccessToken &&
   (readQueryParam('espectador') === '1' || readQueryParam('viewer') === '1');
 const vu = new VuMeter();
-let serverInfo = null;
-
-function shouldForceTurnRelay() {
-  return false;
-}
-
-function createMediaClientOptions() {
-  return {
-    splitRecvTransports: false,
-    forceTurnRelay: shouldForceTurnRelay(),
-    onLog: (m, l) => setStatus(m),
-    onIceState: (state) => {
-      if (state === 'failed') {
-        showToast('Midia bloqueada — verifique rede, firewall ou TURN', 'error', 8000);
-      }
-    }
-  };
-}
-
-function createSignalingClient(options) {
-  if (useHttpSignalingOnly) {
-    return buildSignalingClient(options, { httpOnly: true });
-  }
-  if (isMeetPublicRoute) {
-    return buildSignalingClient(options, { useFallback: true });
-  }
-  return buildSignalingClient(options);
-}
-
-function usesWebSocketSignaling() {
-  return signaling && !signaling.isHttpSignaling;
-}
 
 const mutedClients = new Set();
 
@@ -197,40 +149,14 @@ if (readQueryParam('maquina')) localStorage.setItem(STORAGE_MACHINE, readQueryPa
 
 bindLtOverlayResize(els.previewArea);
 
-function hideWatchingOverlayWhenVideoPlays() {
-  const video = els.video;
-  if (!video || video.dataset.watchOverlayHook) return;
-  video.dataset.watchOverlayHook = '1';
-  const clearOverlay = () => {
-    if (video.srcObject?.getVideoTracks?.().some((t) => t.readyState === 'live')) {
-      updateClientStates('watching', txSync.lastActiveTransmission, { hideWatchingBanner: true });
-    }
-  };
-  video.addEventListener('playing', clearOverlay);
-  video.addEventListener('loadeddata', clearOverlay);
-}
-hideWatchingOverlayWhenVideoPlays();
-
 function updateClientStates(mode, _tx, opts = {}) {
   els.stateSharing.hidden = mode !== 'sharing';
   els.stateSelected.hidden = mode !== 'selected';
   els.stateWatching.hidden = mode !== 'watching' || !!opts.hideWatchingBanner;
-  els.stateWaiting.hidden = mode !== 'waiting' || !!opts.hideWaitingOverlay;
+  els.stateWaiting.hidden = mode !== 'waiting';
   els.statePaused.hidden = mode !== 'paused';
   if (els.stateInterrupted) els.stateInterrupted.hidden = mode !== 'interrupted';
   if (els.stateFinalized) els.stateFinalized.hidden = mode !== 'finalized';
-  updateShareScreenWaitingButton();
-}
-
-function updateShareScreenWaitingButton() {
-  const btn = els.btnShareScreenWaiting;
-  if (!btn) return;
-  const show =
-    sessionReady &&
-    !viewerOnly &&
-    !media?.hasVideoProducer?.() &&
-    !els.stateWaiting?.hidden;
-  btn.hidden = !show;
 }
 
 const txSync = new TransmissionSync({
@@ -807,25 +733,26 @@ async function initOnboarding() {
   }
 
   try {
-    serverInfo = await fetch('/api/info').then((r) => r.json());
-    if (
-      serverInfo?.signalingTransport === 'http' ||
-      serverInfo?.publicUrl?.includes(location.hostname)
-    ) {
-      useHttpSignalingOnly = true;
-    }
-    if (serverInfo.roomPinRequired && els.pinWrap && !isExternalInternetClient) {
+    const info = await fetch('/api/info').then((r) => r.json());
+    if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
       els.pinWrap.hidden = false;
     }
   } catch (_) {}
 
-  if (isMeetPublicRoute) {
+  if (hasExternalAccessToken) {
     const nomeUrl = readQueryParam('nome');
-    if (nomeUrl) {
-      displayName = nomeUrl;
-      if (els.nomeInput) els.nomeInput.value = nomeUrl;
-      localStorage.setItem(STORAGE_NAME, nomeUrl);
+    displayName = nomeUrl || displayName || '';
+    if (displayName && els.nomeInput) {
+      els.nomeInput.value = displayName;
     }
+    if (displayName) {
+      hideOverlay();
+      await salvarEIniciar(false);
+      return;
+    }
+    showIdentifyStep();
+    els.nomeInput?.focus();
+    return;
   }
 
   if (autoViewerEntry) {
@@ -856,7 +783,7 @@ async function initOnboarding() {
     els.nomeInput.value = displayName;
   }
 
-  if (!isMeetPublicRoute && !autoViewerEntry) {
+  if (!hasExternalAccessToken && !autoViewerEntry) {
     const resolved = await resolveClientNameFromServer();
     if (resolved) {
       displayName = resolved;
@@ -866,11 +793,6 @@ async function initOnboarding() {
       await salvarEIniciar(false);
       return;
     }
-  }
-
-  if (isMeetPublicRoute && displayName) {
-    await salvarEIniciar(false);
-    return;
   }
 
   showIdentifyStep();
@@ -1134,7 +1056,7 @@ async function bootstrap(isViewer, { deferScreenShare = false } = {}) {
 
     bootstrapping = true;
 
-    signaling = createSignalingClient({
+    signaling = new SignalingClient(wsUrl(), {
       enableReconnect: false,
       onLog: (m, l) => setStatus(m),
       onStateChange: (state) => {
@@ -1169,13 +1091,11 @@ async function bootstrap(isViewer, { deferScreenShare = false } = {}) {
             .then(() => finish(resolve))
             .catch((e) => finish(reject, e));
         };
-        Promise.resolve(signaling.connect()).catch((e) => finish(reject, e));
+        signaling.connect();
       });
 
-      if (usesWebSocketSignaling()) {
-        signaling.onOpen = () => handleSignalingReconnect();
-        signaling.enableReconnect = true;
-      }
+      signaling.onOpen = () => handleSignalingReconnect();
+      signaling.enableReconnect = true;
       await schedulePostJoinWork({ skipRemoteMedia: deferScreenShare });
     } finally {
       bootstrapping = false;
@@ -1204,16 +1124,14 @@ async function executeJoinAndStart() {
     hideErro();
 
     const entrouPromise = signaling.onceType('entrou');
-    await signalingSend(
-      signaling,
+    signaling.send(
       'entrar',
       {
         papel: 'client',
         nome: getNome(),
         maquina: agentHostname,
         pin: roomPin || undefined,
-        viewerToken: viewerAccessToken || undefined,
-        meetExterno: isExternalInternetClient || isMeetPublicRoute || undefined
+        viewerToken: viewerAccessToken || undefined
       },
       { critical: true }
     );
@@ -1222,7 +1140,10 @@ async function executeJoinAndStart() {
     peerId = payload.peerId;
     signaling.markAuthenticated(true);
 
-    media = new MediaClient(signaling, createMediaClientOptions());
+    media = new MediaClient(signaling, {
+      splitRecvTransports: false,
+      onLog: (m, l) => setStatus(m)
+    });
     await media.loadDevice(payload.rtpCapabilities);
     media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
     await media.ensureRecvTransport();
@@ -1251,8 +1172,7 @@ async function executeJoinAndStart() {
           updateClientMicUi();
           await attachVuMeterIfNeeded();
         } else {
-          setStatus('Conectado — use o painel para compartilhar tela');
-          updateClientStates('waiting');
+          setStatus('Conectado - publicando tela...');
           if (joinPrefs.microphone) {
             await media.publishMicrophone(publishPrefs);
           }
@@ -1322,16 +1242,14 @@ async function rejoinSession() {
   peerId = null;
 
   const entrouPromise = signaling.onceType('entrou');
-  await signalingSend(
-    signaling,
+  signaling.send(
     'entrar',
     {
       papel: 'client',
       nome: getNome(),
       maquina: agentHostname,
       pin: roomPin || undefined,
-      viewerToken: viewerAccessToken || undefined,
-      meetExterno: isExternalInternetClient || isMeetPublicRoute || undefined
+      viewerToken: viewerAccessToken || undefined
     },
     { critical: true }
   );
@@ -1340,7 +1258,10 @@ async function rejoinSession() {
   peerId = payload.peerId;
   signaling.markAuthenticated(true);
 
-  media = new MediaClient(signaling, createMediaClientOptions());
+  media = new MediaClient(signaling, {
+    splitRecvTransports: false,
+    onLog: (m, l) => setStatus(m)
+  });
   await media.loadDevice(payload.rtpCapabilities);
   media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
   await media.ensureRecvTransport();
@@ -1560,11 +1481,6 @@ async function handleServerMessage(msg) {
     els.sidebar?.classList.remove('is-collapsed');
   }
 }
-
-els.btnShareScreenWaiting?.addEventListener('click', () => {
-  if (clientJoinInProgress || bootstrapping) return;
-  captureScreenFirst().catch((e) => errors.handle(e, 'captura'));
-});
 
 els.btnSettings?.addEventListener('click', () => openSettingsModal());
 els.btnSettingsSave?.addEventListener('click', () => saveSettingsModal());

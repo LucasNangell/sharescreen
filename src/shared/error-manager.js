@@ -29,7 +29,7 @@ const FRIENDLY = {
   [ErrorCodes.WS_DISCONNECTED]:
     'Conexão com o servidor perdida. Reconectando automaticamente…',
   [ErrorCodes.ICE_FAILED]:
-    'Falha na conexão de mídia (ICE). Espectadores externos precisam de TURN na porta 443; na LAN, verifique UDP 40000–40100.',
+    'Falha na conexão de mídia (ICE). Verifique firewall UDP 40000–40100 na rede.',
   [ErrorCodes.MEDIASOUP_FAILED]:
     'Falha ao publicar ou receber mídia. Tente recompartilhar a tela.',
   [ErrorCodes.AUTOPLAY_BLOCKED]:

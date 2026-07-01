@@ -1,6 +1,6 @@
 /**
- * STUN/TURN para WebRTC.
- * forceRelay: espectador externo (/meet?token=) — usa TURN:443, nao UDP direto.
+ * STUN/TURN para WebRTC — usado só quando o servidor envia turnServers.
+ * iceTransportPolicy permanece "all" (direto primeiro, TURN como fallback).
  */
 export function buildIceServers(videoQuality = {}) {
   const servers = [];
@@ -21,16 +21,6 @@ export function buildIceServers(videoQuality = {}) {
   }
 
   return servers;
-}
-
-export function buildTransportIceOptions(videoQuality = {}, { forceRelay = false } = {}) {
-  const options = {};
-  const iceServers = buildIceServers(videoQuality);
-  if (iceServers.length) options.iceServers = iceServers;
-  if (forceRelay && hasTurnServers(videoQuality)) {
-    options.iceTransportPolicy = 'relay';
-  }
-  return options;
 }
 
 export function hasTurnServers(videoQuality = {}) {

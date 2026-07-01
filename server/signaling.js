@@ -5,13 +5,12 @@ import { fileURLToPath } from 'url';
 import { room, logClientTrace } from './room-manager.js';
 import { getRtpCapabilities } from './mediasoup-manager.js';
 import { logger } from './logger.js';
-import config from '../config/default.js';
-import { getVideoQualityForClients } from './turn-servers.js';
+import config, { getVideoQualityForClients } from '../config/default.js';
 import { dispatchOpenClient, listAgentClients } from './agent-bridge.js';
 import { validateJoinAuth, getSessionHostToken } from './auth-dev.js';
 import { debugLog } from './debug-log.js';
 import { registerClientByName } from './client-db.js';
-import { getClientIpFromChannel } from './client-ip.js';
+import { getClientIpFromWs } from './client-ip.js';
 
 function parseMessage(raw) {
   try {
@@ -110,7 +109,7 @@ function sendPeerJoinSnapshot(enviar, peer = null) {
   enviar({ type: 'estadoSala', payload: snapshot });
 }
 
-export async function handleMessage(enviar, channel, msg, setPeer, getPeer) {
+async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
   const peer = getPeer();
   const isHostOrCoHost = (p) => p && (p.role === 'host' || p.isCoHost);
 
@@ -125,7 +124,7 @@ export async function handleMessage(enviar, channel, msg, setPeer, getPeer) {
       }
 
       const existingPeer = getPeer();
-      if (existingPeer && existingPeer.ws === channel) {
+      if (existingPeer && existingPeer.ws === ws) {
         if (existingPeer.role !== papel) {
           throw new Error('Esta conexão já está autenticada com outro papel');
         }
@@ -138,7 +137,7 @@ export async function handleMessage(enviar, channel, msg, setPeer, getPeer) {
           existingPeer.isExternal = true;
         }
         if (papel === 'client') {
-          registerClientByName(nome.trim(), getClientIpFromChannel(channel), maquina || '');
+          registerClientByName(nome.trim(), getClientIpFromWs(ws), maquina || '');
         }
         if (papel === 'host') {
           existingPeer.isCoHost = !!msg.payload.isCoHost;
@@ -160,12 +159,10 @@ export async function handleMessage(enviar, channel, msg, setPeer, getPeer) {
       }
 
       const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
-      const newPeer = room.addPeer(channel, papel, nome, maquina, {
-        isExternal: !!(viewerToken || msg.payload?.meetExterno)
-      });
+      const newPeer = room.addPeer(ws, papel, nome, maquina, { isExternal: !!viewerToken });
       setPeer(newPeer);
       if (papel === 'client') {
-        registerClientByName(nome.trim(), getClientIpFromChannel(channel), maquina || '');
+        registerClientByName(nome.trim(), getClientIpFromWs(ws), maquina || '');
       }
       if (papel === 'host') {
         newPeer.isCoHost = !!msg.payload.isCoHost;
@@ -174,7 +171,7 @@ export async function handleMessage(enviar, channel, msg, setPeer, getPeer) {
         debugLog('B', 'signaling.js:entrar', 'external client joined', {
           peerId: newPeer.id,
           hasViewerToken: true,
-          origin: channel._socket?.remoteAddress || null
+          origin: ws._socket?.remoteAddress || null
         });
       }
       enviar({
@@ -196,7 +193,7 @@ export async function handleMessage(enviar, channel, msg, setPeer, getPeer) {
       if (!peer || peer.role !== 'client') throw new Error('Apenas clients podem atualizar nome');
       const { nome } = msg.payload || {};
       room.updatePeerName(peer.id, nome);
-      registerClientByName(String(nome || '').trim(), getClientIpFromChannel(peer.ws), peer.agentHostname || '');
+      registerClientByName(String(nome || '').trim(), getClientIpFromWs(peer.ws), peer.agentHostname || '');
       enviar({ type: 'nomeAtualizado', payload: { ok: true } });
       break;
     }

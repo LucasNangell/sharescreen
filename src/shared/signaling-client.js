@@ -34,8 +34,6 @@ export class SignalingClient {
     this._lastCloseCode = null;
     this._lastCloseReason = '';
     this.authenticated = false;
-    this.isHttpSignaling = false;
-    this.transport = 'ws';
   }
 
   get state() {

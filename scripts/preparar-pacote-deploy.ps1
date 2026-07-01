@@ -71,17 +71,11 @@ foreach ($item in $itens) {
 }
 
 # Modulos usados pelo Node no servidor (import ESM, fora do bundle do browser)
-$serverSharedModules = @(
-    'src\shared\recording-filename.js',
-    'src\shared\http-signaling-wire.js'
-)
+$recordingFilename = Join-Path $root 'src\shared\recording-filename.js'
+Require-File $recordingFilename 'src/shared/recording-filename.js'
 $destSrcShared = Join-Path $dest 'src\shared'
 New-Item -ItemType Directory -Path $destSrcShared -Force | Out-Null
-foreach ($rel in $serverSharedModules) {
-    $srcMod = Join-Path $root $rel
-    Require-File $srcMod $rel
-    Copy-Item $srcMod -Destination $destSrcShared -Force
-}
+Copy-Item $recordingFilename -Destination $destSrcShared -Force
 
 # Nao copiar sourcemaps de producao
 Get-ChildItem (Join-Path $dest 'public') -Recurse -Filter '*.map' -ErrorAction SilentlyContinue |
