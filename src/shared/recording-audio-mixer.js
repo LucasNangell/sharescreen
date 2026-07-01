@@ -1,3 +1,5 @@
+import { hasActiveMicrophoneFilter } from './mic-dsp.js';
+
 function liveAudioTrack(track) {
   return track?.readyState === 'live' ? track : null;
 }
@@ -8,23 +10,72 @@ function addTrackOnce(list, track) {
   list.push({ track: live });
 }
 
-function collectOwnAudioTracks(media) {
+function matchesPeerFilter(peerId, restrictToPeerId) {
+  if (!restrictToPeerId) return true;
+  return String(peerId) === String(restrictToPeerId);
+}
+
+function collectOwnAudioTracks(media, { excludeSystem = false } = {}) {
   const tracks = [];
-  addTrackOnce(tracks, media?.producers?.system?.track);
-  addTrackOnce(tracks, media?.localScreenStream?.getAudioTracks?.()[0]);
+  if (!excludeSystem) {
+    addTrackOnce(tracks, media?.producers?.system?.track);
+    addTrackOnce(tracks, media?.localScreenStream?.getAudioTracks?.()[0]);
+  }
   addTrackOnce(tracks, media?.producers?.microphone?.track);
   addTrackOnce(tracks, media?.getLocalMicrophoneTrack?.());
   return tracks;
 }
 
+function collectMonitorAudioTracks(hostAudioMonitor, mutedClients, restrictToPeerId = null) {
+  const sources = [];
+  if (!hostAudioMonitor) return sources;
+
+  const muted = new Set([...(mutedClients || [])].map(String));
+  const peerFilter = restrictToPeerId ? String(restrictToPeerId) : null;
+
+  if (!peerFilter) {
+    addTrackOnce(sources, hostAudioMonitor.getMixedOutputTrack?.());
+  }
+
+  for (const ch of hostAudioMonitor.channels?.values() || []) {
+    if (muted.has(String(ch.peerId))) continue;
+    if (peerFilter && !matchesPeerFilter(ch.peerId, peerFilter)) continue;
+    const prefs = hostAudioMonitor.getFilterPrefs?.(ch.peerId) || {};
+    if (hasActiveMicrophoneFilter(prefs)) continue;
+    addTrackOnce(sources, ch.consumer?.track);
+  }
+
+  if (!sources.length) {
+    for (const ch of hostAudioMonitor.channels?.values() || []) {
+      if (muted.has(String(ch.peerId))) continue;
+      if (peerFilter && !matchesPeerFilter(ch.peerId, peerFilter)) continue;
+      addTrackOnce(sources, ch.consumer?.track);
+    }
+  }
+
+  if (!sources.length && !peerFilter) {
+    for (const track of hostAudioMonitor.stream?.getAudioTracks?.() || []) {
+      addTrackOnce(sources, track);
+    }
+  }
+
+  return sources;
+}
+
 export const RecordingAudioMixer = {
-  async build({ hostAudioMonitor, media, own = false } = {}) {
+  async build({
+    hostAudioMonitor,
+    media,
+    own = false,
+    mutedClients,
+    excludeOwnSystem = false,
+    restrictToPeerId = null
+  } = {}) {
     await hostAudioMonitor?.resume?.();
 
-    const sources = [];
-    addTrackOnce(sources, hostAudioMonitor?.getMixedOutputTrack?.());
+    const sources = collectMonitorAudioTracks(hostAudioMonitor, mutedClients, restrictToPeerId);
     if (own) {
-      for (const source of collectOwnAudioTracks(media)) {
+      for (const source of collectOwnAudioTracks(media, { excludeSystem: excludeOwnSystem })) {
         addTrackOnce(sources, source.track);
       }
     }

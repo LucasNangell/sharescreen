@@ -164,9 +164,74 @@ export class HostAudioMonitor {
 
   getMixedOutputTrack() {
     this._ensureAudioContext();
-    this._refreshDirectOutput();
-    const track = this.dest?.stream?.getAudioTracks?.()[0];
-    return track?.readyState === 'live' ? track : null;
+    this._rebuildAudioRoutes();
+    const dspTrack = this.dest?.stream?.getAudioTracks?.()[0];
+    if (dspTrack?.readyState === 'live') {
+      return dspTrack;
+    }
+    for (const track of this.stream.getAudioTracks()) {
+      if (track.readyState === 'live') return track;
+    }
+    return this.getOutputTrack();
+  }
+
+  _rebuildAudioRoutes() {
+    const tracksToPlay = [];
+    const directTracks = [];
+    let hasDsp = false;
+
+    for (const ch of this.channels.values()) {
+      const track = ch.consumer?.track;
+      if (!track || track.readyState !== 'live') continue;
+
+      if (this._hasAnyFilter(ch.peerId)) {
+        hasDsp = true;
+        this._setupChannelDsp(ch, track);
+      } else {
+        directTracks.push(track);
+      }
+    }
+
+    if (hasDsp) {
+      this._ensureAudioContext();
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+      if (this.dest && this.ctx?.state !== 'suspended') {
+        const dspTracks = this.dest.stream.getAudioTracks();
+        if (dspTracks.length > 0) {
+          tracksToPlay.push(dspTracks[0]);
+        }
+      }
+    }
+
+    tracksToPlay.push(...directTracks);
+
+    const currentTracks = this.stream.getAudioTracks();
+    for (const t of currentTracks) {
+      if (!tracksToPlay.some((p) => p.id === t.id)) {
+        this.stream.removeTrack(t);
+      }
+    }
+    for (const t of tracksToPlay) {
+      if (!currentTracks.some((p) => p.id === t.id)) {
+        this.stream.addTrack(t);
+      }
+    }
+
+    return { tracksToPlay, directTracks, hasDsp };
+  }
+
+  _refreshDirectOutput() {
+    this._rebuildAudioRoutes();
+    const el = this.outputEl;
+    if (!el) return;
+    if (el.srcObject !== this.stream) {
+      el.srcObject = this.stream;
+    }
+    el.muted = false;
+    el.volume = this.masterVolume;
+    this._tryPlayOutput();
   }
   _startLevelsLoop() {
     if (this._levelsRaf) return;
@@ -228,67 +293,6 @@ export class HostAudioMonitor {
     } catch (e) {
       console.error('[HostAudioMonitor] Falha ao criar AudioContext:', e);
     }
-  }
-
-  _refreshDirectOutput() {
-    const el = this.outputEl;
-    if (!el) return;
-
-    const tracksToPlay = [];
-    const directTracks = [];
-    let hasDsp = false;
-
-    for (const ch of this.channels.values()) {
-      const track = ch.consumer?.track;
-      if (!track || track.readyState !== 'live') continue;
-
-      if (this._hasAnyFilter(ch.peerId)) {
-        hasDsp = true;
-        this._setupChannelDsp(ch, track);
-      } else {
-        directTracks.push(track);
-      }
-    }
-
-    if (hasDsp) {
-      this._ensureAudioContext();
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().catch(() => {});
-      }
-      if (this.dest && this.ctx?.state !== 'suspended') {
-        const dspTracks = this.dest.stream.getAudioTracks();
-        if (dspTracks.length > 0) {
-          tracksToPlay.push(dspTracks[0]);
-        }
-      }
-    }
-
-    if (!tracksToPlay.length) {
-      tracksToPlay.push(...directTracks);
-    }
-    if (el.srcObject !== this.stream) {
-      el.srcObject = this.stream;
-    }
-
-    const currentTracks = this.stream.getAudioTracks();
-
-    // Remove old tracks
-    for (const t of currentTracks) {
-      if (!tracksToPlay.some(p => p.id === t.id)) {
-        this.stream.removeTrack(t);
-      }
-    }
-
-    // Add new tracks
-    for (const t of tracksToPlay) {
-      if (!currentTracks.some(p => p.id === t.id)) {
-        this.stream.addTrack(t);
-      }
-    }
-
-    el.muted = false;
-    el.volume = this.masterVolume;
-    this._tryPlayOutput();
   }
 
   _hasAnyFilter(peerId) {

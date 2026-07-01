@@ -29,6 +29,8 @@ import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
 
 const STORAGE_HOST_NAME = 'sharescreen_host_name';
 const STORAGE_RECORDINGS_DIR = 'sharescreen_recordings_dir';
+const STORAGE_REC_EXCLUDE_OWN_SYSTEM = 'sharescreen_rec_exclude_own_system';
+const STORAGE_REC_SELECTED_PEER_ONLY = 'sharescreen_rec_selected_peer_only';
 
 function showToast(message, type, durationMs) {
   const lower = String(message || '').toLowerCase();
@@ -84,6 +86,10 @@ const els = {
   uploadProgressWrap: $('upload-progress-wrap'),
   uploadProgress: $('upload-progress'),
   recordingFilename: $('recording-filename'),
+  recExcludeOwnSystem: $('rec-exclude-own-system'),
+  recSelectedPeerOnly: $('rec-selected-peer-only'),
+  btnRecMeetBridgePreset: $('btn-rec-meet-bridge-preset'),
+  recMeetBridgeHint: $('rec-meet-bridge-hint'),
   controlesAudio: $('controles-audio'),
   volumeSlider: $('volume-slider'),
   btnMute: $('btn-mute-audio'),
@@ -1391,11 +1397,14 @@ async function getRecordingStream() {
 
   let mixer = null;
   try {
+    const recPrefs = getRecordingAudioPrefs();
     mixer = await RecordingAudioMixer.build({
       hostAudioMonitor,
       media,
       own,
-      mutedClients
+      mutedClients,
+      excludeOwnSystem: recPrefs.excludeOwnSystem,
+      restrictToPeerId: recPrefs.selectedPeerOnly ? selectedPeerId : null
     });
   } catch (err) {
     compositor.stop();
@@ -2104,6 +2113,49 @@ async function loadDir(pathValue) {
   }
 }
 
+function getRecordingAudioPrefs() {
+  return {
+    excludeOwnSystem: localStorage.getItem(STORAGE_REC_EXCLUDE_OWN_SYSTEM) === '1',
+    selectedPeerOnly: localStorage.getItem(STORAGE_REC_SELECTED_PEER_ONLY) === '1'
+  };
+}
+
+function syncRecordingAudioPrefsUi() {
+  const prefs = getRecordingAudioPrefs();
+  if (els.recExcludeOwnSystem) {
+    els.recExcludeOwnSystem.checked = prefs.excludeOwnSystem;
+  }
+  if (els.recSelectedPeerOnly) {
+    els.recSelectedPeerOnly.checked = prefs.selectedPeerOnly;
+  }
+  if (els.recMeetBridgeHint) {
+    els.recMeetBridgeHint.hidden = !(prefs.excludeOwnSystem || prefs.selectedPeerOnly);
+  }
+}
+
+function setRecordingAudioPref(key, value) {
+  localStorage.setItem(key, value ? '1' : '0');
+  syncRecordingAudioPrefsUi();
+}
+
+function setupRecordingAudioPrefs() {
+  syncRecordingAudioPrefsUi();
+
+  els.recExcludeOwnSystem?.addEventListener('change', () => {
+    setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, els.recExcludeOwnSystem.checked);
+  });
+  els.recSelectedPeerOnly?.addEventListener('change', () => {
+    setRecordingAudioPref(STORAGE_REC_SELECTED_PEER_ONLY, els.recSelectedPeerOnly.checked);
+  });
+  els.btnRecMeetBridgePreset?.addEventListener('click', () => {
+    setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, true);
+    setRecordingAudioPref(STORAGE_REC_SELECTED_PEER_ONLY, true);
+    if (els.recExcludeOwnSystem) els.recExcludeOwnSystem.checked = true;
+    if (els.recSelectedPeerOnly) els.recSelectedPeerOnly.checked = true;
+    if (els.recMeetBridgeHint) els.recMeetBridgeHint.hidden = false;
+  });
+}
+
 function setupRecordingsDirInput() {
   if (!els.recordingsDirInput) return;
   els.recordingsDirInput.value = localStorage.getItem(STORAGE_RECORDINGS_DIR) || '';
@@ -2160,6 +2212,7 @@ if (isHost) {
   updateRecordingUi(RecordingState.IDLE);
   updateMuteButtonIcon();
   setupRecordingsDirInput();
+  setupRecordingAudioPrefs();
   setupSettingsInteraction();
 
   installAudioUnlock(() => {
@@ -2540,6 +2593,7 @@ export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
   updateRecordingUi(RecordingState.IDLE);
   updateMuteButtonIcon();
   setupRecordingsDirInput();
+  setupRecordingAudioPrefs();
   setupSettingsInteraction();
 
   installAudioUnlock(() => {

@@ -199,8 +199,12 @@
   
   
   
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T11-55-32-of93nm";
+var BUILD_ID="2026-07-01T12-42-56-r2gh4a";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -234,9 +238,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T11-55-32-of93nm" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T11-55-32-of93nm" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T11-55-32-of93nm" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T12-42-56-r2gh4a" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T12-42-56-r2gh4a" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T12-42-56-r2gh4a" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -457,6 +461,20 @@ try{
                   <div class="progress-fill" id="upload-progress"></div>
                 </div>
                 <p id="recording-filename" class="hint-text"></p>
+                <div class="field" style="margin-top: var(--space-sm);">
+                  <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: var(--space-xs); font-size: 0.8rem; cursor: pointer;">
+                    <input id="rec-exclude-own-system" type="checkbox" style="margin-top: 2px;" />
+                    <span>Excluir áudio do sistema na gravação</span>
+                  </label>
+                  <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: var(--space-xs); font-size: 0.8rem; cursor: pointer; margin-top: var(--space-xs);">
+                    <input id="rec-selected-peer-only" type="checkbox" style="margin-top: 2px;" />
+                    <span>Gravar apenas áudio da fonte selecionada</span>
+                  </label>
+                  <button type="button" id="btn-rec-meet-bridge-preset" class="btn btn-secondary" style="margin-top: var(--space-sm); width: 100%; font-size: 0.8rem; padding: 0.35rem 0.6rem;">Ponte externa (Meet)</button>
+                  <p id="rec-meet-bridge-hint" class="hint-text" hidden style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">
+                    Ponte: compartilhe só a janela do Meet com áudio da aba, sem microfone e com fone. Host: mantenha transmissão normal; não reproduza o Meet no alto-falante. Para vídeo do host + áudio da ponte, use só &quot;Excluir áudio do sistema&quot;.
+                  </p>
+                </div>
                 <div class="field recordings-dir-field" style="margin-top: var(--space-sm);">
                   <label for="recordings-dir-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Destino da gravação</label>
                   <div style="display: flex; gap: var(--space-xs);">
@@ -724,6 +742,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T11-55-32-of93nm"></script>
+  <script src="app.bundle.js?v=2026-07-01T12-42-56-r2gh4a"></script>
 </body>
 </html>
