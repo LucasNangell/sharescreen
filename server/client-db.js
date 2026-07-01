@@ -11,6 +11,19 @@ const dbPath = path.join(dataDir, 'sharescreen.db');
 const ltDir = path.join(dataDir, 'lower-thirds');
 
 let db = null;
+let dbReadonly = false;
+
+function isReadonlySqliteError(err) {
+  return (
+    err?.code === 'SQLITE_READONLY' ||
+    String(err?.message || '').toLowerCase().includes('readonly')
+  );
+}
+
+export function isDbReadonly() {
+  if (!db) getDb();
+  return dbReadonly;
+}
 
 function ensureDirs() {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -48,12 +61,8 @@ export function verifyDataDirWritable() {
   }
 }
 
-function getDb() {
-  if (!db) {
-    ensureDirs();
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.exec(`
+function applySchema(database) {
+  database.exec(`
       CREATE TABLE IF NOT EXISTS clients (
         name TEXT PRIMARY KEY COLLATE NOCASE,
         ip TEXT NOT NULL,
@@ -80,8 +89,39 @@ function getDb() {
         PRIMARY KEY (subject_kind, subject_name)
       );
     `);
-    migrateClientSchema(db);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_clients_computer ON clients(computer_name)`);
+  migrateClientSchema(database);
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_clients_computer ON clients(computer_name)`);
+}
+
+function openDatabase() {
+  ensureDirs();
+  let conn = new Database(dbPath);
+  try {
+    conn.pragma('journal_mode = WAL');
+    applySchema(conn);
+    dbReadonly = false;
+    return conn;
+  } catch (err) {
+    try {
+      conn.close();
+    } catch (_) {}
+    if (isReadonlySqliteError(err)) {
+      logger.warn(
+        'SQLite sem permissao de escrita em data/ — modo somente leitura. ' +
+          'Cadastro, LT e filtros de audio nao serao persistidos no servidor. ' +
+          'Execute fix-data-permissoes.bat no servidor.',
+        { dbPath, error: err.message }
+      );
+      dbReadonly = true;
+      return new Database(dbPath, { readonly: true });
+    }
+    throw err;
+  }
+}
+
+function getDb() {
+  if (!db) {
+    db = openDatabase();
   }
   return db;
 }
@@ -254,9 +294,17 @@ export function seedUsersFromJsonFile(filePath) {
 }
 
 export function seedUsersIfEmpty(usersJsonPath) {
-  const count = getDb().prepare('SELECT COUNT(*) AS n FROM clients').get().n;
-  if (count > 0) return { ok: true, skipped: true };
-  return seedUsersFromJsonFile(usersJsonPath);
+  try {
+    if (isDbReadonly()) {
+      return { ok: false, skipped: true, readonly: true };
+    }
+    const count = getDb().prepare('SELECT COUNT(*) AS n FROM clients').get().n;
+    if (count > 0) return { ok: true, skipped: true };
+    return seedUsersFromJsonFile(usersJsonPath);
+  } catch (err) {
+    logger.warn('seedUsersIfEmpty falhou', { error: err.message });
+    return { ok: false, erro: err.message };
+  }
 }
 
 function safeBasename(name) {
@@ -354,23 +402,24 @@ export function getAudioFilterPreset(kind, name) {
   const subjectKind = normalizeAudioFilterKind(kind);
   const trimmed = String(name || '').trim();
   if (!subjectKind || !trimmed) return null;
-  const row = getDb()
-    .prepare(
-      `SELECT subject_kind, subject_name, prefs_json, updated_at
+  try {
+    const row = getDb()
+      .prepare(
+        `SELECT subject_kind, subject_name, prefs_json, updated_at
        FROM audio_filter_presets
        WHERE subject_kind = ? AND subject_name = ? COLLATE NOCASE`
-    )
-    .get(subjectKind, trimmed);
-  if (!row) return null;
-  try {
+      )
+      .get(subjectKind, trimmed);
+    if (!row) return null;
     return {
       kind: row.subject_kind,
       name: row.subject_name,
       prefs: JSON.parse(row.prefs_json),
       updatedAt: row.updated_at
     };
-  } catch {
-    return null;
+  } catch (err) {
+    if (String(err?.message || '').includes('no such table')) return null;
+    throw err;
   }
 }
 

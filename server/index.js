@@ -23,6 +23,7 @@ import {
   getAudioFilterPreset,
   saveAudioFilterPreset,
   listAllClients,
+  isDbReadonly,
   upsertClient,
   updateClientIp,
   seedUsersFromJsonFile,
@@ -601,16 +602,17 @@ function createApp() {
 async function main() {
   const lanIp = getLanIPv4();
   const usersJsonPath = path.join(rootDir, 'users.json');
-  seedUsersIfEmpty(usersJsonPath);
-  await runClientIpSync(usersJsonPath, 'startup');
-  scheduleClientIpSync(usersJsonPath);
   const dataWritable = verifyDataDirWritable();
-  if (!dataWritable.ok) {
+  const seedResult = seedUsersIfEmpty(usersJsonPath);
+  if (!dataWritable.ok || seedResult?.readonly || isDbReadonly()) {
     logger.error(
-      'AVISO: data/ sem permissão de escrita — cadastro/IP/LT não serão salvos. Rode fix-data-permissoes.bat no servidor.',
-      dataWritable
+      'AVISO: data/ ou SQLite sem permissao de escrita — cadastro/LT/filtros de audio nao serao salvos no servidor. ' +
+        'Execute fix-data-permissoes.bat como Administrador no servidor e reinicie.',
+      { dataWritable, seedResult, dbReadonly: isDbReadonly() }
     );
   }
+  await runClientIpSync(usersJsonPath, 'startup');
+  scheduleClientIpSync(usersJsonPath);
   debugSessionLog({
     runId: 'post-fix',
     hypothesisId: 'H3',
