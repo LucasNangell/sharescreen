@@ -164,6 +164,33 @@ export class HostAudioMonitor {
     return this.channels.size;
   }
 
+  countLiveChannels() {
+    let count = 0;
+    for (const ch of this.channels.values()) {
+      const track = ch.consumer?.track;
+      if (track?.readyState === 'live' && !ch.consumer?.closed) count += 1;
+    }
+    return count;
+  }
+
+  async recoverOutputIfSilent() {
+    if (!this.channels.size) return;
+    this._rebuildAudioRoutes();
+    const mixedTrack = this.dest?.stream?.getAudioTracks?.()[0];
+    const hasLiveOutput =
+      mixedTrack?.readyState === 'live' ||
+      this.stream.getAudioTracks().some((t) => t.readyState === 'live');
+    if (!hasLiveOutput) {
+      this._ensureAudioContext();
+      if (this.ctx?.state === 'suspended') {
+        await this.ctx.resume().catch(() => {});
+      }
+      this._rebuildAudioRoutes();
+    }
+    this._refreshDirectOutput();
+    await this._tryPlayOutput();
+  }
+
   connectOutput(audioEl) {
     this.outputEl = audioEl;
     if (audioEl && audioEl.srcObject !== this.stream) {
@@ -626,6 +653,8 @@ export class HostAudioMonitor {
       wanted.set(channelKey, entry);
     }
 
+    const wantedProducerIds = new Set([...wanted.values()].map((e) => e.producerId));
+
     for (const [channelKey, entry] of wanted) {
       const ch = this.channels.get(channelKey);
       if (
@@ -643,6 +672,15 @@ export class HostAudioMonitor {
     for (const channelKey of [...this.channels.keys()]) {
       if (wanted.has(channelKey)) continue;
       const ch = this.channels.get(channelKey);
+      if (
+        ch?.producerId &&
+        wantedProducerIds.has(ch.producerId) &&
+        ch.consumer &&
+        !ch.consumer.closed &&
+        ch.consumer.track?.readyState === 'live'
+      ) {
+        continue;
+      }
       const isPinned =
         ch?.peerId && this.pinnedPeerIds.has(String(ch.peerId));
       if (
@@ -663,6 +701,7 @@ export class HostAudioMonitor {
     else this._stopLevelsLoop();
 
     this._refreshDirectOutput();
+    await this.recoverOutputIfSilent();
     await this._tryPlayOutput();
   }
 
@@ -689,6 +728,7 @@ export class HostAudioMonitor {
 
     if (this.channels.size) this._startLevelsLoop();
     this._refreshDirectOutput();
+    await this.recoverOutputIfSilent();
     await this._tryPlayOutput();
   }
 

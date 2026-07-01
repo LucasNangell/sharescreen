@@ -19,7 +19,7 @@ import {
 } from '../shared/quality-manager.js';
 import { showToast } from '../shared/toast.js';
 import { HostAudioMonitor } from '../shared/host-audio-monitor.js';
-import { normalizeRemoteAudioSources, audioTraceSync, audioTrace } from '../shared/audio-sources.js';
+import { normalizeRemoteAudioSources, audioTraceSync, audioTrace, audioSourcesSignature } from '../shared/audio-sources.js';
 import { isSelectableSource, sortDisplaySources } from '../shared/display-sources.js';
 import { buildDisplaySourceCard } from '../shared/source-cards.js';
 import { initCoHost } from '../host/app.js';
@@ -112,6 +112,8 @@ let clientMicAutoplayNeeded = false;
 let syncClientAudioPromise = null;
 let syncClientAudioPending = false;
 let lastAudioSources = [];
+let lastAppliedAudioSig = '';
+let fontesAudioDebounceTimer = null;
 let hostPeerId = null;
 let audioHealthTimer = null;
 let deferScreenShareOnJoin = false;
@@ -376,11 +378,12 @@ function onRemoteAudioAutoplayBlocked() {
 
 
 
-function expectedHostSourceCount() {
-  if (!hostPeerId) return 0;
-  return normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId }).filter(
-    (s) => String(s.peerId) === String(hostPeerId)
-  ).length;
+function expectedAudioSourceCount() {
+  return normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId }).length;
+}
+
+function countActiveAudioChannels(monitor) {
+  return monitor?.countLiveChannels?.() ?? 0;
 }
 
 function applyHostPeerFromSnapshot(parsed = {}) {
@@ -391,32 +394,36 @@ function applyHostPeerFromSnapshot(parsed = {}) {
   }
 }
 
-async function repairHostAudioIfNeeded() {
-  if (!hostPeerId || !media || !sessionReady) return;
+async function repairAllAudioIfNeeded() {
+  if (!media || !sessionReady) return;
   const monitor = ensureClientAudioMonitor();
   if (!monitor) return;
 
-  const expected = expectedHostSourceCount();
+  const expected = expectedAudioSourceCount();
   if (!expected) return;
 
-  const active = monitor.countLiveChannelsForPeer?.(hostPeerId) ?? 0;
-  if (active >= expected) return;
+  const active = countActiveAudioChannels(monitor);
+  if (active >= expected) {
+    await monitor.recoverOutputIfSilent?.();
+    return;
+  }
 
-  monitor.setPinnedPeerIds([hostPeerId]);
+  if (hostPeerId) monitor.setPinnedPeerIds([hostPeerId]);
   audioTrace('audio-health', {
-    event: 'repair-host',
-    hostPeerId: hostPeerId.slice(0, 8),
+    event: 'repair-all',
     expected,
     active
   });
 
+  const list = normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId });
   const backoffs = [0, 400, 800, 1600];
   for (const delay of backoffs) {
     if (delay) await new Promise((r) => setTimeout(r, delay));
-    await monitor.syncPeerSources(hostPeerId, lastAudioSources);
-    if ((monitor.countLiveChannelsForPeer?.(hostPeerId) ?? 0) >= expected) break;
+    await monitor.syncFromSources(list);
+    if (countActiveAudioChannels(monitor) >= expected) break;
   }
 
+  await monitor.recoverOutputIfSilent?.();
   monitor.connectOutput(els.audio);
   await monitor.resume();
   try {
@@ -429,13 +436,12 @@ async function repairHostAudioIfNeeded() {
 function startAudioHealthWatchdog() {
   stopAudioHealthWatchdog();
   audioHealthTimer = setInterval(() => {
-    if (!sessionReady || !hostPeerId) return;
-    const expected = expectedHostSourceCount();
+    if (!sessionReady) return;
+    const expected = expectedAudioSourceCount();
     if (!expected) return;
-    const monitor = roomAudioMonitor;
-    const active = monitor?.countLiveChannelsForPeer?.(hostPeerId) ?? 0;
+    const active = countActiveAudioChannels(roomAudioMonitor);
     if (active < expected) {
-      repairHostAudioIfNeeded().catch(() => {});
+      repairAllAudioIfNeeded().catch(() => {});
     }
   }, 5000);
 }
@@ -463,7 +469,7 @@ function ensureClientAudioMonitor() {
   return roomAudioMonitor;
 }
 
-async function syncClientAudioMonitor(sources) {
+async function syncClientAudioMonitor(sources, { force = false } = {}) {
   if (!peerId || !media) return;
   if (syncClientAudioPromise) {
     syncClientAudioPending = true;
@@ -481,6 +487,16 @@ async function syncClientAudioMonitor(sources) {
         { excludePeerId: peerId }
       );
       if (sources?.length) lastAudioSources = sources;
+      const sig = audioSourcesSignature(list);
+      const expected = list.length;
+      const active = countActiveAudioChannels(monitor);
+      if (
+        !force &&
+        sig === lastAppliedAudioSig &&
+        ((expected > 0 && active >= expected) || (expected === 0 && active === 0))
+      ) {
+        return;
+      }
       await monitor.syncFromSources(list);
       const retryBackoffs = [800, 1600, 3200];
       let retryCycle = 0;
@@ -491,6 +507,7 @@ async function syncClientAudioMonitor(sources) {
           normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId })
         );
       }
+      await monitor.recoverOutputIfSilent?.();
       monitor.connectOutput(els.audio);
       await monitor.resume();
       if (monitor.isAutoplayBlocked?.() || (monitor.channelCount > 0 && els.audio?.paused)) {
@@ -505,7 +522,10 @@ async function syncClientAudioMonitor(sources) {
       } else if (list.length) {
         audioTraceSync('sync-falhou', list, { channels: 0, role: 'client' });
       }
-      await repairHostAudioIfNeeded();
+      if (monitor.channelCount >= expected || (expected === 0 && monitor.channelCount === 0)) {
+        lastAppliedAudioSig = sig;
+      }
+      await repairAllAudioIfNeeded();
     } while (syncClientAudioPending);
   })().finally(() => {
     syncClientAudioPromise = null;
@@ -548,6 +568,11 @@ async function ensureClientMicTrack(deviceId = '') {
 
 async function teardownClientSession({ keepDisplayStream = false, keepMicTrack = false } = {}) {
   stopAudioHealthWatchdog();
+  if (fontesAudioDebounceTimer) {
+    clearTimeout(fontesAudioDebounceTimer);
+    fontesAudioDebounceTimer = null;
+  }
+  lastAppliedAudioSig = '';
   await roomAudioMonitor?.dispose();
   roomAudioMonitor = null;
   await media?.dispose({
@@ -1511,7 +1536,12 @@ async function handleServerMessage(msg) {
       pendingAudioSources = sources;
       return;
     }
-    await syncClientAudioMonitor(sources);
+    if (fontesAudioDebounceTimer) clearTimeout(fontesAudioDebounceTimer);
+    fontesAudioDebounceTimer = setTimeout(() => {
+      fontesAudioDebounceTimer = null;
+      syncClientAudioMonitor(sources).catch((e) => errors.handle(e, 'audio-sync'));
+    }, 80);
+    return;
   }
   if (msg.type === 'transmissaoAtiva') {
     const tx = normalizeTransmission(msg.payload);
@@ -1549,7 +1579,8 @@ async function handleServerMessage(msg) {
         errors.handle(e, 'audio-sync')
       );
     } else {
-      await repairHostAudioIfNeeded();
+      lastAppliedAudioSig = '';
+      await repairAllAudioIfNeeded();
     }
     return;
   }

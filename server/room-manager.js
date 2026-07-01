@@ -62,6 +62,22 @@ function producerSlot(kind, appData = {}) {
 
 const AUDIO_PRODUCER_SLOTS = ['microphone', 'system', 'mixed'];
 
+function computeAudioSourcesSignature(sources) {
+  const byProducer = new Map();
+  for (const raw of sources || []) {
+    const peerId = raw?.peerId || raw?.id;
+    const producerId = raw?.producerId || raw?.producerIds?.audio;
+    const source = raw?.source || 'microphone';
+    if (!peerId || !producerId) continue;
+    if (byProducer.has(producerId)) continue;
+    byProducer.set(producerId, { peerId: String(peerId), producerId, source });
+  }
+  return [...byProducer.values()]
+    .map((s) => `${s.peerId}:${s.source}:${s.producerId}`)
+    .sort()
+    .join('|');
+}
+
 /**
  * Estado de um peer (host ou client).
  */
@@ -158,6 +174,7 @@ export class RoomManager {
     this.interrompidaPor = null;
     this.finalizadaPor = null;
     this.mutedPeerIds = new Set();
+    this._lastAudioSourcesSig = '';
   }
 
   isPeerSocketOpen(peer) {
@@ -543,7 +560,12 @@ export class RoomManager {
     });
     logger.info('Peer conectado', { peerId: peer.id, role, name: peer.displayName });
     this.notifyHostState();
-    this.broadcastAudioSources();
+    const sig = computeAudioSourcesSignature(this.getAudioSources());
+    if (sig !== this._lastAudioSourcesSig) {
+      this.broadcastAudioSources({ force: true });
+    } else {
+      this.sendAudioSourcesToPeer(peer);
+    }
     return peer;
   }
 
@@ -827,8 +849,18 @@ export class RoomManager {
     }
   }
 
-  broadcastAudioSources() {
-    const payload = { sources: this.getAudioSources() };
+  sendAudioSourcesToPeer(peer) {
+    if (!peer || !this.isPeerSocketOpen(peer)) return;
+    const sources = this.getAudioSources();
+    peer.send({ type: 'fontesAudio', payload: { sources } });
+  }
+
+  broadcastAudioSources({ force = false } = {}) {
+    const sources = this.getAudioSources();
+    const sig = computeAudioSourcesSignature(sources);
+    if (!force && sig === this._lastAudioSourcesSig) return;
+    this._lastAudioSourcesSig = sig;
+    const payload = { sources };
     for (const peer of this.peers.values()) {
       peer.send({ type: 'fontesAudio', payload });
     }
