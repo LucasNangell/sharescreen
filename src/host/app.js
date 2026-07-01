@@ -29,6 +29,7 @@ import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
 
 const STORAGE_HOST_NAME = 'sharescreen_host_name';
 const STORAGE_RECORDINGS_DIR = 'sharescreen_recordings_dir';
+const STORAGE_RECORDING_FILENAME_PATTERN = 'sharescreen_recording_filename_pattern';
 const STORAGE_REC_EXCLUDE_OWN_SYSTEM = 'sharescreen_rec_exclude_own_system';
 const STORAGE_REC_SELECTED_PEER_ONLY = 'sharescreen_rec_selected_peer_only';
 
@@ -78,6 +79,7 @@ const els = {
   btnPlayPause: $('btn-playpause'),
   btnRecordingToggle: $('btn-gravacao-toggle'),
   recordingsDirInput: $('recordings-dir-input'),
+  recordingFilenamePatternInput: $('recording-filename-pattern-input'),
   transmissionCardContainer: $('transmission-card-container'),
   transmissionVuColumn: $('transmission-vu-column'),
   transmissionVuFill: $('transmission-vu-fill'),
@@ -1304,7 +1306,8 @@ async function pararGravacao() {
       showToast('Gravacao vazia', 'warn');
       return;
     }
-    const filename = formatRecordingFilename(new Date());
+    const pattern = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
+    const filename = formatRecordingFilename(new Date(), pattern);
     const customDir = localStorage.getItem(STORAGE_RECORDINGS_DIR) || '';
     const uploadResult = await recorder.upload(blob, filename, customDir);
     if (els.recordingFilename) {
@@ -2156,6 +2159,14 @@ function setupRecordingAudioPrefs() {
   });
 }
 
+function setupRecordingFilenamePattern() {
+  if (!els.recordingFilenamePatternInput) return;
+  els.recordingFilenamePatternInput.value = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
+  els.recordingFilenamePatternInput.addEventListener('input', () => {
+    localStorage.setItem(STORAGE_RECORDING_FILENAME_PATTERN, els.recordingFilenamePatternInput.value.trim());
+  });
+}
+
 function setupRecordingsDirInput() {
   if (!els.recordingsDirInput) return;
   els.recordingsDirInput.value = localStorage.getItem(STORAGE_RECORDINGS_DIR) || '';
@@ -2212,6 +2223,7 @@ if (isHost) {
   updateRecordingUi(RecordingState.IDLE);
   updateMuteButtonIcon();
   setupRecordingsDirInput();
+  setupRecordingFilenamePattern();
   setupRecordingAudioPrefs();
   setupSettingsInteraction();
 
@@ -2593,6 +2605,7 @@ export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
   updateRecordingUi(RecordingState.IDLE);
   updateMuteButtonIcon();
   setupRecordingsDirInput();
+  setupRecordingFilenamePattern();
   setupRecordingAudioPrefs();
   setupSettingsInteraction();
 

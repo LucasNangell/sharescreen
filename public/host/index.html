@@ -207,8 +207,10 @@
   
   
   
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T13-25-07-kmn36t";
+var BUILD_ID="2026-07-01T13-54-33-zjc243";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -242,9 +244,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T13-25-07-kmn36t" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T13-25-07-kmn36t" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T13-25-07-kmn36t" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T13-54-33-zjc243" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T13-54-33-zjc243" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T13-54-33-zjc243" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -478,6 +480,11 @@ try{
                   <p id="rec-meet-bridge-hint" class="hint-text" hidden style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">
                     Ponte: compartilhe só a janela do Meet com áudio da aba, sem microfone e com fone. Host: mantenha transmissão normal; não reproduza o Meet no alto-falante. Para vídeo do host + áudio da ponte, use só &quot;Excluir áudio do sistema&quot;.
                   </p>
+                </div>
+                <div class="field recordings-filename-pattern-field" style="margin-top: var(--space-sm);">
+                  <label for="recording-filename-pattern-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Padrão de nome do arquivo</label>
+                  <input id="recording-filename-pattern-input" type="text" placeholder="{YYYY} Mes{MM} {DD} {HH}h{NN} - Apogee" style="width: 100%; padding: 0.4rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); min-width: 0; box-sizing: border-box;" />
+                  <p class="hint-text" style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">Variáveis: {DD} {MM} {YYYY} {HH} {NN} {MES}. Vazio = padrão atual do sistema.</p>
                 </div>
                 <div class="field recordings-dir-field" style="margin-top: var(--space-sm);">
                   <label for="recordings-dir-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Destino da gravação</label>
@@ -746,6 +753,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T13-25-07-kmn36t"></script>
+  <script src="app.bundle.js?v=2026-07-01T13-54-33-zjc243"></script>
 </body>
 </html>
