@@ -60,7 +60,10 @@ const config = {
     enabled: true,
     systemAudioDefault: true,
     microphoneDefault: true,
-    maxBitrate: 128_000
+    maxBitrate: 128_000,
+    hostMicPublishGain: 1.4,
+    hostMicCompressor: true,
+    hostMicPeaking: true
   },
 
   certDir: 'certs',
@@ -73,7 +76,7 @@ const config = {
   /** GravaÃƒÂ§ÃƒÂµes do painel host (UNC no cgrafsysvm) */
   recordingsDir:
     process.env.SHARESCREEN_RECORDINGS_DIR ||
-    (isDevRuntime ? '_dev_recordings' : '\\\\cgrafsysvm\\ApogeeFiles\\GravaÃƒÂ§oes Treinamento'),
+    (isDevRuntime ? '_dev_recordings' : '\\\\cgrafsysvm\\ApogeeFiles\\Grava\u00e7oes Treinamento'),
 
   agent: {
     dbPath:
@@ -161,6 +164,9 @@ export function getVideoQualityForClients() {
     systemAudioDefault: config.audio?.systemAudioDefault !== false,
     microphoneDefault: !!config.audio?.microphoneDefault,
     maxAudioBitrate: config.audio?.maxBitrate ?? 128_000,
+    hostMicPublishGain: config.audio?.hostMicPublishGain ?? 1.4,
+    hostMicCompressor: config.audio?.hostMicCompressor !== false,
+    hostMicPeaking: config.audio?.hostMicPeaking !== false,
     stunServers: config.stunServers,
     turnServers: config.turnServers,
     turnEnabled: config.turnServers.length > 0

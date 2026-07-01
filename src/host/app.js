@@ -12,7 +12,12 @@ import { showToast as originalShowToast } from '../shared/toast.js';
 import { collectWebRtcStats } from '../shared/stats-collector.js';
 import { formatRecordingFilename } from '../shared/recording-filename.js';
 import { HostAudioMonitor, savePresetToLocalStorage } from '../shared/host-audio-monitor.js';
-import { normalizeRemoteAudioSources } from '../shared/audio-sources.js';
+import { normalizeRemoteAudioSources, audioSourcesSignature, audioTraceSync } from '../shared/audio-sources.js';
+import {
+  CLIENT_MIC_PUBLISH_DEFAULTS,
+  hasActiveMicrophoneFilter,
+  normalizeMicrophoneFilterPrefs
+} from '../shared/mic-dsp.js';
 import { startTrackLevelMeter } from '../shared/audio-level-meter.js';
 import {
   formatSourceDisplayName,
@@ -87,6 +92,8 @@ const els = {
   hostMicWrap: $('host-mic-picker-wrap'),
   hostMicSelect: $('host-mic-select'),
   hostBtnRefreshMics: $('host-btn-refresh-mics'),
+  hostMicGainSlider: $('host-mic-gain-slider'),
+  hostMicGainVal: $('host-mic-gain-val'),
   btnHostMic: $('btn-host-mic'),
   statusBar: $('status-bar'),
   qualityPreset: $('quality-preset'),
@@ -140,6 +147,46 @@ let lastAppliedSnapshotKey = '';
 let lastAppliedActiveVideoKey = '';
 let lastActiveTransmission = null;
 let pendingHostAudioSync = null;
+
+const HOST_MIC_GAIN_STORAGE_KEY = 'sharescreen_host_mic_gain';
+
+function loadHostMicPublishGain(fallback = 1.4) {
+  try {
+    const raw = localStorage.getItem(HOST_MIC_GAIN_STORAGE_KEY);
+    if (raw == null || raw === '') return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return fallback;
+    return Math.max(0.5, Math.min(2.5, value));
+  } catch {
+    return fallback;
+  }
+}
+
+function saveHostMicPublishGain(value) {
+  localStorage.setItem(HOST_MIC_GAIN_STORAGE_KEY, String(value));
+}
+
+function getDefaultHostMicPublishGain() {
+  return Number(media?.videoQuality?.hostMicPublishGain ?? 1.4);
+}
+
+function syncHostMicGainUi(value = loadHostMicPublishGain(getDefaultHostMicPublishGain())) {
+  if (els.hostMicGainSlider) els.hostMicGainSlider.value = String(value);
+  if (els.hostMicGainVal) els.hostMicGainVal.textContent = `${value.toFixed(1)}x`;
+}
+
+async function applyHostMicPublishGain(value) {
+  const gain = Math.max(0.5, Math.min(2.5, Number(value)));
+  saveHostMicPublishGain(gain);
+  syncHostMicGainUi(gain);
+  if (!media?.applyHostMicPublishChain) return;
+  await media.setMicrophoneFilterPrefs({
+    gain,
+    compressor: true,
+    peaking: true,
+    peakingGain: 2
+  });
+}
 let localHostVuStop = null;
 let isCoHostInstance = readQueryParam('cohost') === 'true';
 if (readQueryParam('nome')) localStorage.setItem(STORAGE_HOST_NAME, readQueryParam('nome'));
@@ -300,6 +347,16 @@ setupMicrophonePicker({
 });
 els.hostChkMic?.addEventListener('change', () => onHostAudioPrefsChange());
 els.hostChkSystem?.addEventListener('change', () => onHostAudioPrefsChange());
+syncHostMicGainUi(loadHostMicPublishGain(1.4));
+els.hostMicGainSlider?.addEventListener('input', () => {
+  const gain = Number(els.hostMicGainSlider?.value || 1.4);
+  if (els.hostMicGainVal) els.hostMicGainVal.textContent = `${gain.toFixed(1)}x`;
+});
+els.hostMicGainSlider?.addEventListener('change', () => {
+  applyHostMicPublishGain(Number(els.hostMicGainSlider?.value || 1.4)).catch((e) =>
+    errors.handle(e, 'host-mic-gain')
+  );
+});
 
 async function onHostAudioPrefsChange() {
   saveCapturePrefs(getHostCapturePrefs());
@@ -312,6 +369,7 @@ async function onHostAudioPrefsChange() {
     const prefs = getHostCapturePrefs();
     await media.ensureSendTransport();
     if (prefs.microphone) {
+      await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
       await media.publishMicrophone(prefs);
     } else {
       await media.stopMicrophone();
@@ -658,6 +716,20 @@ function ensureHostAudioMonitor() {
   return hostAudioMonitor;
 }
 
+function mergeLastAudioSourcesFromEstado(payload = {}) {
+  if (payload.audioSources?.length) {
+    lastAudioSources = payload.audioSources;
+    return;
+  }
+  const merged = buildHostAudioSources();
+  if (!merged.length) return;
+  const nextSig = audioSourcesSignature(merged);
+  const prevSig = audioSourcesSignature(lastAudioSources);
+  if (nextSig !== prevSig) {
+    lastAudioSources = merged;
+  }
+}
+
 async function syncHostAudioMonitor(sources = null) {
   if (!hostPeerId || !media?.device) {
     pendingHostAudioSync = sources ?? 'merge';
@@ -682,12 +754,15 @@ async function syncHostAudioMonitor(sources = null) {
       const audioSources = buildHostAudioSources();
       await monitor.syncFromSources(audioSources);
       syncPublishedAudioFiltersToClients(audioSources);
-      if (audioSources.length && monitor.channelCount === 0) {
+      const retryBackoffs = [800, 1600, 3200];
+      let retryCycle = 0;
+      while (audioSources.length && monitor.channelCount === 0 && retryCycle < retryBackoffs.length) {
         log(
-          `Audio remoto: ${audioSources.length} fonte(s) detectada(s), 0 canal ativo - tentando novamente...`, 
+          `Audio remoto: ${audioSources.length} fonte(s) detectada(s), 0 canal ativo - tentativa ${retryCycle + 1}/${retryBackoffs.length}...`,
           'warn'
         );
-        await new Promise((r) => setTimeout(r, 800));
+        await new Promise((r) => setTimeout(r, retryBackoffs[retryCycle]));
+        retryCycle += 1;
         await monitor.syncFromSources(buildHostAudioSources());
       }
       monitor.connectOutput(els.previewAudio);
@@ -705,6 +780,9 @@ async function syncHostAudioMonitor(sources = null) {
       syncLocalHostVu();
       if (monitor.channelCount > 0) {
         log(`Audio remoto: ${monitor.channelCount} canal(is) ativo(s)`, 'info');
+        audioTraceSync('sync-ok', audioSources, { channels: monitor.channelCount, role: 'host' });
+      } else if (audioSources.length) {
+        audioTraceSync('sync-falhou', audioSources, { channels: 0, role: 'host' });
       }
     } while (syncAudioMonitorPending);
   })().finally(() => {
@@ -1156,6 +1234,7 @@ async function iniciarCompartilhamentoHost() {
     await media.startScreenShare(getHostCapturePrefs());
     const prefs = getHostCapturePrefs();
     if (prefs.microphone && !media.hasPublishedMicrophone()) {
+      await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
       await media.publishMicrophone(prefs);
     }
     signaling.send('status', { status: 'transmitindo' });
@@ -1378,8 +1457,11 @@ function handleMessage(msg) {
       totalClients: estado.clients.length,
       videoProducers
     });
+    mergeLastAudioSourcesFromEstado(msg.payload || {});
     renderLista();
-    syncHostAudioMonitor().catch((e) => errors.handle(e, 'audio-monitor'));
+    syncHostAudioMonitor(msg.payload?.audioSources?.length ? msg.payload.audioSources : null).catch((e) =>
+      errors.handle(e, 'audio-monitor')
+    );
   }
   if (msg.type === 'demovidoCoHost') {
     if (isCoHostInstance) {
@@ -1530,7 +1612,8 @@ async function joinHost({ autoShare = true } = {}) {
     debugHostLog('F', 'joinHost entrou', { gen, hostPeerId });
 
     media = new MediaClient(signaling, {
-      splitRecvTransports: false,
+      splitRecvTransports: true,
+      applyHostMicPublishChain: true,
       onLog: log,
       onIceState: (state) => {
         if (state === 'failed') showToast('Problema na conexao de midia (ICE)', 'error');
@@ -1545,6 +1628,7 @@ async function joinHost({ autoShare = true } = {}) {
     if (gen !== joinGeneration) return;
 
     media.setVideoQuality(quality);
+    syncHostMicGainUi(loadHostMicPublishGain(Number(quality.hostMicPublishGain ?? 1.4)));
     recorder.setHostToken(hostToken);
 
     hostReady = true;
@@ -1568,6 +1652,7 @@ async function joinHost({ autoShare = true } = {}) {
     if (joinPrefs.microphone) {
       try {
         await media.ensureSendTransport();
+        await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
         await media.publishMicrophone(joinPrefs);
         syncLocalHostVu();
       } catch (e) {
@@ -1960,6 +2045,11 @@ async function loadDir(pathValue) {
       },
       body: JSON.stringify({ path: pathValue })
     });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      listEl.innerHTML = '<div style="padding: 10px; color: var(--color-danger);">Rota /api/browse-dir indisponível no proxy. Atualize o NGINX ou acesse o host diretamente.</div>';
+      return;
+    }
     const data = await res.json();
     if (!data.ok) {
       listEl.innerHTML = `<div style="padding: 10px; color: var(--color-danger);">${data.erro || 'Erro ao listar'}</div>`;
@@ -2187,7 +2277,14 @@ function syncPublishedAudioFiltersToClients(audioSources = []) {
     const id = String(source.peerId);
     if (sent.has(id)) continue;
     sent.add(id);
-    sendAudioFiltersToClient({ id }, monitor.getFilterPrefs(id));
+    const stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
+    const prefs = hasActiveMicrophoneFilter(stored)
+      ? stored
+      : normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
+    if (!hasActiveMicrophoneFilter(stored)) {
+      monitor.setFilterPrefs(id, prefs);
+    }
+    sendAudioFiltersToClient({ id }, prefs);
   }
 }
 function applyAudioFiltersFromUi() {

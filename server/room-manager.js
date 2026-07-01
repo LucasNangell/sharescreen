@@ -381,6 +381,7 @@ export class RoomManager {
         : null,
       transmissionPaused: this.transmissionPaused,
       controleExibicao: [...this.displayControllerIds],
+      audioSources: this.getAudioSources(),
       rtpCapabilities: getRtpCapabilities()
     };
   }
@@ -992,6 +993,9 @@ export class RoomManager {
         producerId: producer.id.slice(0, 8)
       });
       this.broadcastAudioSources();
+      for (const host of this.getHostAndCoHostPeers()) {
+        this.sendRoomSnapshot(host);
+      }
     }
 
     this._ensureSelectedAndBroadcast(peer, slot);

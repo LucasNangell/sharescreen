@@ -193,8 +193,14 @@
   
   
   
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T10-56-42-p76qnx";
+var BUILD_ID="2026-07-01T11-55-32-of93nm";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -228,9 +234,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T10-56-42-p76qnx" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T10-56-42-p76qnx" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T10-56-42-p76qnx" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T11-55-32-of93nm" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T11-55-32-of93nm" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T11-55-32-of93nm" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -426,6 +432,12 @@ try{
                   <label for="host-mic-select">Microfone</label>
                   <select id="host-mic-select"></select>
                   <button type="button" id="host-btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar</button>
+                </div>
+                <div class="field" style="margin-top: var(--space-sm);">
+                  <label for="host-mic-gain-slider">
+                    Ganho do meu microfone <span id="host-mic-gain-val">1.4x</span>
+                  </label>
+                  <input id="host-mic-gain-slider" type="range" min="0.5" max="2.5" step="0.1" value="1.4" aria-label="Ganho do microfone do host" />
                 </div>
               </div>
             </details>
@@ -712,6 +724,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T10-56-42-p76qnx"></script>
+  <script src="app.bundle.js?v=2026-07-01T11-55-32-of93nm"></script>
 </body>
 </html>

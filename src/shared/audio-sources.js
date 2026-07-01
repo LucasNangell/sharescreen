@@ -57,3 +57,13 @@ export function audioSourcesSignature(sources) {
     .sort()
     .join('|');
 }
+
+/** Log de sincronização de fontes (sync-ok / sync-falhou). */
+export function audioTraceSync(event, sources, extra = {}) {
+  const normalized = normalizeRemoteAudioSources(sources);
+  audioTrace(event, {
+    signature: audioSourcesSignature(sources),
+    sourceCount: normalized.length,
+    ...extra
+  });
+}

@@ -19,7 +19,7 @@ import {
 } from '../shared/quality-manager.js';
 import { showToast } from '../shared/toast.js';
 import { HostAudioMonitor } from '../shared/host-audio-monitor.js';
-import { normalizeRemoteAudioSources } from '../shared/audio-sources.js';
+import { normalizeRemoteAudioSources, audioTraceSync } from '../shared/audio-sources.js';
 import { isSelectableSource, sortDisplaySources } from '../shared/display-sources.js';
 import { buildDisplaySourceCard } from '../shared/source-cards.js';
 import { initCoHost } from '../host/app.js';
@@ -406,6 +406,15 @@ async function syncClientAudioMonitor(sources) {
       );
       if (sources?.length) lastAudioSources = sources;
       await monitor.syncFromSources(list);
+      const retryBackoffs = [800, 1600, 3200];
+      let retryCycle = 0;
+      while (list.length && monitor.channelCount === 0 && retryCycle < retryBackoffs.length) {
+        await new Promise((r) => setTimeout(r, retryBackoffs[retryCycle]));
+        retryCycle += 1;
+        await monitor.syncFromSources(
+          normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId })
+        );
+      }
       monitor.connectOutput(els.audio);
       await monitor.resume();
       if (monitor.isAutoplayBlocked?.() || (monitor.channelCount > 0 && els.audio?.paused)) {
@@ -415,6 +424,11 @@ async function syncClientAudioMonitor(sources) {
         updateClientMicUi();
       }
       setStatus(`Audio remoto: ${monitor.channelCount} fonte(s)`);
+      if (monitor.channelCount > 0) {
+        audioTraceSync('sync-ok', list, { channels: monitor.channelCount, role: 'client' });
+      } else if (list.length) {
+        audioTraceSync('sync-falhou', list, { channels: 0, role: 'client' });
+      }
     } while (syncClientAudioPending);
   })().finally(() => {
     syncClientAudioPromise = null;
@@ -1141,7 +1155,7 @@ async function executeJoinAndStart() {
     signaling.markAuthenticated(true);
 
     media = new MediaClient(signaling, {
-      splitRecvTransports: false,
+      splitRecvTransports: true,
       onLog: (m, l) => setStatus(m)
     });
     await media.loadDevice(payload.rtpCapabilities);
@@ -1259,7 +1273,7 @@ async function rejoinSession() {
   signaling.markAuthenticated(true);
 
   media = new MediaClient(signaling, {
-    splitRecvTransports: false,
+    splitRecvTransports: true,
     onLog: (m, l) => setStatus(m)
   });
   await media.loadDevice(payload.rtpCapabilities);

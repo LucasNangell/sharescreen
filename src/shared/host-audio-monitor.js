@@ -8,6 +8,11 @@ import {
   audioTrace,
   normalizeRemoteAudioSources
 } from './audio-sources.js';
+import {
+  MIC_FILTER_DEFAULTS,
+  hasActiveMicrophoneFilter,
+  normalizeMicrophoneFilterPrefs
+} from './mic-dsp.js';
 
 function loadPresetFromLocalStorage(name) {
   try {
@@ -236,10 +241,13 @@ export class HostAudioMonitor {
     for (const ch of this.channels.values()) {
       const track = ch.consumer?.track;
       if (!track || track.readyState !== 'live') continue;
-      directTracks.push(track);
 
-      hasDsp = true;
-      this._setupChannelDsp(ch, track);
+      if (this._hasAnyFilter(ch.peerId)) {
+        hasDsp = true;
+        this._setupChannelDsp(ch, track);
+      } else {
+        directTracks.push(track);
+      }
     }
 
     if (hasDsp) {
@@ -284,7 +292,7 @@ export class HostAudioMonitor {
   }
 
   _hasAnyFilter(peerId) {
-    return true;
+    return hasActiveMicrophoneFilter(this.getFilterPrefs(peerId));
   }
 
   _clearChannelDsp(ch) {
@@ -344,20 +352,7 @@ export class HostAudioMonitor {
       if (name) {
         saved = loadPresetFromLocalStorage(name);
       }
-      this.filterPrefs.set(key, saved || {
-        gain: 1.0,
-        bass: 0,
-        treble: 0,
-        highpass: false,
-        highpassFreq: 80,
-        peaking: false,
-        peakingFreq: 3000,
-        peakingGain: 3,
-        compressor: false,
-        noiseGate: false,
-        noiseGateThreshold: -45,
-        micCaptureDistance: 6
-      });
+      this.filterPrefs.set(key, saved || { ...MIC_FILTER_DEFAULTS });
     }
     return this.filterPrefs.get(key);
   }
@@ -666,8 +661,10 @@ export class HostAudioMonitor {
 
       this._refreshDirectOutput();
     } catch (err) {
-      if (attempt < 2) {
-        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      const maxAttempts = 5;
+      if (attempt < maxAttempts - 1) {
+        const delayMs = 400 * (2 ** attempt);
+        await new Promise((r) => setTimeout(r, delayMs));
         return this._addChannel(channelKey, peerId, producerId, source, attempt + 1);
       }
       console.warn('[HostAudioMonitor] falha ao consumir áudio', channelKey, err?.message || err);

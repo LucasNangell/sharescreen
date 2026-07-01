@@ -16,6 +16,7 @@ Headers obrigatórios em **todas** as rotas ShareScreen:
 | `/shared/*` | `/shared/*` | CSS/JS compartilhados |
 | `/vendor/*` | `/vendor/*` | mediasoup-client |
 | `/ws` | `/ws` | WebSocket (timeout 86400s) |
+| `/api/browse-dir` | `/api/browse-dir` | + header `X-Host-Token`; seletor de pasta de gravação |
 | `/api/gravacao*` | `/api/gravacao*` | body até 4GB |
 | `/api/link-externo` | `/api/link-externo` | + header `X-Host-Token` |
 | `/api/info` | `/api/info` | |

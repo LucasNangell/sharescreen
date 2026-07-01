@@ -36,11 +36,11 @@ export function installAudioUnlock(onUnlock) {
   document.addEventListener('keydown', unlock, { once: true, capture: true });
 }
 
-export function buildMicrophoneConstraints(deviceId = '') {
+export function buildMicrophoneConstraints(deviceId = '', { disableAutoGainControl = false } = {}) {
   const audio = {
     echoCancellation: true,
     noiseSuppression: true,
-    autoGainControl: true,
+    autoGainControl: !disableAutoGainControl,
     channelCount: 2
   };
   if (deviceId) audio.deviceId = { ideal: deviceId };
@@ -87,8 +87,8 @@ export async function populateMicrophoneSelect(selectEl, { deviceId = '', onLog 
   return devices;
 }
 
-export async function acquireMicrophoneTrack(deviceId, onLog) {
-  const constraints = buildMicrophoneConstraints(deviceId || '');
+export async function acquireMicrophoneTrack(deviceId, onLog, options = {}) {
+  const constraints = buildMicrophoneConstraints(deviceId || '', options);
   onLog?.(deviceId ? 'Capturando microfone selecionado…' : 'Capturando microfone padrão…');
   const micStream = await navigator.mediaDevices.getUserMedia(constraints);
   const micTrack = micStream.getAudioTracks()[0];

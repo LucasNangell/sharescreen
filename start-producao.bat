@@ -15,7 +15,7 @@ set TURN_USERNAME=sharescreen
 set TURN_PASSWORD=ShareScreenTurn2026!
 
 set SHARESCREEN_DEV=
-set SHARESCREEN_RECORDINGS_DIR=
+set "SHARESCREEN_RECORDINGS_DIR=\\cgrafsysvm\ApogeeFiles\Gravaçoes Treinamento"
 set "DEBUG_LOG=%~dp0debug-b07cf8.log"
 
 where node >nul 2>&1
