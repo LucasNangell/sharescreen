@@ -12,6 +12,7 @@ export const MIC_FILTER_DEFAULTS = {
   compressor: false,
   noiseGate: false,
   noiseGateThreshold: -45,
+  micSensitivity: false,
   micCaptureDistance: 6
 };
 
@@ -27,6 +28,7 @@ export const HOST_MIC_PUBLISH_DEFAULTS = {
   compressor: true,
   noiseGate: false,
   noiseGateThreshold: -45,
+  micSensitivity: false,
   micCaptureDistance: 6
 };
 
@@ -42,6 +44,7 @@ export const CLIENT_MIC_PUBLISH_DEFAULTS = {
   compressor: true,
   noiseGate: false,
   noiseGateThreshold: -45,
+  micSensitivity: false,
   micCaptureDistance: 6
 };
 
@@ -63,6 +66,7 @@ export function normalizeMicrophoneFilterPrefs(prefs = {}) {
     compressor: !!merged.compressor,
     noiseGate: !!merged.noiseGate,
     noiseGateThreshold: clamp(Number(merged.noiseGateThreshold ?? -45), -70, -20),
+    micSensitivity: !!merged.micSensitivity,
     micCaptureDistance: clamp(Number(merged.micCaptureDistance ?? 6), 1, 10)
   };
 }
@@ -76,7 +80,8 @@ export function hasActiveMicrophoneFilter(prefs) {
     p.highpass ||
     p.peaking ||
     p.compressor ||
-    p.noiseGate
+    p.noiseGate ||
+    p.micSensitivity
   );
 }
 
@@ -92,9 +97,31 @@ export function closeMicrophoneFilterGraph(graph) {
   try { graph.ctx?.close?.(); } catch (_) {}
 }
 
-function gateThresholdDb(prefs) {
-  const distanceShift = (6 - prefs.micCaptureDistance) * 3;
-  return clamp(prefs.noiseGateThreshold + distanceShift, -70, -18);
+/** Limiar de abertura do portão de proximidade (1 = só fala próxima, 10 = ambiente amplo). */
+export function proximityGateThresholdDb(prefs) {
+  const normalized = normalizeMicrophoneFilterPrefs(prefs);
+  const distance = normalized.micCaptureDistance;
+  return clamp(-18 - (10 - distance) * 4, -60, -18);
+}
+
+function noiseGateThresholdDb(prefs) {
+  const normalized = normalizeMicrophoneFilterPrefs(prefs);
+  const distanceShift = (6 - normalized.micCaptureDistance) * 3;
+  return clamp(normalized.noiseGateThreshold + distanceShift, -70, -18);
+}
+
+/** Limiar combinado quando noise gate e/ou sensibilidade estão ativos (mais restritivo vence). */
+export function combinedGateOpenThresholdDb(prefs) {
+  const normalized = normalizeMicrophoneFilterPrefs(prefs);
+  const thresholds = [];
+  if (normalized.micSensitivity) {
+    thresholds.push(proximityGateThresholdDb(normalized));
+  }
+  if (normalized.noiseGate) {
+    thresholds.push(noiseGateThresholdDb(normalized));
+  }
+  if (!thresholds.length) return -100;
+  return Math.max(...thresholds);
 }
 
 export function createMicrophoneFilterGraph(inputTrack, prefs) {
@@ -159,14 +186,15 @@ export function createMicrophoneFilterGraph(inputTrack, prefs) {
       rafId: null
     };
 
-    if (normalized.noiseGate) {
+    const gateActive = normalized.noiseGate || normalized.micSensitivity;
+    if (gateActive) {
       const data = new Uint8Array(analyserNode.fftSize);
       let gateOpen = true;
       let lastOpenAt = performance.now();
-      const openDb = gateThresholdDb(normalized);
-      const closeDb = openDb - 8;
       const holdMs = 180;
       const tick = () => {
+        const openDb = combinedGateOpenThresholdDb(normalized);
+        const closeDb = openDb - 8;
         analyserNode.getByteTimeDomainData(data);
         let sum = 0;
         for (let i = 0; i < data.length; i++) {

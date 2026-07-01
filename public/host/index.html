@@ -218,8 +218,11 @@
   
   
   
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T15-43-17-rxq9l1";
+var BUILD_ID="2026-07-01T16-06-55-jdvix8";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -253,9 +256,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T15-43-17-rxq9l1" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T15-43-17-rxq9l1" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T15-43-17-rxq9l1" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T16-06-55-jdvix8" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T16-06-55-jdvix8" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T16-06-55-jdvix8" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -735,6 +738,25 @@ try{
           </div>
         </fieldset>
 
+        <!-- Filtro de Sensibilidade (proximidade) -->
+        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
+          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Sensibilidade do Microfone</legend>
+          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
+            <input type="checkbox" id="audio-sensitivity-enabled" />
+            <label for="audio-sensitivity-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar filtro de sensibilidade (priorizar fala próxima)</label>
+          </div>
+          <p class="hint-text" style="color: var(--color-text-muted); font-size: 0.75rem; margin: 0 0 var(--space-sm) 0;">
+            Afeta o microfone publicado na reunião (o que todos ouvem).
+          </p>
+          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
+              <span>Proximidade (1 = só fala próxima, 10 = ambiente amplo)</span>
+              <strong id="audio-capture-distance-val">6/10</strong>
+            </div>
+            <input id="audio-capture-distance" type="range" min="1" max="10" step="1" value="6" style="width: 100%; cursor: pointer;" />
+          </div>
+        </fieldset>
+
         <!-- Noise Gate -->
         <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
           <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Portão de Ruído (Noise Gate)</legend>
@@ -748,13 +770,6 @@ try{
               <strong id="audio-gate-thresh-val">-45 dB</strong>
             </div>
             <input id="audio-gate-threshold" type="range" min="-70" max="-20" step="1" value="-45" style="width: 100%; cursor: pointer;" />
-            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-                <span>Alcance do microfone</span>
-                <strong id="audio-capture-distance-val">6/10</strong>
-              </div>
-              <input id="audio-capture-distance" type="range" min="1" max="10" step="1" value="6" style="width: 100%; cursor: pointer;" />
-            </div>
           </div>
         </fieldset>
       </div>
@@ -772,6 +787,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T15-43-17-rxq9l1"></script>
+  <script src="app.bundle.js?v=2026-07-01T16-06-55-jdvix8"></script>
 </body>
 </html>

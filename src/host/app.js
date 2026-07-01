@@ -2638,6 +2638,7 @@ function normalizeAudioFilterPrefsForClient(prefs = {}) {
     compressor: !!prefs.compressor,
     noiseGate: !!prefs.noiseGate,
     noiseGateThreshold: Number(prefs.noiseGateThreshold !== undefined ? prefs.noiseGateThreshold : -45),
+    micSensitivity: !!prefs.micSensitivity,
     micCaptureDistance: Number(prefs.micCaptureDistance || 6)
   };
 }
@@ -2708,6 +2709,7 @@ function applyAudioFiltersFromUi() {
     compressor: !!$('audio-comp-enabled')?.checked,
     noiseGate: !!$('audio-gate-enabled')?.checked,
     noiseGateThreshold: Number($('audio-gate-threshold')?.value || -45),
+    micSensitivity: !!$('audio-sensitivity-enabled')?.checked,
     micCaptureDistance: Number($('audio-capture-distance')?.value || 6)
   };
 
@@ -2780,6 +2782,9 @@ async function openAudioFiltersModal(client) {
 
   const gateEnabled = $('audio-gate-enabled');
   if (gateEnabled) gateEnabled.checked = !!prefs.noiseGate;
+
+  const sensitivityEnabled = $('audio-sensitivity-enabled');
+  if (sensitivityEnabled) sensitivityEnabled.checked = !!prefs.micSensitivity;
 
   const hpFreq = $('audio-hp-frequency');
   if (hpFreq) {
@@ -2884,6 +2889,7 @@ $('audio-peak-gain')?.addEventListener('input', (e) => {
   applyAudioFiltersFromUi();
 });
 $('audio-comp-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
+$('audio-sensitivity-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
 $('audio-gate-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
 $('audio-gate-threshold')?.addEventListener('input', (e) => {
   const el = $('audio-gate-thresh-val');
@@ -2920,6 +2926,8 @@ $('btn-audio-filters-reset')?.addEventListener('click', () => {
   const peakGainVal = $('audio-peak-gain-val'); if (peakGainVal) peakGainVal.textContent = '3 dB';
 
   const comp = $('audio-comp-enabled'); if (comp) comp.checked = false;
+
+  const sensitivity = $('audio-sensitivity-enabled'); if (sensitivity) sensitivity.checked = false;
 
   const gate = $('audio-gate-enabled'); if (gate) gate.checked = false;
   const gateThresh = $('audio-gate-threshold'); if (gateThresh) gateThresh.value = -45;

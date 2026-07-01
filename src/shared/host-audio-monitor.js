@@ -10,6 +10,7 @@ import {
 } from './audio-sources.js';
 import {
   MIC_FILTER_DEFAULTS,
+  combinedGateOpenThresholdDb,
   hasActiveMicrophoneFilter,
   normalizeMicrophoneFilterPrefs
 } from './mic-dsp.js';
@@ -609,16 +610,15 @@ export class HostAudioMonitor {
 
       const prefs = this.getFilterPrefs(ch.peerId);
       const targetGain = prefs.gain !== undefined ? prefs.gain : 1.0;
+      const gateActive = prefs.noiseGate || prefs.micSensitivity;
 
-      if (!prefs.noiseGate) {
+      if (!gateActive) {
         if (!isOpen) isOpen = true;
         ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
         return;
       }
 
-      const distance = Math.max(1, Math.min(10, Number(prefs.micCaptureDistance || 6)));
-      const baseDb = prefs.noiseGateThreshold !== undefined ? Number(prefs.noiseGateThreshold) : -45;
-      const openDb = Math.max(-70, Math.min(-18, baseDb + (6 - distance) * 3));
+      const openDb = combinedGateOpenThresholdDb(prefs);
       const closeDb = openDb - 8;
       const currentLevel = Math.max(ch.rawLevel || 0, 0.000001);
       const currentDb = 20 * Math.log10(currentLevel);
