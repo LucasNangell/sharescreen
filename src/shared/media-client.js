@@ -10,6 +10,7 @@ import {
 } from './audio-manager.js';
 import { normalizeAudioSource, parseAudioChannelKey, audioTrace } from './audio-sources.js';
 import { buildIceServers, buildTransportIceOptions, hasTurnServers } from './ice-servers.js';
+import { signalingSend } from './signaling-factory.js';
 const MIC_FILTER_DEFAULTS = {
   gain: 1,
   bass: 0,
@@ -307,7 +308,7 @@ export class MediaClient {
         m.payload?.direction === direction &&
         (m.payload?.tag || 'default') === recvTag
     );
-    this.signaling.send('criarTransporte', {
+    await signalingSend(this.signaling, 'criarTransporte', {
       direction,
       tag: direction === 'recv' ? recvTag : undefined
     });
@@ -341,20 +342,23 @@ export class MediaClient {
     }
 
     transport.on('connect', ({ dtlsParameters }, callback, errback) => {
-      try {
-        const connectedPromise = this.signaling.onceType(
-          'transporteConectado',
-          (m) => m.payload?.transportId === transport.id
-        );
-        this.signaling.send('conectarTransporte', {
-          transportId: transport.id,
-          dtlsParameters,
-          direction
-        });
-        connectedPromise.then(() => callback()).catch((e) => errback(e));
-      } catch (e) {
-        errback(e);
-      }
+      (async () => {
+        try {
+          const connectedPromise = this.signaling.onceType(
+            'transporteConectado',
+            (m) => m.payload?.transportId === transport.id
+          );
+          await signalingSend(this.signaling, 'conectarTransporte', {
+            transportId: transport.id,
+            dtlsParameters,
+            direction
+          });
+          await connectedPromise;
+          callback();
+        } catch (e) {
+          errback(e);
+        }
+      })();
     });
 
     transport.on('connectionstatechange', (state) => {
@@ -372,6 +376,7 @@ export class MediaClient {
           msg += ` — verifique firewall UDP ${ports} em ${ice}`;
         }
         this.onIceState?.('failed', direction);
+        this.onLog(`${msg} — midia bloqueada, verifique rede ou TURN`, 'error');
       } else if (state === 'connected') {
         this.onIceState?.('connected', direction);
       }
@@ -380,30 +385,31 @@ export class MediaClient {
 
     if (direction === 'send') {
       transport.on('produce', ({ kind, rtpParameters, appData }, callback, errback) => {
-        try {
-          const source = appData?.source || null;
-          const producedPromise = this.signaling.onceType(
-            'produzido',
-            (m) => {
-              if (m.payload?.kind !== kind) return false;
-              if (kind === 'audio' && source) {
-                return m.payload?.source === source;
+        (async () => {
+          try {
+            const source = appData?.source || null;
+            const producedPromise = this.signaling.onceType(
+              'produzido',
+              (m) => {
+                if (m.payload?.kind !== kind) return false;
+                if (kind === 'audio' && source) {
+                  return m.payload?.source === source;
+                }
+                return true;
               }
-              return true;
-            }
-          );
-          this.signaling.send('produzir', {
-            transportId: transport.id,
-            kind,
-            rtpParameters,
-            appData
-          });
-          producedPromise
-            .then((p) => callback({ id: p.id }))
-            .catch((e) => errback(e));
-        } catch (e) {
-          errback(e);
-        }
+            );
+            await signalingSend(this.signaling, 'produzir', {
+              transportId: transport.id,
+              kind,
+              rtpParameters,
+              appData
+            });
+            const p = await producedPromise;
+            callback({ id: p.id });
+          } catch (e) {
+            errback(e);
+          }
+        })();
       });
       this.sendTransport = transport;
     } else {
@@ -815,11 +821,12 @@ export class MediaClient {
 
   async _consumeOne(producerId, mediaEl, kindHint, consumerTag = 'default') {
     const transport = await this.ensureRecvTransport(consumerTag);
+    const consumeTimeoutMs = this.signaling?.isHttpSignaling ? 45000 : 25000;
     const payload = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error(`Timeout aguardando: consumido (${producerId.slice(0, 8)})`));
-      }, 25000);
+      }, consumeTimeoutMs);
 
       const onConsumido = (msg) => {
         if (msg.type !== 'consumido') return;
@@ -850,18 +857,18 @@ export class MediaClient {
       this.signaling.addListener(onConsumido);
       this.signaling.addListener(onErro);
 
-      try {
-        // Registra os listeners antes de pedir o consumo para nio perder a
-        // resposta do servidor em redes locais muito ripidas.
-        this.signaling.send('consumir', {
-          producerId,
-          rtpCapabilities: this.device.rtpCapabilities,
-          consumerTag
-        });
-      } catch (err) {
-        cleanup();
-        reject(err);
-      }
+      (async () => {
+        try {
+          await signalingSend(this.signaling, 'consumir', {
+            producerId,
+            rtpCapabilities: this.device.rtpCapabilities,
+            consumerTag
+          });
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      })();
     });
 
     const consumer = await transport.consume({

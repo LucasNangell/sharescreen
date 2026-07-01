@@ -1836,13 +1836,17 @@ async function gerarLinkExterno(guestName) {
     if (!res.ok) throw new Error(data.erro || `Falha ao gerar link externo (${res.status})`);
     if (!data.url) throw new Error('Servidor nao retornou o link externo');
     await navigator.clipboard.writeText(data.url);
-    const hours = Math.round((data.expiresInMs || 0) / 3_600_000);
-    showToast(
-      hours
-        ? `Link de ${nome} copiado (valido por ~${hours}h)`
-        : `Link de ${nome} copiado`,
-      'success'
-    );
+    if (data.publicMeetOpen) {
+      showToast(`Link publico de ${nome} copiado`, 'success');
+    } else {
+      const hours = Math.round((data.expiresInMs || 0) / 3_600_000);
+      showToast(
+        hours
+          ? `Link de ${nome} copiado (valido por ~${hours}h)`
+          : `Link de ${nome} copiado`,
+        'success'
+      );
+    }
   } catch (e) {
     if (e.name === 'NotAllowedError') {
       showToast('Permita acesso a area de transferencia para copiar o link', 'warn');

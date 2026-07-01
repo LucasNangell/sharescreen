@@ -38,12 +38,23 @@ export function getSessionHostToken() {
   return sessionHostToken;
 }
 
+/** /meet aberto: sem token em RAM nem expiracao apos reinicio do Node */
+export function isPublicMeetOpen() {
+  if (process.env.PUBLIC_MEET_OPEN === '1') return true;
+  if (process.env.PUBLIC_MEET_OPEN === '0') return false;
+  return !!(config.publicUrl || '').trim();
+}
+
 /**
  * Valida PIN/host na entrada. Compatível: sem roomPin = sem bloqueio.
  */
 export function validateJoinAuth(payload = {}) {
   const { papel, pin, hostToken, viewerToken } = payload;
   const requiredPin = (config.roomPin || '').trim();
+
+  if (papel === 'client' && isPublicMeetOpen()) {
+    return {};
+  }
 
   if (papel === 'client' && viewerToken) {
     if (validateViewerLinkToken(viewerToken)) {

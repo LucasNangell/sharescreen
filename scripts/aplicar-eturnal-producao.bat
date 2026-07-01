@@ -21,7 +21,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-eturnal-firewall
 if errorlevel 1 echo [AVISO] Firewall pode exigir elevacao.
 
 echo.
-echo === 2. Servico eturnal (restart carrega eturnal.yml) ===
+echo === 2. Certificado TLS eturnal (copia local + permissoes) ===
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-eturnal-tls.ps1"
+if errorlevel 1 echo [AVISO] setup-eturnal-tls falhou — confira cert em etc\ssl\
+
+echo.
+echo === 3. Servico eturnal (restart carrega eturnal.yml) ===
 cd /d "%ETURNAL_HOME%\bin"
 
 call "%ETURNAL_CMD%" list 2>nul | findstr /I "eturnal_1.12.2" >nul
@@ -54,7 +59,7 @@ powershell -NoProfile -Command "if (Test-Path '%ETURNAL_HOME%\log\eturnal.log') 
 
 :nginx
 echo.
-echo === 3. NGINX demux 443 ===
+echo === 4. NGINX demux 443 ===
 cd /d C:\nginx
 if not exist nginx.exe (
     echo [ERRO] C:\nginx\nginx.exe ausente.
@@ -69,7 +74,7 @@ nginx.exe -s reload -p C:\nginx -c conf\nginx.conf
 echo [OK] NGINX reload solicitado.
 
 echo.
-echo === 4. Validacao rapida ===
+echo === 5. Validacao rapida ===
 echo (curl com --ssl-no-revoke evita erro de revogacao offline no Windows)
 where curl >nul 2>&1
 if not errorlevel 1 (
@@ -80,6 +85,10 @@ if not errorlevel 1 (
 )
 powershell -NoProfile -Command "Test-NetConnection -ComputerName 127.0.0.1 -Port 5349 -WarningAction SilentlyContinue | Select-Object TcpTestSucceeded"
 powershell -NoProfile -Command "Test-NetConnection -ComputerName 127.0.0.1 -Port 8443 -WarningAction SilentlyContinue | Select-Object TcpTestSucceeded"
+
+echo.
+echo === 6. WSS + buildId ===
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0verificar-wss-externo.ps1"
 
 :done
 echo.

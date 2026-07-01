@@ -9,12 +9,16 @@ set PUBLIC_URL=https://cgrafsysvm.camara.leg.br
 REM IP publico para candidatos ICE (espectadores externos). Obrigatorio se DNS aponta para 10.1.1.73.
 set PUBLIC_ANNOUNCED_IP=200.219.133.192
 set TRUST_PROXY=1
+set PUBLIC_MEET_OPEN=1
 
-REM TURN — relay para espectadores externos (servico eturnal em C:\eturnal — ver DEPLOY_MAP)
+REM TURN local (Fase 2 — requer DNS turn.cgrafsysvm.camara.leg.br + cert SAN)
 set TURN_USERNAME=sharescreen
 set TURN_PASSWORD=ShareScreenTurn2026!
-REM Periodo 80/443: TURNS na 443 (mesmo host; demux NGINX por ALPN — ver DEPLOY_MAP)
-set TURN_URLS=turns:cgrafsysvm.camara.leg.br:443?transport=tcp
+set TURN_URLS=turns:turn.cgrafsysvm.camara.leg.br:443?transport=tcp
+REM TURN 4G/LAN via internet: Open Relay (metered.ca) — credenciais geradas no Node
+set ENABLE_OPENRELAY_TURN=1
+REM Opcional: API key metered (sobrescreve openrelay estatico) — turn-credentials.local.bat
+if exist "%~dp0turn-credentials.local.bat" call "%~dp0turn-credentials.local.bat"
 
 set SHARESCREEN_DEV=
 set SHARESCREEN_RECORDINGS_DIR=
@@ -62,7 +66,7 @@ echo ========================================
 echo  ShareScreen LAN - PRODUCAO
 echo  Host:   https://10.1.1.73:3443/host
 echo  Client: https://10.1.1.73:3443/client
-echo  Nginx:  https://cgrafsysvm.camara.leg.br/meet/ (externo, com token)
+  echo  Nginx:  https://cgrafsysvm.camara.leg.br/meet/ (externo, PUBLIC_MEET_OPEN)
 echo  TURN:   eturnal ("C:\Program Files\eturnal") — TURNS:443 via demux NGINX
 echo  Verifique: GET /api/info -^> turnEnabled:true, publicAnnouncedIp preenchido
 echo ========================================

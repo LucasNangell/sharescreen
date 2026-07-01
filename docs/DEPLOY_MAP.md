@@ -107,16 +107,37 @@ Certificados TLS: `C:\nginx\conf\ssl\cgrafsysvm-leg-chain.crt` e `.key`
 1. Binário em `C:\eturnal` (ou `\\cgrafsysvm\eturnal`)
 2. Editar `etc\eturnal.yml` (credentials, `relay_ipv4_addr`, TLS 5349, relay 49160–49252)
 3. Firewall interno: `scripts\setup-eturnal-firewall.ps1` (Administrador)
-4. Reiniciar serviço eturnal: `cd "C:\Program Files\eturnal\bin"` → `eturnal.cmd restart` (ou `scripts\start-eturnal.bat`)
+4. Certificado TLS local: `scripts\setup-eturnal-tls.ps1` (copia chain para `Program Files\eturnal\etc\ssl\`)
+5. Reiniciar serviço eturnal: `cd "C:\Program Files\eturnal\bin"` → `eturnal.cmd restart`
 
 **Nota Windows:** `eturnalctl` e `reload` são scripts Linux; no Windows use **`eturnal.cmd restart`**.
 
 #### Demux NGINX (perímetro só 80/443)
 
-- Página/API/WSS: `https://cgrafsysvm.camara.leg.br` → NGINX `:8443` (ALPN h2/http1.1)
-- TURN: `turns:cgrafsysvm.camara.leg.br:443?transport=tcp` → eturnal `:5349` (TLS sem ALPN)
-- Demux por **ALPN** no mesmo hostname (não exige DNS `turn.*`)
-- Subdomínio `turn.cgrafsysvm.camara.leg.br` é opcional (só se infra criar DNS + cert)
+- **Host principal** `cgrafsysvm.camara.leg.br` → sempre NGINX `:8443` (HTTPS, API, **WSS** `/ws`)
+  - ALPN `h2` / `http/1.1` e **ALPN vazio** (WebSocket) → `:8443` via `default`
+- **TURN (Fase 2):** `turn.cgrafsysvm.camara.leg.br` → eturnal `:5349` (exige DNS A + cert SAN)
+- **Não** rotear ALPN vazio do host principal para eturnal — WSS e TURNS são indistinguíveis no mesmo hostname
+
+Verificação: `scripts\verificar-wss-externo.bat` (handshake WSS + `/api/info` buildId).
+
+**Proxy `/ws` internet:** `proxy_pass https://127.0.0.1:3443/ws` com `Connection "upgrade"` (sem upstream keepalive). Ver [`cgrafsysvm-sharescreen-internet-locations.conf`](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/cgrafsysvm-sharescreen-internet-locations.conf).
+
+**Sinalização HTTP (link `/meet?token=`):** espectadores externos usam `POST/GET /api/signal/*` (long-poll), sem WebSocket. Rotas no NGINX internet e em `server/signaling-http.js`.
+
+#### WSS falha em 4G mas OK no servidor (perímetro)
+
+Se `verificar-wss-externo.bat` no cgrafsysvm passa mas o browser em 4G mostra `WebSocket connection failed`, a causa é **proxy/WAF corporativo** na borda (não o ShareScreen).
+
+1. Abrir chamado: texto em `scripts\chamado-infra-wss.txt` (passthrough TCP :443 ou WebSocket no proxy).
+2. Após correção infra: `scripts\validar-meet-externo.bat` (checklist 4G + Fase 2 TURN).
+
+#### Fase 2 — ativar TURN na 443 (quando DNS existir)
+
+1. DNS: `turn.cgrafsysvm.camara.leg.br` A → `200.219.133.192`
+2. Certificado leg com SAN `turn.cgrafsysvm.camara.leg.br` → `scripts\setup-eturnal-tls.ps1`
+3. Em `start-producao.bat`: `set TURN_URLS=turns:turn.cgrafsysvm.camara.leg.br:443?transport=tcp`
+4. Reiniciar eturnal + Node; validar relay no WebRTC internals (4G)
 
 #### Ordem no cgrafsysvm
 
@@ -138,7 +159,7 @@ Substituir `TURN_URLS` por `TURN_SERVERS` (JSON) do provedor. Não requer eturna
 | --- | --- | --- |
 | URL, HTML, REST, WSS | 80 → 443 | NGINX proxy para Node `127.0.0.1:3443` |
 | Mídia WebRTC direta | UDP 40000–40100 | Não passa por proxy HTTP; `PUBLIC_ANNOUNCED_IP` no Node |
-| TURN relay | TURNS **443** TCP | `TURN_URLS=turns:cgrafsysvm.camara.leg.br:443?transport=tcp`; eturnal interno **5349** + demux NGINX (ver `sharescreen-turns-443-stream.inc`) |
+| TURN relay | TURNS **443** TCP | Fase 2: `turns:turn.cgrafsysvm.camara.leg.br:443?transport=tcp`; demux SNI → eturnal **5349** |
 
 Sem TURN ativo ou sem demux na 443, o convidado externo conecta (sinalização) mas a mídia fica em "Conectando...". A LAN interna não é afetada.
 

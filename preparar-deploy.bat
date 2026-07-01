@@ -46,8 +46,10 @@ xcopy /E /I /Q /Y "scripts" "pacote-servidor\scripts\" >nul
 xcopy /E /I /Q /Y "turn" "pacote-servidor\turn\" >nul
 xcopy /E /I /Q /Y "node_modules" "pacote-servidor\node_modules\" >nul
 copy /Y "src\shared\recording-filename.js" "pacote-servidor\src\shared\" >nul
+copy /Y "src\shared\http-signaling-wire.js" "pacote-servidor\src\shared\" >nul
 copy /Y "package.json" "pacote-servidor\" >nul
 copy /Y "start-producao.bat" "pacote-servidor\" >nul
+copy /Y "turn-credentials.local.bat.example" "pacote-servidor\" >nul
 copy /Y "verificar-producao.bat" "pacote-servidor\" >nul
 copy /Y "fix-data-permissoes.bat" "pacote-servidor\" >nul
 if exist "LEIA-ME-SERVIDOR.txt" copy /Y "LEIA-ME-SERVIDOR.txt" "pacote-servidor\" >nul

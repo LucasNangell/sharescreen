@@ -1,5 +1,5 @@
 # ShareScreen — eturnal STUN/TURN (referencia para C:\eturnal\etc\eturnal.yml)
-# Convidados externos: TURNS:443 via demux NGINX -> eturnal:5349
+# Convidados externos: TURNS:443 via turn.cgrafsysvm.camara.leg.br (Fase 2; demux NGINX -> eturnal:5349)
 # LAN: WebRTC direto; TURN e fallback opcional (3478 interno)
 
 eturnal:
@@ -22,8 +22,8 @@ eturnal:
       port: 5349
       transport: tls
 
-  tls_crt_file: "C:/nginx/conf/ssl/cgrafsysvm-leg-chain.crt"
-  tls_key_file: "C:/nginx/conf/ssl/cgrafsysvm-leg.key"
+  tls_crt_file: "C:/Program Files/eturnal/etc/ssl/cgrafsysvm-leg-chain.crt"
+  tls_key_file: "C:/Program Files/eturnal/etc/ssl/cgrafsysvm-leg.key"
 
   realm: "cgrafsysvm.camara.leg.br"
 

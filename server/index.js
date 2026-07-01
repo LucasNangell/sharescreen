@@ -7,13 +7,15 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import { initMediasoup, closeMediasoup, getAnnouncedIp, getPublicAnnouncedIp, getIceListenIps } from './mediasoup-manager.js';
 import { attachSignaling } from './signaling.js';
+import { attachHttpSignaling } from './signaling-http.js';
 import { logger } from './logger.js';
 import { getLanIPv4 } from './network.js';
-import config, { getServerHost, getVideoQualityForClients } from '../config/default.js';
+import config, { getServerHost } from '../config/default.js';
+import { getVideoQualityForClients, getTurnSources, initTurnServers } from './turn-servers.js';
 import { listAgentClients } from './agent-bridge.js';
 import { saveRecording } from './recording-save.js';
 import { saveChunk, assembleUpload, pruneOldUploads } from './recording-chunk-store.js';
-import { validateRecordingUpload, createViewerLinkToken } from './auth-dev.js';
+import { validateRecordingUpload, createViewerLinkToken, isPublicMeetOpen } from './auth-dev.js';
 import {
   lookupClientByIp,
   registerClientByName,
@@ -55,6 +57,21 @@ function applyNoStoreHeaders(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+}
+
+function resolveSignalingTransport(req) {
+  const publicUrl = (config.publicUrl || '').trim();
+  if (!publicUrl) return 'ws';
+  try {
+    const publicHost = new URL(publicUrl).hostname.toLowerCase();
+    const reqHost = (req.get('x-forwarded-host') || req.get('host') || '')
+      .split(':')[0]
+      .toLowerCase();
+    if (reqHost === publicHost) return 'http';
+  } catch {
+    /* ignore */
+  }
+  return 'ws';
 }
 
 function staticAssetHeaders(res, filePath) {
@@ -290,6 +307,7 @@ function createApp() {
   });
 
   app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
   app.get('/api/registro-cliente', (req, res) => {
     applyNoStoreHeaders(res);
@@ -398,8 +416,9 @@ function createApp() {
     });
   });
 
-  app.get('/api/info', (_req, res) => {
+  app.get('/api/info', (req, res) => {
     applyNoStoreHeaders(res);
+    const turnEnabled = getVideoQualityForClients().turnEnabled;
     res.json({
       lanIp: getAnnouncedIp(),
       publicAnnouncedIp: getPublicAnnouncedIp(),
@@ -410,9 +429,13 @@ function createApp() {
       roomPinRequired: !!(config.roomPin || '').trim(),
       dev: !!config.dev,
       publicUrl: config.publicUrl || null,
+      publicMeetOpen: isPublicMeetOpen(),
       publicClientPath: (config.publicUrl || '').trim() ? '/meet/' : '/client/',
       buildId: appBuildId,
-      turnEnabled: getVideoQualityForClients().turnEnabled
+      turnEnabled,
+      turnSources: getTurnSources(),
+      signalingTransport: resolveSignalingTransport(req),
+      viewerForceTurnRelay: false
     });
   });
 
@@ -426,7 +449,8 @@ function createApp() {
       res.status(400).json({ ok: false, erro: 'Informe o nome do convidado (máx. 64 caracteres)' });
       return;
     }
-    const { token, expiresInMs } = createViewerLinkToken();
+    const publicMeetOpen = isPublicMeetOpen();
+    let expiresInMs = 0;
     const configuredPublic = (config.publicUrl || '').trim().replace(/\/$/, '');
     let baseUrl = configuredPublic;
     if (!baseUrl) {
@@ -435,9 +459,14 @@ function createApp() {
       baseUrl = `${proto}://${host}`;
     }
     const clientPath = configuredPublic ? '/meet/' : '/client/';
-    const params = new URLSearchParams({ token, nome });
+    const params = new URLSearchParams({ nome });
+    if (!publicMeetOpen) {
+      const created = createViewerLinkToken();
+      params.set('token', created.token);
+      expiresInMs = created.expiresInMs;
+    }
     const url = `${baseUrl}${clientPath}?${params.toString()}`;
-    res.json({ ok: true, url, expiresInMs, nome });
+    res.json({ ok: true, url, expiresInMs, nome, publicMeetOpen });
   });
 
   app.post('/api/browse-dir', (req, res) => {
@@ -567,6 +596,8 @@ function createApp() {
     res.redirect('/host');
   });
 
+  attachHttpSignaling(app);
+
   return app;
 }
 
@@ -590,6 +621,7 @@ async function main() {
     data: { clientCount: listAllClients().length, dataWritable: dataWritable.ok }
   });
   await initMediasoup();
+  initTurnServers();
   logger.info('Debug session log (servidor + clientTrace)', { path: getAgentDebugLogPath() });
 
   const app = createApp();
