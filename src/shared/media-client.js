@@ -50,6 +50,8 @@ export class MediaClient {
     this._producing = false;
     this._publishedMicMuted = false;
     this._mediaOps = Promise.resolve();
+    this._videoMediaOps = Promise.resolve();
+    this._audioMediaOps = Promise.resolve();
   }
 
   _audioProducer(source) {
@@ -104,6 +106,18 @@ export class MediaClient {
   _runMediaOp(fn) {
     const task = this._mediaOps.then(() => fn());
     this._mediaOps = task.catch(() => {});
+    return task;
+  }
+
+  _runVideoMediaOp(fn) {
+    const task = this._videoMediaOps.then(() => fn());
+    this._videoMediaOps = task.catch(() => {});
+    return task;
+  }
+
+  _runAudioMediaOp(fn) {
+    const task = this._audioMediaOps.then(() => fn());
+    this._audioMediaOps = task.catch(() => {});
     return task;
   }
 
@@ -784,7 +798,7 @@ export class MediaClient {
   }
 
   async closeActiveVideoConsumer({ videoEl = null, notifyServer = true } = {}) {
-    return this._runMediaOp(async () => {
+    return this._runVideoMediaOp(async () => {
       const currentVideo = this.remoteConsumers.video;
       if (!currentVideo || currentVideo.closed) {
         this.remoteConsumers.video = null;
@@ -827,7 +841,7 @@ export class MediaClient {
   }
 
   async closeAuxiliaryAudio(peerId, source = null) {
-    return this._runMediaOp(async () => {
+    return this._runAudioMediaOp(async () => {
       const closeEntry = (key, entry) => {
         if (!entry || entry.consumer.closed) return;
         const { source: entrySource } = parseAudioChannelKey(key);
@@ -869,7 +883,7 @@ export class MediaClient {
   }
 
   async consumeAuxiliaryAudio(peerId, producerId, source = 'microphone') {
-    return this._runMediaOp(async () => {
+    return this._runAudioMediaOp(async () => {
       const channelKey = `${String(peerId)}:${normalizeAudioSource(source, 'microphone')}`;
       const existing = this.auxAudioConsumers.get(channelKey);
       if (
@@ -914,7 +928,7 @@ export class MediaClient {
     producerIds,
     { videoEl = null, audioEl = null, ownProducerIds = null } = {}
   ) {
-    return this._runMediaOp(async () => {
+    return this._runVideoMediaOp(async () => {
       if (producerIds?.video && videoEl) {
         const ownVideoIds = new Set(
           [ownProducerIds?.video, this.producers.video?.id].filter(Boolean)

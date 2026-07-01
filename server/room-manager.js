@@ -543,6 +543,7 @@ export class RoomManager {
     });
     logger.info('Peer conectado', { peerId: peer.id, role, name: peer.displayName });
     this.notifyHostState();
+    this.broadcastAudioSources();
     return peer;
   }
 

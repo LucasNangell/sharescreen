@@ -1493,10 +1493,10 @@ function handleMessage(msg) {
   }
   if (msg.type === 'consumerFechado') {
     const consumerId = msg.payload?.consumerId;
+    const wasVideoConsumer = media?.remoteConsumers?.video?.id === consumerId;
     if (consumerId) {
       hostAudioMonitor?.removeByConsumerId(consumerId).catch(() => {});
     }
-    const wasVideoConsumer = media?.remoteConsumers?.video?.id === consumerId;
     if (wasVideoConsumer) {
       media.remoteConsumers.video = null;
       media.currentActiveVideoProducerId = null;
@@ -1511,10 +1511,10 @@ function handleMessage(msg) {
         updatePreviewOverlays();
         setStatus('Nenhuma transmissao ativa');
       }
+      syncHostAudioMonitor(buildHostAudioSources()).catch((e) =>
+        errors.handle(e, 'audio-monitor')
+      );
     }
-    syncHostAudioMonitor(buildHostAudioSources()).catch((e) =>
-      errors.handle(e, 'audio-monitor')
-    );
   }
   if (msg.type === 'transmissaoAtiva') {
     const tx = normalizeTransmission(msg.payload);

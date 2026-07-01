@@ -19,7 +19,7 @@ import {
 } from '../shared/quality-manager.js';
 import { showToast } from '../shared/toast.js';
 import { HostAudioMonitor } from '../shared/host-audio-monitor.js';
-import { normalizeRemoteAudioSources, audioTraceSync } from '../shared/audio-sources.js';
+import { normalizeRemoteAudioSources, audioTraceSync, audioTrace } from '../shared/audio-sources.js';
 import { isSelectableSource, sortDisplaySources } from '../shared/display-sources.js';
 import { buildDisplaySourceCard } from '../shared/source-cards.js';
 import { initCoHost } from '../host/app.js';
@@ -112,6 +112,8 @@ let clientMicAutoplayNeeded = false;
 let syncClientAudioPromise = null;
 let syncClientAudioPending = false;
 let lastAudioSources = [];
+let hostPeerId = null;
+let audioHealthTimer = null;
 let deferScreenShareOnJoin = false;
 let pendingPostPublishRemoteWork = null;
 let clientDisplayStream = null;
@@ -372,17 +374,91 @@ function onRemoteAudioAutoplayBlocked() {
   updateClientMicUi();
 }
 
+
+
+function expectedHostSourceCount() {
+  if (!hostPeerId) return 0;
+  return normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId }).filter(
+    (s) => String(s.peerId) === String(hostPeerId)
+  ).length;
+}
+
+function applyHostPeerFromSnapshot(parsed = {}) {
+  const nextHostId = parsed.host?.id || null;
+  if (nextHostId) {
+    hostPeerId = String(nextHostId);
+    roomAudioMonitor?.setPinnedPeerIds?.([hostPeerId]);
+  }
+}
+
+async function repairHostAudioIfNeeded() {
+  if (!hostPeerId || !media || !sessionReady) return;
+  const monitor = ensureClientAudioMonitor();
+  if (!monitor) return;
+
+  const expected = expectedHostSourceCount();
+  if (!expected) return;
+
+  const active = monitor.countLiveChannelsForPeer?.(hostPeerId) ?? 0;
+  if (active >= expected) return;
+
+  monitor.setPinnedPeerIds([hostPeerId]);
+  audioTrace('audio-health', {
+    event: 'repair-host',
+    hostPeerId: hostPeerId.slice(0, 8),
+    expected,
+    active
+  });
+
+  const backoffs = [0, 400, 800, 1600];
+  for (const delay of backoffs) {
+    if (delay) await new Promise((r) => setTimeout(r, delay));
+    await monitor.syncPeerSources(hostPeerId, lastAudioSources);
+    if ((monitor.countLiveChannelsForPeer?.(hostPeerId) ?? 0) >= expected) break;
+  }
+
+  monitor.connectOutput(els.audio);
+  await monitor.resume();
+  try {
+    await els.audio?.play();
+  } catch (_) {
+    onRemoteAudioAutoplayBlocked();
+  }
+}
+
+function startAudioHealthWatchdog() {
+  stopAudioHealthWatchdog();
+  audioHealthTimer = setInterval(() => {
+    if (!sessionReady || !hostPeerId) return;
+    const expected = expectedHostSourceCount();
+    if (!expected) return;
+    const monitor = roomAudioMonitor;
+    const active = monitor?.countLiveChannelsForPeer?.(hostPeerId) ?? 0;
+    if (active < expected) {
+      repairHostAudioIfNeeded().catch(() => {});
+    }
+  }, 5000);
+}
+
+function stopAudioHealthWatchdog() {
+  if (!audioHealthTimer) return;
+  clearInterval(audioHealthTimer);
+  audioHealthTimer = null;
+}
+
 function ensureClientAudioMonitor() {
   if (!media) return null;
   if (!roomAudioMonitor) {
     roomAudioMonitor = new HostAudioMonitor(media, {
       excludePeerId: peerId,
+      pinnedPeerIds: hostPeerId ? [hostPeerId] : [],
       onAutoplayBlocked: onRemoteAudioAutoplayBlocked
     });
     roomAudioMonitor.connectOutput(els.audio);
     roomAudioMonitor.setManualMuted(mutedClients);
   } else if (peerId) {
     roomAudioMonitor.excludePeerId = String(peerId);
+    if (hostPeerId) roomAudioMonitor.setPinnedPeerIds([hostPeerId]);
   }
   return roomAudioMonitor;
 }
@@ -429,6 +505,7 @@ async function syncClientAudioMonitor(sources) {
       } else if (list.length) {
         audioTraceSync('sync-falhou', list, { channels: 0, role: 'client' });
       }
+      await repairHostAudioIfNeeded();
     } while (syncClientAudioPending);
   })().finally(() => {
     syncClientAudioPromise = null;
@@ -470,6 +547,7 @@ async function ensureClientMicTrack(deviceId = '') {
 }
 
 async function teardownClientSession({ keepDisplayStream = false, keepMicTrack = false } = {}) {
+  stopAudioHealthWatchdog();
   await roomAudioMonitor?.dispose();
   roomAudioMonitor = null;
   await media?.dispose({
@@ -956,6 +1034,7 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   if (!snapshot) return;
 
   const parsed = parseRoomSnapshot(snapshot);
+  applyHostPeerFromSnapshot(parsed);
 
   if (parsed.mutedPeerIds) {
     mutedClients.clear();
@@ -1135,6 +1214,7 @@ async function executeJoinAndStart() {
   let deferredShare = false;
   try {
     sessionReady = false;
+    stopAudioHealthWatchdog();
     hideErro();
 
     const entrouPromise = signaling.onceType('entrou');
@@ -1211,6 +1291,7 @@ async function executeJoinAndStart() {
 
     sessionStarted = true;
     sessionReady = true;
+    startAudioHealthWatchdog();
     setBadge('Online', 'online');
 
     if (
@@ -1232,6 +1313,7 @@ async function rejoinSession() {
   if (joinInFlight || clientJoinInProgress || bootstrapping) return;
   joinInFlight = true;
   sessionReady = false;
+  stopAudioHealthWatchdog();
   txSync.reset();
   try {
   const prefs = getCapturePrefsFromUi();
@@ -1453,20 +1535,22 @@ async function handleServerMessage(msg) {
   }
   if (msg.type === 'consumerFechado') {
     const consumerId = msg.payload?.consumerId;
+    const wasVideoConsumer = media?.remoteConsumers?.video?.id === consumerId;
     if (consumerId) {
       await roomAudioMonitor?.removeByConsumerId(consumerId);
     }
-    const wasVideoConsumer = media?.remoteConsumers?.video?.id === consumerId;
     if (wasVideoConsumer) {
       debugClientLog('H3', '[CLIENT_CONSUME] consumer de video fechado', {
         consumerId: consumerId?.slice(0, 8) || null
       });
       setStatus('Stream remota encerrada');
+      await txSync.onConsumerClosed(consumerId);
+      await syncClientAudioMonitor(lastAudioSources).catch((e) =>
+        errors.handle(e, 'audio-sync')
+      );
+    } else {
+      await repairHostAudioIfNeeded();
     }
-    await txSync.onConsumerClosed(consumerId);
-    await syncClientAudioMonitor(lastAudioSources).catch((e) =>
-      errors.handle(e, 'audio-sync')
-    );
     return;
   }
   if (msg.type === 'qualidadeAtualizada') {

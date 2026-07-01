@@ -33,8 +33,14 @@ function collectMonitorAudioTracks(hostAudioMonitor, mutedClients, restrictToPee
   const muted = new Set([...(mutedClients || [])].map(String));
   const peerFilter = restrictToPeerId ? String(restrictToPeerId) : null;
 
+  const mixedTrack = liveAudioTrack(hostAudioMonitor.getMixedOutputTrack?.());
+  if (mixedTrack && hostAudioMonitor.allChannelsRoutedToDest) {
+    addTrackOnce(sources, mixedTrack);
+    return sources;
+  }
+
   if (!peerFilter) {
-    addTrackOnce(sources, hostAudioMonitor.getMixedOutputTrack?.());
+    addTrackOnce(sources, mixedTrack);
   }
 
   for (const ch of hostAudioMonitor.channels?.values() || []) {

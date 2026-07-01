@@ -1,5 +1,5 @@
 /**
- * Áudio remoto: reprodução direta no <audio> + VU por track (MediaStreamTrackProcessor).
+ * Áudio remoto: mix único via Web Audio no <audio> + VU por track (MediaStreamTrackProcessor).
  */
 
 import { startTrackLevelMeter } from './audio-level-meter.js';
@@ -88,6 +88,26 @@ export class HostAudioMonitor {
     this.filterPrefs = new Map();
     this.stream = new MediaStream();
     this.peerNames = new Map();
+    this.pinnedPeerIds = new Set(
+      [...(options.pinnedPeerIds || [])].map((id) => String(id))
+    );
+    this.allChannelsRoutedToDest = false;
+  }
+
+  setPinnedPeerIds(peerIds = []) {
+    this.pinnedPeerIds = new Set([...(peerIds || [])].map((id) => String(id)));
+  }
+
+  countLiveChannelsForPeer(peerId) {
+    if (!peerId) return 0;
+    const key = String(peerId);
+    let count = 0;
+    for (const ch of this.channels.values()) {
+      if (String(ch.peerId) !== key) continue;
+      const track = ch.consumer?.track;
+      if (track?.readyState === 'live' && !ch.consumer?.closed) count += 1;
+    }
+    return count;
   }
 
   _log(event, data = {}) {
@@ -176,36 +196,47 @@ export class HostAudioMonitor {
   }
 
   _rebuildAudioRoutes() {
-    const tracksToPlay = [];
-    const directTracks = [];
-    let hasDsp = false;
-
+    const liveChannels = [];
     for (const ch of this.channels.values()) {
       const track = ch.consumer?.track;
       if (!track || track.readyState !== 'live') continue;
-
-      if (this._hasAnyFilter(ch.peerId)) {
-        hasDsp = true;
-        this._setupChannelDsp(ch, track);
-      } else {
-        directTracks.push(track);
-      }
+      liveChannels.push({ ch, track });
     }
 
-    if (hasDsp) {
-      this._ensureAudioContext();
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().catch(() => {});
+    if (!liveChannels.length) {
+      this.allChannelsRoutedToDest = false;
+      for (const t of [...this.stream.getAudioTracks()]) {
+        this.stream.removeTrack(t);
       }
-      if (this.dest && this.ctx?.state !== 'suspended') {
-        const dspTracks = this.dest.stream.getAudioTracks();
-        if (dspTracks.length > 0) {
-          tracksToPlay.push(dspTracks[0]);
+      return { tracksToPlay: [], mixedTrack: null };
+    }
+
+    this._ensureAudioContext();
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    for (const { ch, track } of liveChannels) {
+      const wantsDsp = this._hasAnyFilter(ch.peerId);
+      if (wantsDsp) {
+        if (!ch.highpassNode) {
+          this._clearChannelDsp(ch);
+          this._setupChannelDsp(ch, track);
+        }
+      } else {
+        if (ch.highpassNode) {
+          this._clearChannelDsp(ch);
+        }
+        if (!ch.sourceNode) {
+          this._setupChannelPassthrough(ch, track);
         }
       }
+      this._applyChannelFilters(ch);
     }
 
-    tracksToPlay.push(...directTracks);
+    this.allChannelsRoutedToDest = !!(this.ctx && this.dest);
+    const mixedTrack = this.dest?.stream?.getAudioTracks?.()[0] || null;
+    const tracksToPlay = mixedTrack?.readyState === 'live' ? [mixedTrack] : [];
 
     const currentTracks = this.stream.getAudioTracks();
     for (const t of currentTracks) {
@@ -219,7 +250,7 @@ export class HostAudioMonitor {
       }
     }
 
-    return { tracksToPlay, directTracks, hasDsp };
+    return { tracksToPlay, mixedTrack };
   }
 
   _refreshDirectOutput() {
@@ -439,6 +470,32 @@ export class HostAudioMonitor {
     }
   }
 
+  _setupChannelPassthrough(ch, track) {
+    if (ch.sourceNode) return;
+
+    this._ensureAudioContext();
+    if (!this.ctx || !this.dest) return;
+
+    try {
+      const stream = new MediaStream([track]);
+      ch.stream = stream;
+      ch.sourceNode = this.ctx.createMediaStreamSource(stream);
+
+      const dummyEl = document.createElement('audio');
+      dummyEl.muted = true;
+      dummyEl.srcObject = stream;
+      dummyEl.play().catch(() => {});
+      ch.dummyEl = dummyEl;
+
+      ch.gainNode = this.ctx.createGain();
+      ch.gainNode.gain.value = this._isChannelMuted(ch.peerId) ? 0 : 1;
+      ch.sourceNode.connect(ch.gainNode);
+      ch.gainNode.connect(this.dest);
+    } catch (err) {
+      console.warn('[HostAudioMonitor] Erro ao configurar passthrough do canal:', err);
+    }
+  }
+
   _applyChannelFilters(ch) {
     if (!this.ctx) return;
     const prefs = this.getFilterPrefs(ch.peerId);
@@ -446,8 +503,10 @@ export class HostAudioMonitor {
     if (ch.gainNode) {
       if (this._isChannelMuted(ch.peerId)) {
         ch.gainNode.gain.value = 0;
-      } else {
+      } else if (this._hasAnyFilter(ch.peerId)) {
         ch.gainNode.gain.value = prefs.gain !== undefined ? prefs.gain : 1.0;
+      } else {
+        ch.gainNode.gain.value = 1.0;
       }
     }
 
@@ -547,10 +606,6 @@ export class HostAudioMonitor {
       wanted.set(channelKey, entry);
     }
 
-    for (const channelKey of [...this.channels.keys()]) {
-      if (!wanted.has(channelKey)) await this._removeChannel(channelKey);
-    }
-
     for (const [channelKey, entry] of wanted) {
       const ch = this.channels.get(channelKey);
       if (
@@ -564,9 +619,55 @@ export class HostAudioMonitor {
       await this._addChannel(channelKey, entry.peerId, entry.producerId, entry.source);
     }
 
+    const toRemove = [];
+    for (const channelKey of [...this.channels.keys()]) {
+      if (wanted.has(channelKey)) continue;
+      const ch = this.channels.get(channelKey);
+      const isPinned =
+        ch?.peerId && this.pinnedPeerIds.has(String(ch.peerId));
+      if (
+        isPinned &&
+        ch?.consumer &&
+        !ch.consumer.closed &&
+        ch.consumer.track?.readyState === 'live'
+      ) {
+        continue;
+      }
+      toRemove.push(channelKey);
+    }
+    for (const channelKey of toRemove) {
+      await this._removeChannel(channelKey);
+    }
+
     if (this.channels.size) this._startLevelsLoop();
     else this._stopLevelsLoop();
 
+    this._refreshDirectOutput();
+    await this._tryPlayOutput();
+  }
+
+  async syncPeerSources(peerId, sources) {
+    if (!this.media || !peerId) return;
+
+    const list = normalizeRemoteAudioSources(sources, {
+      excludePeerId: this.excludePeerId
+    }).filter((entry) => String(entry.peerId) === String(peerId));
+
+    for (const entry of list) {
+      const channelKey = audioChannelKey(entry.peerId, entry.source);
+      const ch = this.channels.get(channelKey);
+      if (
+        ch &&
+        ch.producerId === entry.producerId &&
+        ch.consumer &&
+        !ch.consumer.closed
+      ) {
+        continue;
+      }
+      await this._addChannel(channelKey, entry.peerId, entry.producerId, entry.source);
+    }
+
+    if (this.channels.size) this._startLevelsLoop();
     this._refreshDirectOutput();
     await this._tryPlayOutput();
   }
