@@ -72,6 +72,13 @@ function getDb() {
         chroma_tolerance INTEGER NOT NULL DEFAULT 40,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS audio_filter_presets (
+        subject_kind TEXT NOT NULL,
+        subject_name TEXT NOT NULL COLLATE NOCASE,
+        prefs_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (subject_kind, subject_name)
+      );
     `);
     migrateClientSchema(db);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_clients_computer ON clients(computer_name)`);
@@ -205,6 +212,7 @@ export function registerClientByName(name, ip, computerName = '') {
 
   const byIp = lookupClientByIp(normalizedIp);
   if (byIp) {
+    renameAudioFilterPreset('client', byIp.name, trimmed);
     const writeResult = runDbWrite('registerClientByName:update-by-ip', () => {
       getDb()
         .prepare(
@@ -333,4 +341,91 @@ export function saveLowerThird(displayName, buffer, meta = {}) {
 
   logger.info('Lower Third salvo', { clientName: trimmed, filename, width, height });
   return { ok: true, lowerThird: getLowerThirdForDisplayName(trimmed) };
+}
+
+const AUDIO_FILTER_KINDS = new Set(['client', 'host']);
+
+function normalizeAudioFilterKind(kind) {
+  const k = String(kind || '').trim().toLowerCase();
+  return AUDIO_FILTER_KINDS.has(k) ? k : '';
+}
+
+export function getAudioFilterPreset(kind, name) {
+  const subjectKind = normalizeAudioFilterKind(kind);
+  const trimmed = String(name || '').trim();
+  if (!subjectKind || !trimmed) return null;
+  const row = getDb()
+    .prepare(
+      `SELECT subject_kind, subject_name, prefs_json, updated_at
+       FROM audio_filter_presets
+       WHERE subject_kind = ? AND subject_name = ? COLLATE NOCASE`
+    )
+    .get(subjectKind, trimmed);
+  if (!row) return null;
+  try {
+    return {
+      kind: row.subject_kind,
+      name: row.subject_name,
+      prefs: JSON.parse(row.prefs_json),
+      updatedAt: row.updated_at
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveAudioFilterPreset(kind, name, prefs) {
+  const subjectKind = normalizeAudioFilterKind(kind);
+  const trimmed = String(name || '').trim();
+  if (!subjectKind || !trimmed) return { ok: false, erro: 'Tipo ou nome inválido' };
+  if (!prefs || typeof prefs !== 'object') return { ok: false, erro: 'Prefs inválidos' };
+
+  const now = Date.now();
+  const prefsJson = JSON.stringify(prefs);
+  const writeResult = runDbWrite('saveAudioFilterPreset', () => {
+    getDb()
+      .prepare(
+        `INSERT INTO audio_filter_presets (subject_kind, subject_name, prefs_json, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(subject_kind, subject_name) DO UPDATE SET
+           prefs_json = excluded.prefs_json,
+           updated_at = excluded.updated_at`
+      )
+      .run(subjectKind, trimmed, prefsJson, now);
+    return { ok: true };
+  });
+  if (writeResult?.readonly) return { ok: false, erro: writeResult.erro };
+  return { ok: true, preset: getAudioFilterPreset(subjectKind, trimmed) };
+}
+
+function deleteAudioFilterPreset(kind, name) {
+  const subjectKind = normalizeAudioFilterKind(kind);
+  const trimmed = String(name || '').trim();
+  if (!subjectKind || !trimmed) return;
+  runDbWrite('deleteAudioFilterPreset', () => {
+    getDb()
+      .prepare(
+        `DELETE FROM audio_filter_presets
+         WHERE subject_kind = ? AND subject_name = ? COLLATE NOCASE`
+      )
+      .run(subjectKind, trimmed);
+    return { ok: true };
+  });
+}
+
+export function renameAudioFilterPreset(kind, oldName, newName) {
+  const subjectKind = normalizeAudioFilterKind(kind);
+  const oldTrimmed = String(oldName || '').trim();
+  const newTrimmed = String(newName || '').trim();
+  if (!subjectKind || !oldTrimmed || !newTrimmed) return { ok: true, skipped: true };
+  if (oldTrimmed.toLowerCase() === newTrimmed.toLowerCase()) return { ok: true, skipped: true };
+
+  const existing = getAudioFilterPreset(subjectKind, oldTrimmed);
+  if (!existing?.prefs) return { ok: true, skipped: true };
+
+  const saved = saveAudioFilterPreset(subjectKind, newTrimmed, existing.prefs);
+  if (!saved.ok) return saved;
+  deleteAudioFilterPreset(subjectKind, oldTrimmed);
+  logger.info('Preset de áudio renomeado', { kind: subjectKind, from: oldTrimmed, to: newTrimmed });
+  return { ok: true };
 }

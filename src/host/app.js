@@ -11,10 +11,11 @@ import { mergeServerQuality, loadPresetId, savePresetId, getPreset, bitrateMbps 
 import { showToast as originalShowToast } from '../shared/toast.js';
 import { collectWebRtcStats } from '../shared/stats-collector.js';
 import { formatRecordingFilename, isValidRecordingFilename } from '../shared/recording-filename.js';
-import { HostAudioMonitor, savePresetToLocalStorage } from '../shared/host-audio-monitor.js';
+import { HostAudioMonitor, savePresetToLocalStorage, renamePresetInLocalStorage } from '../shared/host-audio-monitor.js';
 import { normalizeRemoteAudioSources, audioSourcesSignature, audioTraceSync } from '../shared/audio-sources.js';
 import {
   CLIENT_MIC_PUBLISH_DEFAULTS,
+  HOST_MIC_PUBLISH_DEFAULTS,
   hasActiveMicrophoneFilter,
   normalizeMicrophoneFilterPrefs
 } from '../shared/mic-dsp.js';
@@ -32,6 +33,7 @@ const STORAGE_RECORDINGS_DIR = 'sharescreen_recordings_dir';
 const STORAGE_RECORDING_FILENAME_PATTERN = 'sharescreen_recording_filename_pattern';
 const STORAGE_REC_EXCLUDE_OWN_SYSTEM = 'sharescreen_rec_exclude_own_system';
 const STORAGE_REC_SELECTED_PEER_ONLY = 'sharescreen_rec_selected_peer_only';
+const STORAGE_REC_DEFAULT_AUDIO_CLIENT = 'sharescreen_rec_default_audio_client';
 
 function showToast(message, type, durationMs) {
   const lower = String(message || '').toLowerCase();
@@ -94,6 +96,8 @@ const els = {
   recSelectedPeerOnly: $('rec-selected-peer-only'),
   btnRecMeetBridgePreset: $('btn-rec-meet-bridge-preset'),
   recMeetBridgeHint: $('rec-meet-bridge-hint'),
+  recDefaultAudioHint: $('rec-default-audio-hint'),
+  btnRecClearDefaultAudio: $('btn-rec-clear-default-audio'),
   controlesAudio: $('controles-audio'),
   volumeSlider: $('volume-slider'),
   btnMute: $('btn-mute-audio'),
@@ -157,8 +161,118 @@ let lastAppliedSnapshotKey = '';
 let lastAppliedActiveVideoKey = '';
 let lastActiveTransmission = null;
 let pendingHostAudioSync = null;
+const peerDisplayNameById = new Map();
 
 const HOST_MIC_GAIN_STORAGE_KEY = 'sharescreen_host_mic_gain';
+
+async function fetchAudioFilterPresetApi(kind, name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return null;
+  try {
+    const res = await fetch(
+      `/api/audio-filter/${encodeURIComponent(kind)}/${encodeURIComponent(trimmed)}`
+    );
+    const data = await res.json();
+    return data?.preset || null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveAudioFilterPresetApi(kind, name, prefs) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed || !hostToken) return { ok: false };
+  try {
+    const res = await fetch('/api/audio-filter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(hostToken ? { 'X-Host-Token': hostToken } : {})
+      },
+      body: JSON.stringify({ kind, name: trimmed, prefs: normalizeMicrophoneFilterPrefs(prefs) })
+    });
+    return await res.json();
+  } catch {
+    return { ok: false };
+  }
+}
+
+function getDefaultRecordingAudioClientName() {
+  return String(localStorage.getItem(STORAGE_REC_DEFAULT_AUDIO_CLIENT) || '').trim();
+}
+
+function setDefaultRecordingAudioClientName(name) {
+  const trimmed = String(name || '').trim();
+  if (trimmed) {
+    localStorage.setItem(STORAGE_REC_DEFAULT_AUDIO_CLIENT, trimmed);
+  } else {
+    localStorage.removeItem(STORAGE_REC_DEFAULT_AUDIO_CLIENT);
+  }
+  syncRecordingDefaultAudioClientUi();
+}
+
+function syncRecordingDefaultAudioClientUi() {
+  const name = getDefaultRecordingAudioClientName();
+  if (els.recDefaultAudioHint) {
+    els.recDefaultAudioHint.textContent = name
+      ? `Áudio padrão da gravação: ${name}`
+      : 'Áudio padrão da gravação: nenhum';
+  }
+  if (els.btnRecClearDefaultAudio) {
+    els.btnRecClearDefaultAudio.hidden = !name;
+  }
+}
+
+function resolveRecordingAudioPeer(clients, displayName) {
+  const wanted = String(displayName || '').trim().toLowerCase();
+  if (!wanted) return null;
+  const withAudio = (clients || []).find((c) => {
+    if (c.ehHost || String(c.id) === String(hostPeerId)) return false;
+    if (String(c.displayName || '').trim().toLowerCase() !== wanted) return false;
+    return !!(
+      c.hasAudio ||
+      c.producerIds?.microphone ||
+      c.producerIds?.system ||
+      c.producerIds?.audio
+    );
+  });
+  if (withAudio) return withAudio;
+  return (clients || []).find((c) => {
+    if (c.ehHost) return false;
+    return String(c.displayName || '').trim().toLowerCase() === wanted;
+  }) || null;
+}
+
+function trackClientDisplayNameChanges(clients) {
+  for (const c of clients || []) {
+    if (!c?.id || c.ehHost) continue;
+    const id = String(c.id);
+    const newName = String(c.displayName || '').trim();
+    if (!newName) continue;
+    const oldName = peerDisplayNameById.get(id);
+    if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+      renamePresetInLocalStorage(oldName, newName);
+      const defaultRec = getDefaultRecordingAudioClientName();
+      if (defaultRec && defaultRec.toLowerCase() === oldName.toLowerCase()) {
+        setDefaultRecordingAudioClientName(newName);
+      }
+    }
+    peerDisplayNameById.set(id, newName);
+  }
+}
+
+function toggleDefaultRecordingAudioClient(client) {
+  if (!client?.displayName) return;
+  const current = getDefaultRecordingAudioClientName();
+  if (current && current.toLowerCase() === client.displayName.toLowerCase()) {
+    setDefaultRecordingAudioClientName('');
+    showToast('Áudio padrão da gravação removido', 'info');
+  } else {
+    setDefaultRecordingAudioClientName(client.displayName);
+    showToast(`${client.displayName} definido como áudio padrão da gravação`, 'success');
+  }
+  renderLista();
+}
 
 function loadHostMicPublishGain(fallback = 1.4) {
   try {
@@ -190,12 +304,47 @@ async function applyHostMicPublishGain(value) {
   saveHostMicPublishGain(gain);
   syncHostMicGainUi(gain);
   if (!media?.applyHostMicPublishChain) return;
-  await media.setMicrophoneFilterPrefs({
+  const prefs = normalizeMicrophoneFilterPrefs({
+    ...HOST_MIC_PUBLISH_DEFAULTS,
     gain,
     compressor: true,
     peaking: true,
     peakingGain: 2
   });
+  await media.setMicrophoneFilterPrefs(prefs);
+  if (hostDisplayName) {
+    saveAudioFiltersPresetDebounced(hostDisplayName, prefs, 'host');
+  }
+}
+
+async function loadHostMicPresetFromStorage() {
+  if (!media?.applyHostMicPublishChain) {
+    syncHostMicGainUi(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
+    return;
+  }
+  let prefs = null;
+  if (hostDisplayName) {
+    const apiPreset = await fetchAudioFilterPresetApi('host', hostDisplayName);
+    if (apiPreset?.prefs) {
+      prefs = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
+    }
+  }
+  if (!prefs) {
+    const gain = loadHostMicPublishGain(getDefaultHostMicPublishGain());
+    prefs = normalizeMicrophoneFilterPrefs({
+      ...HOST_MIC_PUBLISH_DEFAULTS,
+      gain,
+      compressor: true,
+      peaking: true,
+      peakingGain: 2
+    });
+    if (hostDisplayName && hasActiveMicrophoneFilter(prefs)) {
+      saveAudioFilterPresetApi('host', hostDisplayName, prefs).catch(() => {});
+    }
+  }
+  if (prefs.gain != null) saveHostMicPublishGain(prefs.gain);
+  syncHostMicGainUi(prefs.gain ?? loadHostMicPublishGain());
+  await media.setMicrophoneFilterPrefs(prefs);
 }
 let localHostVuStop = null;
 let isCoHostInstance = readQueryParam('cohost') === 'true';
@@ -543,6 +692,19 @@ function buildSourceCard(c, onSelect, isTransmissionSection = false) {
       }
     },
     decorateRow: (row, source) => {
+      const defaultRecName = getDefaultRecordingAudioClientName();
+      if (
+        defaultRecName &&
+        source.displayName &&
+        defaultRecName.toLowerCase() === String(source.displayName).toLowerCase()
+      ) {
+        const badge = document.createElement('span');
+        badge.className = 'source-role-badge source-role-badge--rec-audio';
+        badge.textContent = 'áudio gravação';
+        badge.title = 'Áudio padrão da gravação';
+        const nameWrap = row.querySelector('.source-name-wrap');
+        if (nameWrap) nameWrap.append(badge);
+      }
       if (!source.hasAudio) return;
       const vuColumn = document.createElement('div');
       vuColumn.className = 'source-vu-column';
@@ -764,7 +926,7 @@ async function syncHostAudioMonitor(sources = null) {
       }
       const audioSources = buildHostAudioSources();
       await monitor.syncFromSources(audioSources);
-      syncPublishedAudioFiltersToClients(audioSources);
+      await syncPublishedAudioFiltersToClients(audioSources);
       const retryBackoffs = [800, 1600, 3200];
       let retryCycle = 0;
       while (audioSources.length && monitor.channelCount === 0 && retryCycle < retryBackoffs.length) {
@@ -1181,6 +1343,7 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   });
 
   if (!hostReady || joinInProgress) {
+    trackClientDisplayNameChanges(snapshot.clients || parsed.peers || []);
     pendingRoomSnapshot = snapshot;
     if (snapshot.clients?.length || parsed.peers?.length) {
       estado = enrichRoomSourcesState(
@@ -1200,6 +1363,7 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     return;
   }
 
+  trackClientDisplayNameChanges(snapshot.clients || parsed.peers || []);
   estado = enrichRoomSourcesState(
     {
       clients: snapshot.clients || parsed.peers || [],
@@ -1411,13 +1575,31 @@ async function getRecordingStream() {
   let mixer = null;
   try {
     const recPrefs = getRecordingAudioPrefs();
+    let restrictToPeerId = null;
+    let ownForRec = own;
+    let excludeOwnSystem = recPrefs.excludeOwnSystem;
+
+    const defaultAudioName = getDefaultRecordingAudioClientName();
+    if (defaultAudioName) {
+      const defaultPeer = resolveRecordingAudioPeer(estado.clients, defaultAudioName);
+      if (defaultPeer?.id) {
+        restrictToPeerId = defaultPeer.id;
+        ownForRec = false;
+        excludeOwnSystem = true;
+      } else {
+        showToast('Client padrao de gravacao indisponivel — usando mix normal', 'warn');
+      }
+    } else if (recPrefs.selectedPeerOnly) {
+      restrictToPeerId = selectedPeerId;
+    }
+
     mixer = await RecordingAudioMixer.build({
       hostAudioMonitor,
       media,
-      own,
+      own: ownForRec,
       mutedClients,
-      excludeOwnSystem: recPrefs.excludeOwnSystem,
-      restrictToPeerId: recPrefs.selectedPeerOnly ? selectedPeerId : null
+      excludeOwnSystem,
+      restrictToPeerId
     });
   } catch (err) {
     compositor.stop();
@@ -1674,7 +1856,7 @@ async function joinHost({ autoShare = true } = {}) {
     if (joinPrefs.microphone) {
       try {
         await media.ensureSendTransport();
-        await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
+        await applyHostMicPresetFromStorage();
         await media.publishMicrophone(joinPrefs);
         syncLocalHostVu();
       } catch (e) {
@@ -2153,6 +2335,7 @@ function setRecordingAudioPref(key, value) {
 
 function setupRecordingAudioPrefs() {
   syncRecordingAudioPrefsUi();
+  syncRecordingDefaultAudioClientUi();
 
   els.recExcludeOwnSystem?.addEventListener('change', () => {
     setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, els.recExcludeOwnSystem.checked);
@@ -2166,6 +2349,11 @@ function setupRecordingAudioPrefs() {
     if (els.recExcludeOwnSystem) els.recExcludeOwnSystem.checked = true;
     if (els.recSelectedPeerOnly) els.recSelectedPeerOnly.checked = true;
     if (els.recMeetBridgeHint) els.recMeetBridgeHint.hidden = false;
+  });
+  els.btnRecClearDefaultAudio?.addEventListener('click', () => {
+    setDefaultRecordingAudioClientName('');
+    showToast('Áudio padrão da gravação removido', 'info');
+    renderLista();
   });
 }
 
@@ -2314,6 +2502,22 @@ function openContextMenu(e, client) {
   }
   const audioBtn = $('ctx-audio');
   if (audioBtn) audioBtn.hidden = isHostCard;
+  const recAudioBtn = $('ctx-rec-audio');
+  if (recAudioBtn) {
+    recAudioBtn.hidden = isHostCard || !client.hasAudio;
+    const isDefault = !!(
+      client.displayName &&
+      getDefaultRecordingAudioClientName().toLowerCase() ===
+        String(client.displayName).toLowerCase()
+    );
+    recAudioBtn.classList.toggle('is-active', isDefault);
+    const textEl = recAudioBtn.querySelector('.ctx-text');
+    if (textEl) {
+      textEl.textContent = isDefault
+        ? 'Remover áudio padrão da gravação'
+        : 'Definir como áudio padrão da gravação';
+    }
+  }
 
   menu.style.left = `${e.clientX}px`;
   menu.style.top = `${e.clientY}px`;
@@ -2344,10 +2548,12 @@ let originalAudioFilterPrefs = null;
 let saveTimeout = null;
 const sentAudioFilterKeys = new Map();
 
-function saveAudioFiltersPresetDebounced(name, prefs) {
+function saveAudioFiltersPresetDebounced(name, prefs, kind = 'client') {
   if (saveTimeout) clearTimeout(saveTimeout);
+  const normalized = normalizeMicrophoneFilterPrefs(prefs);
   saveTimeout = setTimeout(() => {
-    savePresetToLocalStorage(name, prefs);
+    savePresetToLocalStorage(name, normalized);
+    saveAudioFilterPresetApi(kind, name, normalized).catch(() => {});
   }, 1000);
 }
 
@@ -2380,6 +2586,10 @@ function sendAudioFiltersToClient(client, prefs, { force = false } = {}) {
 }
 
 function syncPublishedAudioFiltersToClients(audioSources = []) {
+  return syncPublishedAudioFiltersToClientsAsync(audioSources);
+}
+
+async function syncPublishedAudioFiltersToClientsAsync(audioSources = []) {
   const monitor = hostAudioMonitor;
   if (!monitor) return;
   const sent = new Set();
@@ -2388,7 +2598,22 @@ function syncPublishedAudioFiltersToClients(audioSources = []) {
     const id = String(source.peerId);
     if (sent.has(id)) continue;
     sent.add(id);
-    const stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
+
+    const client = estado.clients.find((c) => String(c.id) === id);
+    const displayName =
+      client?.displayName || source.name || monitor.peerNames?.get?.(id) || '';
+
+    let stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
+    if (displayName) {
+      const apiPreset = await fetchAudioFilterPresetApi('client', displayName);
+      if (apiPreset?.prefs) {
+        stored = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
+        monitor.setFilterPrefs(id, stored);
+      } else if (hasActiveMicrophoneFilter(stored)) {
+        saveAudioFilterPresetApi('client', displayName, stored).catch(() => {});
+      }
+    }
+
     const prefs = hasActiveMicrophoneFilter(stored)
       ? stored
       : normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
@@ -2420,10 +2645,26 @@ function applyAudioFiltersFromUi() {
 
   monitor.setFilterPrefs(client.id, prefs);
   sendAudioFiltersToClient(client, prefs, { force: true });
-  saveAudioFiltersPresetDebounced(client.displayName, prefs);
+  saveAudioFiltersPresetDebounced(client.displayName, prefs, 'client');
+  saveAudioFilterPresetApi('client', client.displayName, prefs).catch(() => {});
 }
 
-function openAudioFiltersModal(client) {
+async function ensureClientAudioFilterPresetLoaded(client) {
+  if (!client?.id || !client?.displayName) return;
+  const monitor = hostAudioMonitor;
+  if (!monitor) return;
+  const apiPreset = await fetchAudioFilterPresetApi('client', client.displayName);
+  if (apiPreset?.prefs) {
+    monitor.setFilterPrefs(client.id, normalizeMicrophoneFilterPrefs(apiPreset.prefs));
+    return;
+  }
+  const stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(client.id));
+  if (hasActiveMicrophoneFilter(stored)) {
+    saveAudioFilterPresetApi('client', client.displayName, stored).catch(() => {});
+  }
+}
+
+async function openAudioFiltersModal(client) {
   if (!client) return;
   activeAudioFiltersClient = client;
   const monitor = hostAudioMonitor;
@@ -2432,6 +2673,7 @@ function openAudioFiltersModal(client) {
     return;
   }
 
+  await ensureClientAudioFilterPresetLoaded(client);
   const prefs = monitor.getFilterPrefs(client.id);
   originalAudioFilterPrefs = { ...prefs };
 
@@ -2534,6 +2776,7 @@ function closeAudioFiltersModal(revert = false) {
     monitor.setFilterPrefs(client.id, originalAudioFilterPrefs);
     sendAudioFiltersToClient(client, originalAudioFilterPrefs, { force: true });
     savePresetToLocalStorage(client.displayName, originalAudioFilterPrefs);
+    saveAudioFilterPresetApi('client', client.displayName, originalAudioFilterPrefs).catch(() => {});
   }
 
   activeAudioFiltersClient = null;
@@ -2623,6 +2866,12 @@ $('ctx-audio')?.addEventListener('click', () => {
   const client = activeContextClient;
   closeContextMenu();
   if (client) openAudioFiltersModal(client);
+});
+
+$('ctx-rec-audio')?.addEventListener('click', () => {
+  const client = activeContextClient;
+  closeContextMenu();
+  if (client) toggleDefaultRecordingAudioClient(client);
 });
 
 $('btn-audio-filters-cancel')?.addEventListener('click', () => closeAudioFiltersModal(true));

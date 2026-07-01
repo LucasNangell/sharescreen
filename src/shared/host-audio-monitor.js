@@ -34,6 +34,26 @@ export function savePresetToLocalStorage(name, prefs) {
   } catch {}
 }
 
+export function renamePresetInLocalStorage(oldName, newName) {
+  const oldTrimmed = String(oldName || '').trim();
+  const newTrimmed = String(newName || '').trim();
+  if (!oldTrimmed || !newTrimmed) return;
+  if (oldTrimmed.toLowerCase() === newTrimmed.toLowerCase()) return;
+  const prefs = loadPresetFromLocalStorage(oldTrimmed);
+  if (!prefs) return;
+  try {
+    const raw = localStorage.getItem('sharescreen_audio_presets') || '{}';
+    const presets = JSON.parse(raw);
+    for (const key of Object.keys(presets)) {
+      if (key.toLowerCase() === oldTrimmed.toLowerCase()) {
+        delete presets[key];
+      }
+    }
+    presets[newTrimmed] = prefs;
+    localStorage.setItem('sharescreen_audio_presets', JSON.stringify(presets));
+  } catch {}
+}
+
 function waitForPlayingTrack(track, timeoutMs = 8000) {
   if (!track) return Promise.resolve(null);
   const ready = () => track.readyState === 'live';

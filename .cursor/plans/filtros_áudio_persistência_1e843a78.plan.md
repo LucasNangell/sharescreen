@@ -1,6 +1,6 @@
 ---
 name: Filtros áudio persistência
-overview: Persistir presets de filtros de áudio (cliente e host) no SQLite com renomeação in-place ao mudar nome, corrigir a gravação para usar as mesmas trilhas WebRTC que os clients ouvem (sem re-aplicar DSP do monitor). Eliminador de eco fora do escopo.
+overview: Persistir presets de filtros de áudio (cliente e host) no SQLite com renomeação in-place ao mudar nome, corrigir a gravação para paridade com o áudio dos clients, e oferecer opcionalmente um client padrão de áudio para gravação (anti-eco) sem alterar áudio ao vivo nem WebRTC. Eliminador de eco fora do escopo.
 todos:
   - id: db-schema
     content: Criar tabela audio_filter_presets + funções CRUD/renomear em client-db.js
@@ -16,6 +16,9 @@ todos:
     status: pending
   - id: recording-fix
     content: Ajustar recording-audio-mixer.js para usar consumer tracks WebRTC (sem DSP do monitor)
+    status: pending
+  - id: recording-default-client
+    content: Client padrão opcional de áudio para gravação (host UI + getRecordingStream, sem tocar áudio ao vivo)
     status: pending
   - id: update-maps
     content: Atualizar DATABASE_MAP, BACKEND_MAP e FRONTEND_MAP nas seções impactadas
@@ -174,6 +177,104 @@ Reescrever `collectMonitorAudioTracks` para:
 
 ---
 
+### 6. Client padrão de áudio para gravação (opcional, anti-eco)
+
+**Objetivo**: permitir designar um client como **única fonte de áudio** na gravação (ex.: ponte Meet), evitando mix de várias faixas que gera eco/duplicação. **Sem client padrão definido → gravação segue o fluxo normal** (após a correção da seção 5).
+
+#### Infraestrutura já existente (reutilizar, não reinventar)
+
+O sistema **já possui** mecanismo parcial em [`src/host/app.js`](e:/Projetos/Trabalho/Screen%20Share/src/host/app.js):
+
+- `getRecordingAudioPrefs()` → `selectedPeerOnly`, `excludeOwnSystem` (localStorage).
+- `RecordingAudioMixer.build({ restrictToPeerId })` em [`recording-audio-mixer.js`](e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-audio-mixer.js) já filtra canais por `peerId`.
+- Checkbox **"Gravar apenas áudio da fonte selecionada"** restringe ao peer do **vídeo em gravação** (dinâmico, por sessão).
+- Preset **"Ponte externa (Meet)"** liga os dois toggles acima.
+
+A novidade é um **client padrão persistente por nome**, independente da fonte de vídeo selecionada no momento.
+
+#### Comportamento definido
+
+| Situação | Áudio gravado | Vídeo gravado |
+|----------|---------------|---------------|
+| **Sem client padrão** | Mix normal (seção 5) — igual hoje, corrigido | Fonte selecionada (inalterado) |
+| **Com client padrão** e peer **online com áudio** | **Somente** trilhas WebRTC desse peer (`restrictToPeerId`); `own: false` (sem áudio do host) | Fonte selecionada (inalterado) |
+| **Com client padrão** mas peer **offline/sem áudio** | **Fallback seguro**: comportamento normal (mix completo); toast opcional `"Client padrão de gravação indisponível"` | Inalterado |
+
+**Precedência** (apenas em `getRecordingStream`, sem afetar mais nada):
+
+1. Client padrão resolvido e disponível → usa só esse peer.
+2. Senão, se `selectedPeerOnly` ligado → usa `selectedPeerId` (comportamento Meet atual).
+3. Senão → mix completo.
+
+Checkboxes manuais (`excludeOwnSystem`, `selectedPeerOnly`) continuam funcionando quando **não** há client padrão ativo. Com client padrão ativo, `excludeOwnSystem`/`own` ficam implícitos (só o peer designado); toggles manuais **não são alterados** na UI — apenas ignorados naquele take de gravação.
+
+#### Persistência
+
+- **localStorage** no host: `sharescreen_rec_default_audio_client` = `displayName` ou string vazia (mesmo padrão dos outros prefs de gravação em `STORAGE_REC_*`).
+- **Renomear client**: mover valor no localStorage (nome antigo → novo), alinhado à seção 1.
+- **Sem SQLite** para este pref (escopo mínimo; pref operacional do painel host, não cadastro corporativo).
+
+#### UI mínima (sem redesign)
+
+**Arquivos**: [`public/host/index.html`](e:/Projetos/Trabalho/Screen%20Share/public/host/index.html), [`src/host/app.js`](e:/Projetos/Trabalho/Screen%20Share/src/host/app.js)
+
+- Item no menu de contexto do client: **"Definir como áudio padrão da gravação"** (toggle; se já for o padrão, **"Remover áudio padrão da gravação"**).
+- Indicador discreto no card do client (ex.: badge/ícone) quando for o padrão.
+- Na seção de gravação (settings): linha de hint `"Áudio padrão: {nome}"` ou `"Nenhum"` + botão limpar.
+
+**Não alterar**: cards de fonte, seleção de vídeo, mute, filtros de áudio, monitor ao vivo.
+
+#### Código — único ponto de ramificação
+
+Somente em `getRecordingStream()` (~linha 1413), **antes** de `RecordingAudioMixer.build`:
+
+```javascript
+// Pseudocódigo — ramo novo isolado
+const defaultAudioName = getDefaultRecordingAudioClientName(); // localStorage ou ''
+let restrictToPeerId = null;
+let ownForRec = own;
+
+if (defaultAudioName) {
+  const defaultPeer = resolveRecordingAudioPeer(estado.clients, defaultAudioName);
+  if (defaultPeer?.id) {
+    restrictToPeerId = defaultPeer.id;
+    ownForRec = false;
+  }
+  // se não resolver: restrictToPeerId permanece null → mix normal (fallback)
+} else if (recPrefs.selectedPeerOnly) {
+  restrictToPeerId = selectedPeerId;
+}
+```
+
+Passar `own: ownForRec` e `restrictToPeerId` ao mixer. **Nenhuma outra função de áudio ao vivo é chamada.**
+
+#### Garantias de integridade (obrigatórias)
+
+```mermaid
+flowchart TB
+  subgraph untouched [Não tocar]
+    LiveMonitor[host-audio-monitor ao vivo]
+    WebRTC[media-client / signaling / mediasoup]
+    ClientPlayback[roomAudioMonitor nos clients]
+    ShareAudio[compartilhamento system+mic]
+  end
+  subgraph recordingOnly [Somente gravação]
+    GetRec[getRecordingStream]
+    RecMixer[recording-audio-mixer collect]
+    GetRec --> RecMixer
+  end
+```
+
+| Garantia | Como |
+|----------|------|
+| Áudio ao vivo idêntico | Zero mudanças em `host-audio-monitor.js` rotas, `media-client.js`, `signaling.js` |
+| Sem client padrão = comportamento atual | Ramo `if (defaultAudioName)` só executa com valor não vazio; else cai no fluxo existente |
+| Falha não bloqueia gravação | Peer indisponível → fallback ao mix normal + vídeo grava normalmente |
+| Meet bridge preservado | Preset Meet e checkboxes intactos; só usados quando não há client padrão |
+| Escopo mínimo | ~40–60 linhas em `host/app.js` + hint HTML; **0** mudanças em `room-manager` |
+
+---
+
 ## Arquivos tocados (resumo)
 
 | Arquivo | Ação | Motivo |
@@ -181,7 +282,8 @@ Reescrever `collectMonitorAudioTracks` para:
 | `server/client-db.js` | Alterar | Schema + CRUD + renomear preset in-place |
 | `server/index.js` | Alterar | Endpoints GET/POST |
 | `server/signaling.js` | Alterar | Persistir ao definir filtro; renomear ao mudar nome |
-| `src/host/app.js` | Alterar | Load/save API; preset host completo |
+| `src/host/app.js` | Alterar | Load/save API filtros; preset host; client padrão gravação |
+| `public/host/index.html` | Alterar mínimo | Hint de áudio padrão na seção gravação |
 | `src/shared/recording-audio-mixer.js` | Alterar | Gravação = trilhas WebRTC (paridade clients) |
 | `src/shared/host-audio-monitor.js` | Alterar mínimo | Opcional: export helper de cache; sem mudar rotas de áudio |
 | `docs/DATABASE_MAP.md` | Alterar | Nova tabela |
@@ -204,7 +306,9 @@ Reescrever `collectMonitorAudioTracks` para:
 | Renomear com nomes que diferem só por maiúsculas | Baixa | COLLATE NOCASE na PK — comportamento consistente com `clients` |
 | Dois hosts com presets diferentes para o mesmo client | Baixa | Preset é por nome, não por sessão — alinhado ao pedido |
 | Host muda próprio nome | Baixa | Preset `kind=host` fica no nome antigo até reconfigurar; documentar |
-| Regressão no áudio ao vivo | **Alta se mexer no monitor** | **Não alterar** `_rebuildAudioRoutes` nem transports; mudança restrita ao collector da gravação |
+| Regressão no áudio ao vivo | **Alta se mexer no monitor** | **Não alterar** `_rebuildAudioRoutes` nem transports; mudanças **somente** em `getRecordingStream` e collector da gravação |
+| Client padrão offline na gravação | Baixa | Fallback automático ao mix normal; gravação de vídeo não interrompida |
+| Client padrão + vídeo de outro peer | Baixa (esperado) | Vídeo da fonte selecionada + áudio só do client padrão — comportamento desejado para ponte Meet |
 | Renomear para nome que já tem preset | Baixa | Comportamento definido: **sobrescreve** o preset do nome novo com o do antigo |
 
 ---
@@ -217,4 +321,9 @@ Reescrever `collectMonitorAudioTracks` para:
 4. **Host**: ajustar ganho/EQ do host → recarregar → preset `kind=host` restaurado.
 5. **Paridade gravação**: com EQ/compressor ativo em um client, comparar áudio gravado vs áudio no client viewer — devem coincidir.
 6. **Regressão áudio ao vivo**: múltiplos participantes; host e clients ouvem system+mic+remotos; reconexão; co-host — comportamento idêntico ao atual.
-7. **Meet bridge presets** (`excludeOwnSystem`, `selectedPeerOnly`): gravar com toggles ligados — sem regressão.
+7. **Meet bridge presets** (`excludeOwnSystem`, `selectedPeerOnly`): gravar **sem** client padrão — sem regressão.
+8. **Client padrão de gravação**:
+   - Definir client A como padrão → gravar com vídeo do host → áudio **só** do client A.
+   - Remover padrão → gravar com mix normal.
+   - Client padrão offline → gravação continua (mix normal ou só vídeo+host conforme fallback).
+   - Renomear client padrão → nome atualizado no localStorage.

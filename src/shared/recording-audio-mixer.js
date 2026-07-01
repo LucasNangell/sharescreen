@@ -1,5 +1,3 @@
-import { hasActiveMicrophoneFilter } from './mic-dsp.js';
-
 function liveAudioTrack(track) {
   return track?.readyState === 'live' ? track : null;
 }
@@ -33,36 +31,10 @@ function collectMonitorAudioTracks(hostAudioMonitor, mutedClients, restrictToPee
   const muted = new Set([...(mutedClients || [])].map(String));
   const peerFilter = restrictToPeerId ? String(restrictToPeerId) : null;
 
-  const mixedTrack = liveAudioTrack(hostAudioMonitor.getMixedOutputTrack?.());
-  if (mixedTrack && hostAudioMonitor.allChannelsRoutedToDest) {
-    addTrackOnce(sources, mixedTrack);
-    return sources;
-  }
-
-  if (!peerFilter) {
-    addTrackOnce(sources, mixedTrack);
-  }
-
   for (const ch of hostAudioMonitor.channels?.values() || []) {
     if (muted.has(String(ch.peerId))) continue;
     if (peerFilter && !matchesPeerFilter(ch.peerId, peerFilter)) continue;
-    const prefs = hostAudioMonitor.getFilterPrefs?.(ch.peerId) || {};
-    if (hasActiveMicrophoneFilter(prefs)) continue;
     addTrackOnce(sources, ch.consumer?.track);
-  }
-
-  if (!sources.length) {
-    for (const ch of hostAudioMonitor.channels?.values() || []) {
-      if (muted.has(String(ch.peerId))) continue;
-      if (peerFilter && !matchesPeerFilter(ch.peerId, peerFilter)) continue;
-      addTrackOnce(sources, ch.consumer?.track);
-    }
-  }
-
-  if (!sources.length && !peerFilter) {
-    for (const track of hostAudioMonitor.stream?.getAudioTracks?.() || []) {
-      addTrackOnce(sources, track);
-    }
   }
 
   return sources;

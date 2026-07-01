@@ -212,8 +212,9 @@
   
   
   
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T14-20-29-nx50nj";
+var BUILD_ID="2026-07-01T14-34-36-v37l6w";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -247,9 +248,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T14-20-29-nx50nj" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T14-20-29-nx50nj" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T14-20-29-nx50nj" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T14-34-36-v37l6w" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T14-34-36-v37l6w" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T14-34-36-v37l6w" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -483,6 +484,8 @@ try{
                   <p id="rec-meet-bridge-hint" class="hint-text" hidden style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">
                     Ponte: compartilhe só a janela do Meet com áudio da aba, sem microfone e com fone. Host: mantenha transmissão normal; não reproduza o Meet no alto-falante. Para vídeo do host + áudio da ponte, use só &quot;Excluir áudio do sistema&quot;.
                   </p>
+                  <p id="rec-default-audio-hint" class="hint-text" style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">Áudio padrão da gravação: nenhum</p>
+                  <button type="button" id="btn-rec-clear-default-audio" class="btn btn-secondary" hidden style="margin-top: var(--space-xs); width: 100%; font-size: 0.8rem; padding: 0.35rem 0.6rem;">Remover áudio padrão da gravação</button>
                 </div>
                 <div class="field recordings-filename-pattern-field" style="margin-top: var(--space-sm);">
                   <label for="recording-filename-pattern-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Padrão de nome do arquivo</label>
@@ -584,6 +587,10 @@ try{
     <button type="button" id="ctx-audio" class="ctx-item">
       <span class="ctx-icon"></span>
       <span class="ctx-text">Áudio</span>
+    </button>
+    <button type="button" id="ctx-rec-audio" class="ctx-item">
+      <span class="ctx-icon"></span>
+      <span class="ctx-text">Definir como áudio padrão da gravação</span>
     </button>
   </div>
 
@@ -760,6 +767,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T14-20-29-nx50nj"></script>
+  <script src="app.bundle.js?v=2026-07-01T14-34-36-v37l6w"></script>
 </body>
 </html>

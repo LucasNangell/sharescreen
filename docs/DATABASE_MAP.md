@@ -39,6 +39,16 @@ Armazena metadados e arquivos de vídeo de Lower Thirds (legendas/revestimentos 
 | `chroma_tolerance` | `INTEGER` | `NOT NULL DEFAULT 40` | Tolerância de variação da cor na remoção de fundo (5 a 120). |
 | `updated_at` | `INTEGER` | `NOT NULL` | Timestamp em milissegundos da última modificação. |
 
+### Tabela 3: `audio_filter_presets`
+Presets de filtros DSP de microfone por nome de exibição (client ou host).
+
+| Campo | Tipo SQL | Chave/Índice | Descrição |
+| --- | --- | --- | --- |
+| `subject_kind` | `TEXT` | PK composta | `'client'` ou `'host'`. |
+| `subject_name` | `TEXT` | PK composta (COLLATE NOCASE) | Nome de exibição associado. |
+| `prefs_json` | `TEXT` | `NOT NULL` | JSON com campos de `MIC_FILTER_DEFAULTS`. |
+| `updated_at` | `INTEGER` | `NOT NULL` | Timestamp em milissegundos da última modificação. |
+
 ---
 
 ## Relacionamentos

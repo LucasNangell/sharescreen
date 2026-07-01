@@ -20,6 +20,8 @@ import {
   getLowerThirdForDisplayName,
   saveLowerThird,
   getLowerThirdsDir,
+  getAudioFilterPreset,
+  saveAudioFilterPreset,
   listAllClients,
   upsertClient,
   updateClientIp,
@@ -354,6 +356,32 @@ function createApp() {
       return;
     }
     res.json({ ok: true, lowerThird: lt });
+  });
+
+  app.get('/api/audio-filter/:kind/:name', (req, res) => {
+    applyNoStoreHeaders(res);
+    const preset = getAudioFilterPreset(
+      decodeURIComponent(req.params.kind || ''),
+      decodeURIComponent(req.params.name || '')
+    );
+    res.json({ ok: true, preset: preset || null });
+  });
+
+  app.post('/api/audio-filter', express.json({ limit: '32kb' }), (req, res) => {
+    applyNoStoreHeaders(res);
+    if (!validateRecordingUpload(req)) {
+      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
+      return;
+    }
+    const kind = String(req.body?.kind || '').trim();
+    const name = String(req.body?.name || '').trim();
+    const prefs = req.body?.prefs;
+    const result = saveAudioFilterPreset(kind, name, prefs);
+    if (!result.ok) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
   });
 
   app.post(

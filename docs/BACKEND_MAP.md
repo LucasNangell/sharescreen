@@ -33,6 +33,8 @@ Mapeamento do backend da aplicação. Estruturado em **Node.js** com **Express**
 * `GET /api/registro-cliente` — Lê o IP do cliente e responde se ele está registrado no banco de dados e qual o nome mapeado.
 * `POST /api/registro-cliente` — Recebe `{ nome, computerName }` e associa ao IP do chamador na base SQLite.
 * `GET /api/lower-third/:clientName` — Retorna as configurações de lower third salvas (vídeo, croma, tolerância) para o client indicado.
+* `GET /api/audio-filter/:kind/:name` — Retorna preset de filtros de áudio (`client` ou `host`) para o nome indicado, ou `preset: null`.
+* `POST /api/audio-filter` — Salva preset `{ kind, name, prefs }` (requer token de host no header).
 * `POST /api/lower-third` — Recebe o binário do vídeo WebM da lower third e salva no servidor associando ao cliente (requer token de host no header).
 * `GET /lt-videos/:filename` — Serve os arquivos de vídeo gravados em `data/lower-thirds/`.
 * `GET /api/info` — Informa o estado atual do servidor (transmissões, cohosts ativos, build ID).
@@ -65,7 +67,7 @@ Arquivos envolvidos:
 
 1. Host ou Client conecta via WebSocket.
 2. A sinalização ouve eventos como `room:join`, `webrtc:create-transport`, `webrtc:connect-transport`, `webrtc:produce`, `webrtc:consume`.
-3. `definirFiltroAudioClient` e repassado por WebSocket do host/co-host para o client alvo para atualizar filtros de microfone sem alterar producers de video, gravacao ou ICE.
+3. `definirFiltroAudioClient` e repassado por WebSocket do host/co-host para o client alvo para atualizar filtros de microfone sem alterar producers de video, gravacao ou ICE. O servidor persiste o preset em `audio_filter_presets` e renomeia ao `atualizarNome`.
 4. `getHostState()` inclui `audioSources` (lista de producers de audio ativos) para o host sincronizar consumo sem depender apenas de `fontesAudio`.
 5. `addPeer()` chama `broadcastAudioSources()` ao final para ressincronizar clients quando entra participante.
 

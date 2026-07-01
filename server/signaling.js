@@ -9,7 +9,7 @@ import config, { getVideoQualityForClients } from '../config/default.js';
 import { dispatchOpenClient, listAgentClients } from './agent-bridge.js';
 import { validateJoinAuth, getSessionHostToken } from './auth-dev.js';
 import { debugLog } from './debug-log.js';
-import { registerClientByName } from './client-db.js';
+import { registerClientByName, saveAudioFilterPreset, renameAudioFilterPreset } from './client-db.js';
 import { getClientIpFromWs } from './client-ip.js';
 
 function parseMessage(raw) {
@@ -192,8 +192,13 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
     case 'atualizarNome': {
       if (!peer || peer.role !== 'client') throw new Error('Apenas clients podem atualizar nome');
       const { nome } = msg.payload || {};
+      const oldName = peer.displayName;
+      const newName = String(nome || '').trim();
       room.updatePeerName(peer.id, nome);
-      registerClientByName(String(nome || '').trim(), getClientIpFromWs(peer.ws), peer.agentHostname || '');
+      if (oldName && newName) {
+        renameAudioFilterPreset('client', oldName, newName);
+      }
+      registerClientByName(newName, getClientIpFromWs(peer.ws), peer.agentHostname || '');
       enviar({ type: 'nomeAtualizado', payload: { ok: true } });
       break;
     }
@@ -318,6 +323,9 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         break;
       }
       target.send({ type: 'filtroAudioAtualizado', payload: { prefs: prefs || {} } });
+      if (target.displayName && prefs) {
+        saveAudioFilterPreset('client', target.displayName, prefs);
+      }
       enviar({ type: 'filtroAudioResultado', payload: { ok: true, peerId } });
       break;
     }
