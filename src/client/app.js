@@ -341,7 +341,7 @@ function closeSettingsModal() {
   if (els.settingsModal) els.settingsModal.hidden = true;
 }
 
-function saveSettingsModal() {
+async function saveSettingsModal() {
   const prefs = getSettingsPrefsFromModal();
   const newName = els.settingsNomeInput?.value?.trim();
   if (newName) {
@@ -351,11 +351,15 @@ function saveSettingsModal() {
     if (signaling?.authenticated) {
       signaling.send('atualizarNome', { nome: newName });
     }
-    fetch('/api/registro-cliente', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: newName })
-    }).catch(() => {});
+    try {
+      await fetch('/api/registro-cliente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: newName, computerName: agentHostname })
+      });
+    } catch (_) {
+      showToast('Nome salvo localmente; nao foi possivel sincronizar com o servidor', 'info');
+    }
   }
   applyCapturePrefsToUi(prefs);
   saveCapturePrefs(prefs);
@@ -794,25 +798,30 @@ function hideErro() {
 }
 
 async function resolveClientNameFromServer() {
+  const cached = (localStorage.getItem(STORAGE_NAME) || displayName || '').trim();
+  let serverNome = null;
   try {
     const reg = await fetch('/api/registro-cliente').then((r) => r.json());
-    if (reg?.nome) return reg.nome;
+    serverNome = reg?.nome ? String(reg.nome).trim() : null;
   } catch (_) {}
 
-  const cached = localStorage.getItem(STORAGE_NAME);
-  if (!cached) return null;
+  const namesMatch = (a, b) =>
+    a && b && a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0;
 
-  try {
-    const res = await fetch('/api/registro-cliente', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: cached })
-    });
-    const data = await res.json();
-    if (data?.ok) return data.nome || data.name || cached;
-  } catch (_) {}
+  if (cached) {
+    if (!namesMatch(cached, serverNome)) {
+      try {
+        await fetch('/api/registro-cliente', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome: cached, computerName: agentHostname })
+        });
+      } catch (_) {}
+    }
+    return cached;
+  }
 
-  return null;
+  return serverNome || null;
 }
 
 function getNome() {
