@@ -38,6 +38,12 @@ if not exist "public\client\app.bundle.js" (
     exit /b 1
 )
 
+if not exist "public\shared\build-id.json" (
+    echo [ERRO] public\shared\build-id.json ausente.
+    pause
+    exit /b 1
+)
+
 if not exist "certs\server.crt" (
     echo [ERRO] certs\server.crt ausente.
     pause
@@ -48,6 +54,34 @@ if not exist "server\index.js" (
     echo [ERRO] server\index.js ausente.
     pause
     exit /b 1
+)
+
+if not exist "server\signaling.js" (
+    echo [ERRO] server\signaling.js ausente.
+    pause
+    exit /b 1
+)
+
+if not exist "server\room-manager.js" (
+    echo [ERRO] server\room-manager.js ausente.
+    pause
+    exit /b 1
+)
+
+findstr /C:"roomState" "server\signaling.js" >nul 2>&1
+if errorlevel 1 (
+    echo [AVISO] server\signaling.js sem handler roomState — pacote pode estar desatualizado.
+)
+
+findstr /C:"midiaPronta" "server\signaling.js" >nul 2>&1
+if errorlevel 1 (
+    echo [AVISO] server\signaling.js sem handler midiaPronta — pacote pode estar desatualizado.
+)
+
+if not exist "MANIFEST.json" (
+    echo [AVISO] MANIFEST.json ausente — rode preparar-deploy.bat no PC de desenvolvimento.
+) else (
+    echo [OK] MANIFEST.json presente.
 )
 
 if not exist "src\shared\recording-filename.js" (

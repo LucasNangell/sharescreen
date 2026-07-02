@@ -9,6 +9,8 @@ import { ErrorManager, assertSecureContext, isTransientServerError } from '../sh
 import { UiStateMachine } from '../shared/ui-state.js';
 import { mergeServerQuality, loadPresetId, savePresetId, getPreset, bitrateMbps } from '../shared/quality-manager.js';
 import { showToast as originalShowToast } from '../shared/toast.js';
+import { verifyServerBuild } from '../shared/build-verify.js';
+import { debugClientSessionLog } from '../shared/debug-session-client.js';
 import { collectWebRtcStats } from '../shared/stats-collector.js';
 import { formatRecordingFilename, isValidRecordingFilename } from '../shared/recording-filename.js';
 import { HostAudioMonitor, savePresetToLocalStorage, renamePresetInLocalStorage } from '../shared/host-audio-monitor.js';
@@ -1684,6 +1686,23 @@ async function getRecordingStream() {
 }
 
 function handleMessage(msg) {
+  if (msg.type === 'roomState') {
+    // #region agent log
+    debugClientSessionLog('H5', 'host:handleMessage', 'roomState', {
+      version: msg.payload?.version,
+      clients: (msg.payload?.clients || []).map((c) => ({
+        id: c.id?.slice(0, 8),
+        name: c.displayName,
+        selectable: c.selectable,
+        mediaReadyVideo: c.mediaReady?.video,
+        hasVideo: c.hasVideo,
+        producerVideo: c.producerIds?.video?.slice(0, 8) || null
+      }))
+    });
+    // #endregion
+    applyRoomSnapshot(msg.payload, { force: true }).catch((e) => errors.handle(e, 'room-state'));
+    return;
+  }
   if (msg.type === 'estadoSala') {
     applyRoomSnapshot(msg.payload).catch((e) => errors.handle(e, 'estado-sala'));
     return;
@@ -1705,6 +1724,19 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'estado') {
+    // #region agent log
+    debugClientSessionLog('H5', 'host:handleMessage', 'estado', {
+      clients: (msg.payload?.clients || []).map((c) => ({
+        id: c.id?.slice(0, 8),
+        name: c.displayName,
+        selectable: c.selectable,
+        mediaReadyVideo: c.mediaReady?.video,
+        hasVideo: c.hasVideo,
+        isProducing: c.isProducing,
+        producerVideo: c.producerIds?.video?.slice(0, 8) || null
+      }))
+    });
+    // #endregion
     estado = enrichRoomSourcesState(
       {
         clients: msg.payload.clients || [],
@@ -1936,7 +1968,7 @@ async function joinHost({ autoShare = true } = {}) {
     if (joinPrefs.microphone) {
       try {
         await media.ensureSendTransport();
-        await applyHostMicPresetFromStorage();
+        await loadHostMicPresetFromStorage();
         await media.publishMicrophone(joinPrefs);
         syncLocalHostVu();
       } catch (e) {
@@ -3054,5 +3086,11 @@ export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
 
 const isHostPage = window.location.pathname.includes('/host');
 if (isHostPage) {
+  verifyServerBuild({
+    onToast: (m, t) => showToast(m, t),
+    onTitlePrefix: (prefix) => {
+      document.title = prefix + (document.title.replace(/^\[[^\]]+\]\s*/, '') || 'ShareScreen Host');
+    }
+  });
   bootstrap();
 }

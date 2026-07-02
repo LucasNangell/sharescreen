@@ -15,6 +15,25 @@ import {
   normalizeMicrophoneFilterPrefs
 } from './mic-dsp.js';
 
+function sourcePriority(source) {
+  if (source === 'microphone') return 0;
+  if (source === 'system') return 1;
+  return 2;
+}
+
+function pickAntiEchoSources(list, { allowDualPeerAudio = false } = {}) {
+  if (allowDualPeerAudio) return list || [];
+  const byPeer = new Map();
+  for (const entry of list || []) {
+    const pid = String(entry.peerId);
+    const existing = byPeer.get(pid);
+    if (!existing || sourcePriority(entry.source) < sourcePriority(existing.source)) {
+      byPeer.set(pid, entry);
+    }
+  }
+  return [...byPeer.values()];
+}
+
 function loadPresetFromLocalStorage(name) {
   try {
     const raw = localStorage.getItem('sharescreen_audio_presets');
@@ -113,6 +132,7 @@ export class HostAudioMonitor {
       [...(options.pinnedPeerIds || [])].map((id) => String(id))
     );
     this.allChannelsRoutedToDest = false;
+    this.allowDualPeerAudio = options.allowDualPeerAudio === true;
   }
 
   setPinnedPeerIds(peerIds = []) {
@@ -374,8 +394,8 @@ export class HostAudioMonitor {
     }
   }
 
-  _hasAnyFilter(peerId) {
-    return hasActiveMicrophoneFilter(this.getFilterPrefs(peerId));
+  _hasAnyFilter(channelKeyOrPeerId) {
+    return hasActiveMicrophoneFilter(this.getFilterPrefs(channelKeyOrPeerId));
   }
 
   _clearChannelDsp(ch) {
@@ -427,24 +447,31 @@ export class HostAudioMonitor {
     ch.stream = null;
   }
 
-  getFilterPrefs(peerId) {
-    const key = String(peerId);
+  getFilterPrefs(channelKeyOrPeerId) {
+    const key = String(channelKeyOrPeerId);
+    const peerId = key.includes(':') ? key.split(':')[0] : key;
+    const source = key.includes(':') ? key.split(':').slice(1).join(':') : 'microphone';
     if (!this.filterPrefs.has(key)) {
-      const name = this.peerNames.get(key) || '';
+      const name = this.peerNames.get(peerId) || '';
       let saved = null;
-      if (name) {
+      if (name && source === 'microphone') {
         saved = loadPresetFromLocalStorage(name);
       }
-      this.filterPrefs.set(key, saved || { ...MIC_FILTER_DEFAULTS });
+      const defaults =
+        source === 'system'
+          ? { ...MIC_FILTER_DEFAULTS, noiseGate: false, micSensitivity: false }
+          : { ...MIC_FILTER_DEFAULTS };
+      this.filterPrefs.set(key, saved || defaults);
     }
     return this.filterPrefs.get(key);
   }
 
-  setFilterPrefs(peerId, prefs) {
-    const key = String(peerId);
+  setFilterPrefs(channelKeyOrPeerId, prefs) {
+    const key = String(channelKeyOrPeerId);
     this.filterPrefs.set(key, { ...this.getFilterPrefs(key), ...prefs });
     for (const ch of this.channels.values()) {
-      if (ch.peerId === key) {
+      const chKey = audioChannelKey(ch.peerId, ch.source);
+      if (chKey === key || ch.peerId === key) {
         this._applyChannelFilters(ch);
       }
     }
@@ -546,12 +573,14 @@ export class HostAudioMonitor {
 
   _applyChannelFilters(ch) {
     if (!this.ctx) return;
-    const prefs = this.getFilterPrefs(ch.peerId);
+    const channelKey = audioChannelKey(ch.peerId, ch.source);
+    const prefs = this.getFilterPrefs(channelKey);
+    const useDsp = ch.source !== 'system';
 
     if (ch.gainNode) {
       if (this._isChannelMuted(ch.peerId)) {
         ch.gainNode.gain.value = 0;
-      } else if (this._hasAnyFilter(ch.peerId)) {
+      } else if (useDsp && this._hasAnyFilter(channelKey)) {
         ch.gainNode.gain.value = prefs.gain !== undefined ? prefs.gain : 1.0;
       } else {
         ch.gainNode.gain.value = 1.0;
@@ -608,9 +637,11 @@ export class HostAudioMonitor {
         return;
       }
 
-      const prefs = this.getFilterPrefs(ch.peerId);
+      const channelKey = audioChannelKey(ch.peerId, ch.source);
+      const prefs = this.getFilterPrefs(channelKey);
       const targetGain = prefs.gain !== undefined ? prefs.gain : 1.0;
-      const gateActive = prefs.noiseGate || prefs.micSensitivity;
+      const gateActive =
+        ch.source !== 'system' && (prefs.noiseGate || prefs.micSensitivity);
 
       if (!gateActive) {
         if (!isOpen) isOpen = true;
@@ -643,9 +674,12 @@ export class HostAudioMonitor {
       }
     }
 
-    const list = normalizeRemoteAudioSources(sources, {
-      excludePeerId: this.excludePeerId
-    });
+    const list = pickAntiEchoSources(
+      normalizeRemoteAudioSources(sources, {
+        excludePeerId: this.excludePeerId
+      }),
+      { allowDualPeerAudio: this.allowDualPeerAudio }
+    );
 
     const wanted = new Map();
     for (const entry of list) {
@@ -749,7 +783,9 @@ export class HostAudioMonitor {
         sources.push({ peerId: c.id, producerId: ids.audio, source: 'microphone' });
       }
     }
-    return this.syncFromSources(sources);
+    return this.syncFromSources(
+      pickAntiEchoSources(sources, { allowDualPeerAudio: this.allowDualPeerAudio })
+    );
   }
 
   async _addChannel(channelKey, peerId, producerId, source = 'microphone', attempt = 0) {

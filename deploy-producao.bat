@@ -28,8 +28,8 @@ call :kill_port 3443
 call :kill_port 3080
 timeout /t 1 /nobreak >nul
 
-echo Copiando arquivos (robocopy /MIR — pode demorar)...
-robocopy "%ORIGEM%" "%DESTINO%" /MIR /MT:8 /R:2 /W:5 /NFL /NDL /NP
+echo Copiando arquivos (robocopy /MIR — pasta data\ do servidor preservada)...
+robocopy "%ORIGEM%" "%DESTINO%" /MIR /MT:8 /R:2 /W:5 /NFL /NDL /NP /XD data
 set RC=%ERRORLEVEL%
 if %RC% GEQ 8 (
     echo [ERRO] Robocopy falhou com codigo %RC%

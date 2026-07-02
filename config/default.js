@@ -30,7 +30,9 @@ const config = {
   httpsPort: 3443,
   httpPort: 3080,
   wsPingInterval: 25000,
-  maxClients: 10,
+  maxClients: 15,
+  /** Emite roomState versionado; false = apenas eventos legados */
+  useLegacyRoomSync: process.env.SHARESCREEN_LEGACY_ROOM_SYNC === '1',
   rtcMinPort: 40000,
   rtcMaxPort: 40100,
 

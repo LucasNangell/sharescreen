@@ -3,6 +3,8 @@
  */
 export function isSelectableSource(client) {
   return !!(
+    client?.selectable ||
+    client?.mediaReady?.video ||
     client?.isProducing ||
     client?.hasVideo ||
     client?.producerIds?.video ||

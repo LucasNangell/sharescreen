@@ -562,7 +562,9 @@ export class MediaClient {
     }
 
     if (this.localScreenStream && this.localScreenStream !== displayStream) {
+      const keepTrackIds = new Set(displayStream.getTracks().map((t) => t.id));
       for (const track of this.localScreenStream.getTracks()) {
+        if (keepTrackIds.has(track.id)) continue;
         try {
           track.stop();
         } catch (_) {}
@@ -570,9 +572,9 @@ export class MediaClient {
       await this.stopSystemAudio();
     }
 
-    const videoTrack = displayStream.getVideoTracks()[0];
-    if (!videoTrack || videoTrack.readyState !== 'live') {
-      throw new Error('Pista de v?fideo indispon?fivel i?,???? selecione a tela novamente');
+    const videoTrack = displayStream.getVideoTracks().find((t) => t.readyState === 'live');
+    if (!videoTrack) {
+      throw new Error('Pista de video indisponivel - selecione a tela novamente');
     }
 
     this.localScreenStream = displayStream;

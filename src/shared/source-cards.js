@@ -3,6 +3,8 @@
  */
 function hasVideoAvailable(c) {
   return !!(
+    c?.selectable ||
+    c?.mediaReady?.video ||
     c?.isProducing ||
     c?.hasVideo ||
     c?.producerIds?.video ||

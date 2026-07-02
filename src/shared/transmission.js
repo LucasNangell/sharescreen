@@ -23,7 +23,7 @@ export function hasActiveVideo(payload) {
   return !!producerIds.video;
 }
 
-/** Extrai transmissão e fontes de áudio de estadoSala ou payload legado. */
+/** Extrai transmissão e fontes de áudio de roomState, estadoSala ou payload legado. */
 export function parseRoomSnapshot(snapshot = {}) {
   const transmission = normalizeTransmission(
     snapshot.transmission || snapshot.transmissaoAtiva || snapshot
@@ -40,8 +40,21 @@ export function parseRoomSnapshot(snapshot = {}) {
     host: snapshot.host || null,
     displayControl: snapshot.displayControl || null,
     snapshotAt: snapshot.snapshotAt || 0,
-    mutedPeerIds: snapshot.mutedPeerIds || []
+    mutedPeerIds: snapshot.mutedPeerIds || [],
+    version: snapshot.version || 0,
+    reason: snapshot.reason || null
   };
+}
+
+/** Alias canonico para evento roomState versionado. */
+export function parseRoomState(payload = {}) {
+  return parseRoomSnapshot(payload);
+}
+
+export function roomStateMediaKey(snapshot = {}) {
+  const parsed = parseRoomSnapshot(snapshot);
+  const version = parsed.version || snapshot.version || 0;
+  return `${version}:${roomSnapshotMediaKey(snapshot)}`;
 }
 
 export function roomSnapshotMediaKey(snapshot = {}) {
@@ -81,6 +94,7 @@ function mergeSourceWithTransmission(source, tx, { isSelected = false } = {}) {
   const videoId = normalized.producerIds?.video || null;
   return {
     ...source,
+    selectable: source.selectable ?? source.mediaReady?.video ?? true,
     isProducing: true,
     hasVideo: true,
     producerIds: {

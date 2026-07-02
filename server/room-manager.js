@@ -6,6 +6,8 @@ import config from '../config/default.js';
 import { createWebRtcTransport, getRouter, getRtpCapabilities } from './mediasoup-manager.js';
 import { logger } from './logger.js';
 import { getLowerThirdForDisplayName } from './client-db.js';
+import { getClientIpFromWs } from './client-ip.js';
+import { debugSessionLog } from './debug-session-log.js';
 
 const _agentDebugLogPath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -82,13 +84,21 @@ function computeAudioSourcesSignature(sources) {
  * Estado de um peer (host ou client).
  */
 export class Peer {
-  constructor(ws, role, displayName, agentHostname = '', { isExternal = false } = {}) {
+  constructor(
+    ws,
+    role,
+    displayName,
+    agentHostname = '',
+    { isExternal = false, publishIntent = 'publisher' } = {}
+  ) {
     this.id = randomPeerId();
     this.ws = ws;
     this.role = role;
     this.displayName = displayName || (role === 'host' ? 'Painel Host' : `Client ${shortId(this.id)}`);
     this.agentHostname = (agentHostname || '').trim().toUpperCase();
     this.isExternal = !!isExternal;
+    this.publishIntent = publishIntent === 'viewer' ? 'viewer' : 'publisher';
+    this.mediaReadyAck = { video: false, microphone: false, system: false };
     this.status = 'conectado';
     this.sendTransport = null;
     this.recvTransport = null;
@@ -100,6 +110,7 @@ export class Peer {
     this.isCoHost = false;
     this.replacingProducers = new Set();
     this.cleaningUpMedia = false;
+    this.clientIp = '';
   }
 
   getProducerIds() {
@@ -176,6 +187,36 @@ export class RoomManager {
     this.mutedPeerIds = new Set();
     this._lastAudioSourcesSig = '';
     this.meetBridgeLiveMode = false;
+    this.roomVersion = 0;
+    this._emittingRoomState = false;
+  }
+
+  getMediaReady(peer) {
+    const hasMic = !!(peer.producers.microphone && !peer.producers.microphone.closed);
+    const hasSystem = !!(peer.producers.system && !peer.producers.system.closed);
+    const videoReady =
+      peer.hasVideoProducer() &&
+      (peer.role === 'host' || peer.mediaReadyAck.video);
+    return {
+      video: videoReady,
+      microphone: hasMic,
+      system: hasSystem
+    };
+  }
+
+  isPeerSelectable(peer) {
+    if (peer.publishIntent === 'viewer') return false;
+    return this.getMediaReady(peer).video;
+  }
+
+  confirmMediaReady(peer) {
+    if (!peer.hasVideoProducer()) {
+      return { ok: false, erro: 'Sem producer de video ativo' };
+    }
+    peer.mediaReadyAck.video = true;
+    peer.status = 'transmitindo';
+    this.emitRoomState('media-ready');
+    return { ok: true };
   }
 
   isPeerSocketOpen(peer) {
@@ -280,12 +321,119 @@ export class RoomManager {
   }
 
   notifyHostState() {
-    this._pruneDisplayControllers();
-    const payload = this.getHostState();
-    for (const host of this.getHostAndCoHostPeers()) {
-      host.send({ type: 'estado', payload });
+    this.emitRoomState('legacy-estado');
+  }
+
+  buildRoomState(viewingPeer = null, reason = 'update') {
+    this.purgeStalePeers();
+    const transmission = this.buildTransmissionPayload();
+    const audioSources = this.getAudioSources();
+    const peers = [...this.peers.values()]
+      .filter((p) => this.isPeerSocketOpen(p))
+      .map((p) => this._mapPeerForState(p));
+
+    const host = this.getHostPeer();
+    const selected =
+      transmission.selectedPeerId
+        ? peers.find((p) => p.id === transmission.selectedPeerId) ||
+          (transmission.producerIds?.video
+            ? {
+                id: transmission.selectedPeerId,
+                displayName: transmission.peerName || 'Fonte',
+                producerIds: transmission.producerIds,
+                mediaReady: { video: true, microphone: false, system: false },
+                selectable: true,
+                isProducing: true,
+                hasVideo: true,
+                selecionado: true,
+                pausado: transmission.paused
+              }
+            : null)
+        : null;
+
+    const payload = {
+      version: this.roomVersion,
+      reason,
+      snapshotAt: Date.now(),
+      host: host
+        ? {
+            id: host.id,
+            shortId: shortId(host.id),
+            displayName: host.displayName,
+            hasVideo: host.hasVideoProducer(),
+            hasAudio: host.hasAudioProducer(),
+            producerIds: host.getProducerIds(),
+            mediaReady: this.getMediaReady(host)
+          }
+        : null,
+      peers,
+      clients: peers.filter((p) => p.role === 'client' || p.ehHost),
+      selecionado: selected,
+      transmission,
+      audioSources,
+      videoProducers: peers
+        .filter((p) => p.producerIds?.video)
+        .map((p) => ({
+          peerId: p.id,
+          producerId: p.producerIds.video,
+          name: p.displayName,
+          origin: p.origin
+        })),
+      audioProducers: audioSources,
+      transmissionPaused: this.transmissionPaused,
+      controleExibicao: [...this.displayControllerIds],
+      meetBridgeLiveMode: this.meetBridgeLiveMode,
+      mutedPeerIds: [...this.mutedPeerIds],
+      rtpCapabilities: getRtpCapabilities()
+    };
+
+    if (viewingPeer?.role === 'client') {
+      payload.displayControl = this.buildDisplayControlPayload(viewingPeer.id);
     }
-    this.notifyDisplayControllers();
+
+    return payload;
+  }
+
+  emitRoomState(reason = 'update') {
+    if (this._emittingRoomState) return;
+    this._emittingRoomState = true;
+    try {
+      this._pruneDisplayControllers();
+      this.roomVersion += 1;
+
+      if (!config.useLegacyRoomSync) {
+        for (const peer of this.peers.values()) {
+          if (!this.isPeerSocketOpen(peer)) continue;
+          peer.send({
+            type: 'roomState',
+            payload: this.buildRoomState(peer, reason)
+          });
+        }
+      }
+
+      const hostPayload = this.getHostState();
+      // #region agent log
+      debugSessionLog('H4', 'room-manager:emitRoomState', reason, {
+        version: this.roomVersion,
+        clients: (hostPayload.clients || []).map((c) => ({
+          id: c.id?.slice(0, 8),
+          name: c.displayName,
+          publishIntent: c.publishIntent,
+          selectable: c.selectable,
+          mediaReadyVideo: c.mediaReady?.video,
+          hasVideo: c.hasVideo,
+          isProducing: c.isProducing,
+          producerVideo: c.producerIds?.video?.slice(0, 8) || null
+        }))
+      });
+      // #endregion
+      for (const host of this.getHostAndCoHostPeers()) {
+        host.send({ type: 'estado', payload: hostPayload });
+      }
+      this.notifyDisplayControllers();
+    } finally {
+      this._emittingRoomState = false;
+    }
   }
 
   canControlDisplay(peerId) {
@@ -378,8 +526,20 @@ export class RoomManager {
   }
 
   _mapPeerForState(peer) {
+    const producerIds = peer.getProducerIds();
+    const mediaReady = this.getMediaReady(peer);
     return {
       ...peer.getPublicInfo(this),
+      mediaReady,
+      publishIntent: peer.publishIntent,
+      selectable: this.isPeerSelectable(peer),
+      producerIds: {
+        video: producerIds.video,
+        microphone: producerIds.microphone,
+        system: producerIds.system,
+        mixed: producerIds.mixed,
+        audio: producerIds.audio
+      },
       ehHost: peer.role === 'host',
       selecionado: peer.id === this.selectedPeerId,
       pausado: this.transmissionPaused && peer.id === this.selectedPeerId
@@ -491,10 +651,16 @@ export class RoomManager {
       videoProducers: (snapshot.videoProducers || []).length,
       peers: (snapshot.peers || []).length
     });
+    if (!config.useLegacyRoomSync) {
+      peer.send({
+        type: 'roomState',
+        payload: this.buildRoomState(peer, 'snapshot')
+      });
+    }
     peer.send({ type: 'estadoSala', payload: snapshot });
   }
 
-  addPeer(ws, role, displayName, agentHostname = '', { isExternal = false } = {}) {
+  addPeer(ws, role, displayName, agentHostname = '', { isExternal = false, publishIntent = 'publisher' } = {}) {
     this.purgeStalePeers();
     if (role === 'client' && this.getClientCount() >= config.maxClients) {
       throw new Error(`Limite de ${config.maxClients} clients atingido`);
@@ -537,17 +703,25 @@ export class RoomManager {
       }
     }
 
-    // Mesma mÃ¡quina ou convidado externo reconectando â€” remove sessÃ£o anterior ainda aberta
+    // Mesma máquina ou convidado externo reconectando — remove sessão anterior ainda aberta
     if (role === 'client') {
       const hostKey = (agentHostname || '').trim().toUpperCase();
       const nameKey = (displayName || '').trim().toLowerCase();
+      const newClientIp = getClientIpFromWs(ws);
       let clearedSelection = false;
       for (const [peerId, old] of [...this.peers.entries()]) {
         if (old.role !== 'client' || old.ws === ws) continue;
         const sameMachine = hostKey && old.agentHostname === hostKey;
         const sameExternalGuest =
           isExternal && old.isExternal && old.displayName.trim().toLowerCase() === nameKey;
-        if (!sameMachine && !sameExternalGuest) continue;
+        const sameNameAndIp =
+          !isExternal &&
+          !hostKey &&
+          nameKey &&
+          old.displayName.trim().toLowerCase() === nameKey &&
+          !!newClientIp &&
+          (old.clientIp || '') === newClientIp;
+        if (!sameMachine && !sameExternalGuest && !sameNameAndIp) continue;
         logger.info('Substituindo client anterior', {
           peerId,
           name: old.displayName,
@@ -575,16 +749,20 @@ export class RoomManager {
       this.broadcastAudioSources();
     }
 
-    const peer = new Peer(ws, role, displayName, agentHostname, { isExternal });
+    const peer = new Peer(ws, role, displayName, agentHostname, { isExternal, publishIntent });
     peer.ws = ws;
+    if (role === 'client') {
+      peer.clientIp = getClientIpFromWs(ws);
+    }
     this.peers.set(peer.id, peer);
     sessionDebugLog('[ROOM_STATE]', 'peer entrou', {
       peerId: peer.id.slice(0, 8),
       role,
-      name: peer.displayName
+      name: peer.displayName,
+      publishIntent: peer.publishIntent
     });
     logger.info('Peer conectado', { peerId: peer.id, role, name: peer.displayName });
-    this.notifyHostState();
+    this.emitRoomState('peer-joined');
     const sig = computeAudioSourcesSignature(this.getAudioSources());
     if (sig !== this._lastAudioSourcesSig) {
       this.broadcastAudioSources({ force: true });
@@ -986,6 +1164,7 @@ export class RoomManager {
 
     peer.producers[slot] = producer;
     if (slot === 'video') {
+      peer.mediaReadyAck.video = true;
       peer.status = 'transmitindo';
       sessionDebugLog('[VIDEO_PRODUCER]', 'producer de video criado', {
         peerId: peer.id.slice(0, 8),
@@ -1003,6 +1182,7 @@ export class RoomManager {
       if (peer.cleaningUpMedia || isReplacing) return;
       if (!peer.hasVideoProducer()) {
         peer.status = 'conectado';
+        peer.mediaReadyAck.video = false;
         this.displayControllerIds.delete(peer.id);
       }
       if (slot === 'video' && !peer.hasVideoProducer()) {
@@ -1021,7 +1201,7 @@ export class RoomManager {
         });
         this.broadcastAudioSources();
       }
-      this.notifyHostState();
+      this.emitRoomState('producer-closed');
     };
 
     producer.on('transportclose', onProducerClosed);
@@ -1033,16 +1213,13 @@ export class RoomManager {
       kind: slot
     });
 
-    this.notifyHostState();
+    this.emitRoomState(`produce-${slot}`);
     if (slot === 'video') {
       sessionDebugLog('[VIDEO_PRODUCER]', 'producer de video anunciado ao host', {
         peerId: peer.id.slice(0, 8),
         producerId: producer.id.slice(0, 8),
         hosts: this.getHostAndCoHostPeers().map((h) => h.id.slice(0, 8))
       });
-      for (const host of this.getHostAndCoHostPeers()) {
-        this.sendRoomSnapshot(host);
-      }
     }
     if (AUDIO_PRODUCER_SLOTS.includes(slot)) {
       logger.info('[audio] producer criado', {
@@ -1051,9 +1228,6 @@ export class RoomManager {
         producerId: producer.id.slice(0, 8)
       });
       this.broadcastAudioSources();
-      for (const host of this.getHostAndCoHostPeers()) {
-        this.sendRoomSnapshot(host);
-      }
     }
 
     this._ensureSelectedAndBroadcast(peer, slot);

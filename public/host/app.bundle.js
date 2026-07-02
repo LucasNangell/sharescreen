@@ -12923,13 +12923,15 @@
         this._lastCloseReason = "";
         this.setState(ConnectionState.CONNECTED);
         this.onLog("WebSocket conectado", "info");
-        this._pendingCritical = this._pendingCritical.filter((packet) => {
-          try {
-            return JSON.parse(packet).type !== "entrar";
-          } catch {
-            return false;
-          }
-        });
+        if (this.enableReconnect) {
+          this._pendingCritical = this._pendingCritical.filter((packet) => {
+            try {
+              return JSON.parse(packet).type !== "entrar";
+            } catch {
+              return false;
+            }
+          });
+        }
         this._flushCriticalQueue();
         (_a47 = this.onOpen) == null ? void 0 : _a47.call(this);
       };
@@ -14213,7 +14215,9 @@
         this.producers.video = null;
       }
       if (this.localScreenStream && this.localScreenStream !== displayStream) {
+        const keepTrackIds = new Set(displayStream.getTracks().map((t) => t.id));
         for (const track of this.localScreenStream.getTracks()) {
+          if (keepTrackIds.has(track.id)) continue;
           try {
             track.stop();
           } catch (_) {
@@ -14221,9 +14225,9 @@
         }
         await this.stopSystemAudio();
       }
-      const videoTrack = displayStream.getVideoTracks()[0];
-      if (!videoTrack || videoTrack.readyState !== "live") {
-        throw new Error("Pista de v?fideo indispon?fivel i?,???? selecione a tela novamente");
+      const videoTrack = displayStream.getVideoTracks().find((t) => t.readyState === "live");
+      if (!videoTrack) {
+        throw new Error("Pista de video indisponivel - selecione a tela novamente");
       }
       this.localScreenStream = displayStream;
       try {
@@ -14795,7 +14799,9 @@
       host: snapshot.host || null,
       displayControl: snapshot.displayControl || null,
       snapshotAt: snapshot.snapshotAt || 0,
-      mutedPeerIds: snapshot.mutedPeerIds || []
+      mutedPeerIds: snapshot.mutedPeerIds || [],
+      version: snapshot.version || 0,
+      reason: snapshot.reason || null
     };
   }
   function roomSnapshotMediaKey(snapshot = {}) {
@@ -14821,20 +14827,21 @@
     return !hasVideoElement;
   }
   function mergeSourceWithTransmission(source, tx, { isSelected = false } = {}) {
-    var _a47, _b, _c;
+    var _a47, _b, _c, _d;
     if (!source) return source;
     const normalized = normalizeTransmission(tx);
     if (!hasActiveVideo(normalized)) return source;
     const videoId = ((_a47 = normalized.producerIds) == null ? void 0 : _a47.video) || null;
     return {
       ...source,
+      selectable: source.selectable ?? ((_b = source.mediaReady) == null ? void 0 : _b.video) ?? true,
       isProducing: true,
       hasVideo: true,
       producerIds: {
         ...source.producerIds || {},
-        video: videoId || ((_b = source.producerIds) == null ? void 0 : _b.video) || source.producerId || null
+        video: videoId || ((_c = source.producerIds) == null ? void 0 : _c.video) || source.producerId || null
       },
-      producerId: videoId || ((_c = source.producerIds) == null ? void 0 : _c.video) || source.producerId || null,
+      producerId: videoId || ((_d = source.producerIds) == null ? void 0 : _d.video) || source.producerId || null,
       selecionado: !!isSelected,
       pausado: isSelected ? normalized.paused : source.pausado
     };
@@ -15656,6 +15663,39 @@
     }, durationMs);
   }
 
+  // src/shared/build-verify.js
+  async function verifyServerBuild({ onToast, onTitlePrefix } = {}) {
+    try {
+      const info = await fetch("/api/info", { cache: "no-store" }).then((r) => r.json());
+      const env = info.dev ? "DEV" : "PROD";
+      const proto = info.roomStateProtocol ? "roomState" : "legacy";
+      const label = `${env} ${info.buildId} ${proto}`;
+      onTitlePrefix == null ? void 0 : onTitlePrefix(`[${label}] `);
+      if (info.dev) {
+        onToast == null ? void 0 : onToast(`Servidor DEV ativo (${info.buildId}, ${proto})`, "info");
+      } else if (!info.roomStateProtocol) {
+        onToast == null ? void 0 : onToast(
+          "Servidor PROD/legado \u2014 para testar mudancas use start-dev.bat neste PC (nao cgrafsysvm)",
+          "warn"
+        );
+      }
+      return info;
+    } catch (e) {
+      onToast == null ? void 0 : onToast("Nao foi possivel verificar /api/info do servidor", "warn");
+      return null;
+    }
+  }
+
+  // src/shared/debug-session-client.js
+  function debugClientSessionLog(hypothesisId, location2, message, data = {}) {
+    fetch("/api/client-debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hypothesisId, location: location2, message, data })
+    }).catch(() => {
+    });
+  }
+
   // src/shared/stats-collector.js
   var prevSamples = /* @__PURE__ */ new WeakMap();
   async function collectWebRtcStats(mediaClient) {
@@ -15712,6 +15752,23 @@
   }
 
   // src/shared/host-audio-monitor.js
+  function sourcePriority(source) {
+    if (source === "microphone") return 0;
+    if (source === "system") return 1;
+    return 2;
+  }
+  function pickAntiEchoSources(list, { allowDualPeerAudio = false } = {}) {
+    if (allowDualPeerAudio) return list || [];
+    const byPeer = /* @__PURE__ */ new Map();
+    for (const entry of list || []) {
+      const pid = String(entry.peerId);
+      const existing = byPeer.get(pid);
+      if (!existing || sourcePriority(entry.source) < sourcePriority(existing.source)) {
+        byPeer.set(pid, entry);
+      }
+    }
+    return [...byPeer.values()];
+  }
   function loadPresetFromLocalStorage(name) {
     try {
       const raw = localStorage.getItem("sharescreen_audio_presets");
@@ -15803,6 +15860,7 @@
         [...options.pinnedPeerIds || []].map((id) => String(id))
       );
       this.allChannelsRoutedToDest = false;
+      this.allowDualPeerAudio = options.allowDualPeerAudio === true;
     }
     setPinnedPeerIds(peerIds = []) {
       this.pinnedPeerIds = new Set([...peerIds || []].map((id) => String(id)));
@@ -16046,8 +16104,8 @@
         console.error("[HostAudioMonitor] Falha ao criar AudioContext:", e);
       }
     }
-    _hasAnyFilter(peerId) {
-      return hasActiveMicrophoneFilter(this.getFilterPrefs(peerId));
+    _hasAnyFilter(channelKeyOrPeerId) {
+      return hasActiveMicrophoneFilter(this.getFilterPrefs(channelKeyOrPeerId));
     }
     _clearChannelDsp(ch) {
       if (ch.gateInterval) {
@@ -16120,23 +16178,27 @@
       }
       ch.stream = null;
     }
-    getFilterPrefs(peerId) {
-      const key = String(peerId);
+    getFilterPrefs(channelKeyOrPeerId) {
+      const key = String(channelKeyOrPeerId);
+      const peerId = key.includes(":") ? key.split(":")[0] : key;
+      const source = key.includes(":") ? key.split(":").slice(1).join(":") : "microphone";
       if (!this.filterPrefs.has(key)) {
-        const name = this.peerNames.get(key) || "";
+        const name = this.peerNames.get(peerId) || "";
         let saved = null;
-        if (name) {
+        if (name && source === "microphone") {
           saved = loadPresetFromLocalStorage(name);
         }
-        this.filterPrefs.set(key, saved || { ...MIC_FILTER_DEFAULTS });
+        const defaults = source === "system" ? { ...MIC_FILTER_DEFAULTS, noiseGate: false, micSensitivity: false } : { ...MIC_FILTER_DEFAULTS };
+        this.filterPrefs.set(key, saved || defaults);
       }
       return this.filterPrefs.get(key);
     }
-    setFilterPrefs(peerId, prefs) {
-      const key = String(peerId);
+    setFilterPrefs(channelKeyOrPeerId, prefs) {
+      const key = String(channelKeyOrPeerId);
       this.filterPrefs.set(key, { ...this.getFilterPrefs(key), ...prefs });
       for (const ch of this.channels.values()) {
-        if (ch.peerId === key) {
+        const chKey = audioChannelKey(ch.peerId, ch.source);
+        if (chKey === key || ch.peerId === key) {
           this._applyChannelFilters(ch);
         }
       }
@@ -16220,11 +16282,13 @@
     }
     _applyChannelFilters(ch) {
       if (!this.ctx) return;
-      const prefs = this.getFilterPrefs(ch.peerId);
+      const channelKey = audioChannelKey(ch.peerId, ch.source);
+      const prefs = this.getFilterPrefs(channelKey);
+      const useDsp = ch.source !== "system";
       if (ch.gainNode) {
         if (this._isChannelMuted(ch.peerId)) {
           ch.gainNode.gain.value = 0;
-        } else if (this._hasAnyFilter(ch.peerId)) {
+        } else if (useDsp && this._hasAnyFilter(channelKey)) {
           ch.gainNode.gain.value = prefs.gain !== void 0 ? prefs.gain : 1;
         } else {
           ch.gainNode.gain.value = 1;
@@ -16273,9 +16337,10 @@
           isOpen = false;
           return;
         }
-        const prefs = this.getFilterPrefs(ch.peerId);
+        const channelKey = audioChannelKey(ch.peerId, ch.source);
+        const prefs = this.getFilterPrefs(channelKey);
         const targetGain = prefs.gain !== void 0 ? prefs.gain : 1;
-        const gateActive = prefs.noiseGate || prefs.micSensitivity;
+        const gateActive = ch.source !== "system" && (prefs.noiseGate || prefs.micSensitivity);
         if (!gateActive) {
           if (!isOpen) isOpen = true;
           ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
@@ -16304,9 +16369,12 @@
           this.peerNames.set(String(s.peerId), s.name);
         }
       }
-      const list = normalizeRemoteAudioSources(sources, {
-        excludePeerId: this.excludePeerId
-      });
+      const list = pickAntiEchoSources(
+        normalizeRemoteAudioSources(sources, {
+          excludePeerId: this.excludePeerId
+        }),
+        { allowDualPeerAudio: this.allowDualPeerAudio }
+      );
       const wanted = /* @__PURE__ */ new Map();
       for (const entry of list) {
         const channelKey = audioChannelKey(entry.peerId, entry.source);
@@ -16377,7 +16445,9 @@
           sources.push({ peerId: c.id, producerId: ids.audio, source: "microphone" });
         }
       }
-      return this.syncFromSources(sources);
+      return this.syncFromSources(
+        pickAntiEchoSources(sources, { allowDualPeerAudio: this.allowDualPeerAudio })
+      );
     }
     async _addChannel(channelKey, peerId, producerId, source = "microphone", attempt = 0) {
       var _a47, _b, _c, _d;
@@ -16515,8 +16585,8 @@
 
   // src/shared/source-cards.js
   function hasVideoAvailable(c) {
-    var _a47;
-    return !!((c == null ? void 0 : c.isProducing) || (c == null ? void 0 : c.hasVideo) || ((_a47 = c == null ? void 0 : c.producerIds) == null ? void 0 : _a47.video) || (c == null ? void 0 : c.producerId) || (c == null ? void 0 : c.status) === "transmitindo");
+    var _a47, _b;
+    return !!((c == null ? void 0 : c.selectable) || ((_a47 = c == null ? void 0 : c.mediaReady) == null ? void 0 : _a47.video) || (c == null ? void 0 : c.isProducing) || (c == null ? void 0 : c.hasVideo) || ((_b = c == null ? void 0 : c.producerIds) == null ? void 0 : _b.video) || (c == null ? void 0 : c.producerId) || (c == null ? void 0 : c.status) === "transmitindo");
   }
   function isConnectedPeer(c) {
     return !!(c == null ? void 0 : c.id) && (c == null ? void 0 : c.status) !== "desconectado";
@@ -16968,6 +17038,36 @@
     if (hostDisplayName) {
       saveAudioFiltersPresetDebounced(hostDisplayName, prefs, "host");
     }
+  }
+  async function loadHostMicPresetFromStorage() {
+    if (!(media == null ? void 0 : media.applyHostMicPublishChain)) {
+      syncHostMicGainUi(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
+      return;
+    }
+    let prefs = null;
+    if (hostDisplayName) {
+      const apiPreset = await fetchAudioFilterPresetApi("host", hostDisplayName);
+      if (apiPreset == null ? void 0 : apiPreset.prefs) {
+        prefs = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
+      }
+    }
+    if (!prefs) {
+      const gain = loadHostMicPublishGain(getDefaultHostMicPublishGain());
+      prefs = normalizeMicrophoneFilterPrefs({
+        ...HOST_MIC_PUBLISH_DEFAULTS,
+        gain,
+        compressor: true,
+        peaking: true,
+        peakingGain: 2
+      });
+      if (hostDisplayName && hasActiveMicrophoneFilter(prefs)) {
+        saveAudioFilterPresetApi("host", hostDisplayName, prefs).catch(() => {
+        });
+      }
+    }
+    if (prefs.gain != null) saveHostMicPublishGain(prefs.gain);
+    syncHostMicGainUi(prefs.gain ?? loadHostMicPublishGain());
+    await media.setMicrophoneFilterPrefs(prefs);
   }
   var localHostVuStop = null;
   var isCoHostInstance = readQueryParam("cohost") === "true";
@@ -18172,19 +18272,37 @@
     return stream;
   }
   function handleMessage(msg) {
-    var _a47, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+    var _a47, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+    if (msg.type === "roomState") {
+      debugClientSessionLog("H5", "host:handleMessage", "roomState", {
+        version: (_a47 = msg.payload) == null ? void 0 : _a47.version,
+        clients: (((_b = msg.payload) == null ? void 0 : _b.clients) || []).map((c) => {
+          var _a48, _b2, _c2, _d2;
+          return {
+            id: (_a48 = c.id) == null ? void 0 : _a48.slice(0, 8),
+            name: c.displayName,
+            selectable: c.selectable,
+            mediaReadyVideo: (_b2 = c.mediaReady) == null ? void 0 : _b2.video,
+            hasVideo: c.hasVideo,
+            producerVideo: ((_d2 = (_c2 = c.producerIds) == null ? void 0 : _c2.video) == null ? void 0 : _d2.slice(0, 8)) || null
+          };
+        })
+      });
+      applyRoomSnapshot(msg.payload, { force: true }).catch((e) => errors.handle(e, "room-state"));
+      return;
+    }
     if (msg.type === "estadoSala") {
       applyRoomSnapshot(msg.payload).catch((e) => errors.handle(e, "estado-sala"));
       return;
     }
     if (msg.type === "modoPonteMeetDefinido") {
-      if (((_a47 = msg.payload) == null ? void 0 : _a47.ativo) !== void 0) {
+      if (((_c = msg.payload) == null ? void 0 : _c.ativo) !== void 0) {
         applyMeetBridgeLiveModeFromRoom(msg.payload.ativo);
       }
       return;
     }
     if (msg.type === "clientesSilenciados") {
-      const mutedIds = ((_b = msg.payload) == null ? void 0 : _b.mutedPeerIds) || [];
+      const mutedIds = ((_d = msg.payload) == null ? void 0 : _d.mutedPeerIds) || [];
       mutedClients.clear();
       for (const id of mutedIds) {
         mutedClients.add(String(id));
@@ -18194,6 +18312,20 @@
       return;
     }
     if (msg.type === "estado") {
+      debugClientSessionLog("H5", "host:handleMessage", "estado", {
+        clients: (((_e = msg.payload) == null ? void 0 : _e.clients) || []).map((c) => {
+          var _a48, _b2, _c2, _d2;
+          return {
+            id: (_a48 = c.id) == null ? void 0 : _a48.slice(0, 8),
+            name: c.displayName,
+            selectable: c.selectable,
+            mediaReadyVideo: (_b2 = c.mediaReady) == null ? void 0 : _b2.video,
+            hasVideo: c.hasVideo,
+            isProducing: c.isProducing,
+            producerVideo: ((_d2 = (_c2 = c.producerIds) == null ? void 0 : _c2.video) == null ? void 0 : _d2.slice(0, 8)) || null
+          };
+        })
+      });
       estado = enrichRoomSourcesState(
         {
           clients: msg.payload.clients || [],
@@ -18221,12 +18353,12 @@
         totalClients: estado.clients.length,
         videoProducers
       });
-      if (((_c = msg.payload) == null ? void 0 : _c.meetBridgeLiveMode) !== void 0) {
+      if (((_f = msg.payload) == null ? void 0 : _f.meetBridgeLiveMode) !== void 0) {
         applyMeetBridgeLiveModeFromRoom(msg.payload.meetBridgeLiveMode);
       }
       mergeLastAudioSourcesFromEstado(msg.payload || {});
       renderLista();
-      syncHostAudioMonitor(((_e = (_d = msg.payload) == null ? void 0 : _d.audioSources) == null ? void 0 : _e.length) ? msg.payload.audioSources : null).catch(
+      syncHostAudioMonitor(((_h = (_g = msg.payload) == null ? void 0 : _g.audioSources) == null ? void 0 : _h.length) ? msg.payload.audioSources : null).catch(
         (e) => errors.handle(e, "audio-monitor")
       );
     }
@@ -18238,7 +18370,7 @@
       window.location.href = `/client/?nome=${encodeURIComponent(hostDisplayName)}`;
     }
     if (msg.type === "fontesAudio") {
-      const sources = ((_f = msg.payload) == null ? void 0 : _f.sources) || [];
+      const sources = ((_i = msg.payload) == null ? void 0 : _i.sources) || [];
       const forceMicSync = sources.some(
         (s) => (s.source || "microphone") === "microphone" && String(s.peerId || s.id) !== String(hostPeerId)
       );
@@ -18253,8 +18385,8 @@
       return;
     }
     if (msg.type === "consumerFechado") {
-      const consumerId = (_g = msg.payload) == null ? void 0 : _g.consumerId;
-      const wasVideoConsumer = ((_i = (_h = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _h.video) == null ? void 0 : _i.id) === consumerId;
+      const consumerId = (_j = msg.payload) == null ? void 0 : _j.consumerId;
+      const wasVideoConsumer = ((_l = (_k = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _k.video) == null ? void 0 : _l.id) === consumerId;
       if (consumerId) {
         hostAudioMonitor == null ? void 0 : hostAudioMonitor.removeByConsumerId(consumerId).catch(() => {
         });
@@ -18287,8 +18419,8 @@
     if (msg.type === "transmissaoAtiva") {
       const tx = normalizeTransmission(msg.payload);
       debugHostLog("H2", "[ACTIVE_VIDEO] evento de transmissao ativa recebido no host", {
-        selectedPeerId: ((_j = tx.selectedPeerId) == null ? void 0 : _j.slice(0, 8)) || null,
-        producerVideo: ((_l = (_k = tx.producerIds) == null ? void 0 : _k.video) == null ? void 0 : _l.slice(0, 8)) || null,
+        selectedPeerId: ((_m = tx.selectedPeerId) == null ? void 0 : _m.slice(0, 8)) || null,
+        producerVideo: ((_o = (_n = tx.producerIds) == null ? void 0 : _n.video) == null ? void 0 : _o.slice(0, 8)) || null,
         activeKey: activeVideoTransmissionKey(tx),
         lastAppliedActiveVideoKey
       });
@@ -18302,7 +18434,7 @@
       return;
     }
     if (msg.type === "erro") {
-      const mensagem = ((_m = msg.payload) == null ? void 0 : _m.mensagem) || "";
+      const mensagem = ((_p = msg.payload) == null ? void 0 : _p.mensagem) || "";
       if (isTransientServerError(mensagem, { joinInProgress })) {
         log(mensagem || "Erro transitorio", "warn");
         return;
@@ -18407,7 +18539,7 @@ ${entry.technical}`;
       if (joinPrefs.microphone) {
         try {
           await media.ensureSendTransport();
-          await applyHostMicPresetFromStorage();
+          await loadHostMicPresetFromStorage();
           await media.publishMicrophone(joinPrefs);
           syncLocalHostVu();
         } catch (e) {
@@ -19453,6 +19585,12 @@ ${entry.technical}`;
   }
   var isHostPage = window.location.pathname.includes("/host");
   if (isHostPage) {
+    verifyServerBuild({
+      onToast: (m, t) => showToast2(m, t),
+      onTitlePrefix: (prefix) => {
+        document.title = prefix + (document.title.replace(/^\[[^\]]+\]\s*/, "") || "ShareScreen Host");
+      }
+    });
     bootstrap();
   }
 })();

@@ -31,9 +31,9 @@ import {
   verifyDataDirWritable
 } from './client-db.js';
 import { getClientIpFromRequest } from './client-ip.js';
-import { debugSessionLog } from './debug-session-log.js';
 import { resolveComputerIp } from './user-resolve.js';
 import { room, getAgentDebugLogPath } from './room-manager.js';
+import { getDebugSessionRing, debugSessionLog } from './debug-session-log.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
@@ -441,8 +441,22 @@ function createApp() {
       publicUrl: config.publicUrl || null,
       publicClientPath: (config.publicUrl || '').trim() ? '/meet/' : '/client/',
       buildId: appBuildId,
+      roomStateProtocol: !config.useLegacyRoomSync,
       turnEnabled: getVideoQualityForClients().turnEnabled
     });
+  });
+
+  app.get('/api/debug-session', (_req, res) => {
+    applyNoStoreHeaders(res);
+    res.json({ sessionId: '20cf0e', entries: getDebugSessionRing() });
+  });
+
+  app.post('/api/client-debug', (req, res) => {
+    const { hypothesisId, location, message, data } = req.body || {};
+    if (hypothesisId && location && message) {
+      debugSessionLog(hypothesisId, location, message, data || {});
+    }
+    res.json({ ok: true });
   });
 
   app.post('/api/link-externo', (req, res) => {

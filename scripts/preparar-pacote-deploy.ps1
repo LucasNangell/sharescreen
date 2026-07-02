@@ -13,35 +13,39 @@ function Require-File($path, $label) {
     }
 }
 
+function File-Sha256($path) {
+    return (Get-FileHash -Path $path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
 Write-Host '=== ShareScreen — preparar pacote para servidor ===' -ForegroundColor Cyan
 
-Write-Host '[1/4] npm install (baixa/compila mediasoup-worker neste PC)...'
+Write-Host '[1/5] npm install (baixa/compila mediasoup-worker neste PC)...'
 npm install
 if ($LASTEXITCODE -ne 0) { throw 'npm install falhou' }
 
 $worker = Join-Path $root 'node_modules\mediasoup\worker\out\Release\mediasoup-worker.exe'
 Require-File $worker 'mediasoup-worker.exe'
 
-Write-Host '[2/4] Certificado producao (10.1.1.73)...'
+Write-Host '[2/5] Certificado producao (10.1.1.73)...'
 npm run cert:prod
 if ($LASTEXITCODE -ne 0) { throw 'cert:prod falhou' }
 
-Write-Host '[3/4] Build frontend producao...'
+Write-Host '[3/5] Build frontend producao...'
 npm run build:prod
 if ($LASTEXITCODE -ne 0) { throw 'build:prod falhou' }
 
 Require-File (Join-Path $root 'public\host\app.bundle.js') 'host bundle'
 Require-File (Join-Path $root 'public\client\app.bundle.js') 'client bundle'
+Require-File (Join-Path $root 'public\shared\build-id.json') 'build-id.json'
 Require-File (Join-Path $root 'certs\server.crt') 'certificado'
 
-# Remove lixo de compilacao do mediasoup (mantem so o .exe)
 $buildDir = Join-Path $root 'node_modules\mediasoup\worker\out\Release\build'
 if (Test-Path $buildDir) {
     Write-Host 'Limpando artefatos de compilacao do mediasoup...'
     Remove-Item $buildDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '[4/4] Montando pasta pacote-servidor...'
+Write-Host '[4/5] Montando pasta pacote-servidor...'
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Path $dest | Out-Null
 
@@ -52,13 +56,10 @@ $itens = @(
     'certs',
     'scripts',
     'node_modules',
-    'nginx',
     'package.json',
     'package-lock.json',
     'start-producao.bat',
-    'verificar-producao.bat',
-    'DEPLOY-PRODUCAO.md',
-    'DEPLOY-COPIAR.txt'
+    'verificar-producao.bat'
 )
 
 foreach ($item in $itens) {
@@ -70,29 +71,40 @@ foreach ($item in $itens) {
     Copy-Item $src -Destination (Join-Path $dest $item) -Recurse -Force
 }
 
-# Modulos usados pelo Node no servidor (import ESM, fora do bundle do browser)
-$recordingFilename = Join-Path $root 'src\shared\recording-filename.js'
-Require-File $recordingFilename 'src/shared/recording-filename.js'
+# Modulos ESM usados pelo Node no servidor (fora do bundle do browser)
 $destSrcShared = Join-Path $dest 'src\shared'
 New-Item -ItemType Directory -Path $destSrcShared -Force | Out-Null
-Copy-Item $recordingFilename -Destination $destSrcShared -Force
+$sharedServerModules = @('recording-filename.js')
+foreach ($mod in $sharedServerModules) {
+    $srcMod = Join-Path $root "src\shared\$mod"
+    Require-File $srcMod "src/shared/$mod"
+    Copy-Item $srcMod -Destination (Join-Path $destSrcShared $mod) -Force
+}
 
-# Nao copiar sourcemaps de producao
 Get-ChildItem (Join-Path $dest 'public') -Recurse -Filter '*.map' -ErrorAction SilentlyContinue |
     Remove-Item -Force
 
 $adminPublic = Join-Path $dest 'public\admin'
 if (Test-Path $adminPublic) { Remove-Item $adminPublic -Recurse -Force }
 
-$dataSrc = Join-Path $root 'data'
-if (Test-Path $dataSrc) {
-    Copy-Item $dataSrc -Destination (Join-Path $dest 'data') -Recurse -Force
+Write-Host '[5/5] Gerando MANIFEST.json...'
+$buildIdJson = Get-Content (Join-Path $root 'public\shared\build-id.json') -Raw | ConvertFrom-Json
+$manifest = @{
+    buildId = $buildIdJson.buildId
+    builtAt = $buildIdJson.builtAt
+    packagedAt = (Get-Date).ToUniversalTime().ToString('o')
+    files = @{
+        'public/client/app.bundle.js' = (File-Sha256 (Join-Path $root 'public\client\app.bundle.js'))
+        'public/host/app.bundle.js' = (File-Sha256 (Join-Path $root 'public\host\app.bundle.js'))
+        'server/signaling.js' = (File-Sha256 (Join-Path $root 'server\signaling.js'))
+        'server/room-manager.js' = (File-Sha256 (Join-Path $root 'server\room-manager.js'))
+    }
+    features = @{
+        roomState = $true
+        midiaPronta = $true
+    }
 }
-
-$usersJson = Join-Path $root 'users.json'
-if (Test-Path $usersJson) {
-    Copy-Item $usersJson -Destination $dest -Force
-}
+$manifest | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $dest 'MANIFEST.json') -Encoding UTF8
 
 $readme = @"
 PACOTE PRONTO PARA O SERVIDOR
@@ -106,12 +118,12 @@ No servidor (so precisa Node.js 18+ instalado):
   2. start-producao.bat
 
 Nao execute npm install no servidor.
+A pasta data\ do servidor NAO e sobrescrita pelo deploy (robocopy /XD data).
 "@
-
 Set-Content -Path (Join-Path $dest 'LEIA-ME-SERVIDOR.txt') -Value $readme -Encoding UTF8
 
 Write-Host ''
 Write-Host '=== Pacote criado ===' -ForegroundColor Green
 Write-Host "Pasta: $dest"
-Write-Host 'Copie o conteudo para C:\Sistemas CGraf\Screen Share no cgrafsysvm'
+Write-Host "Build ID: $($buildIdJson.buildId)"
 Write-Host ''

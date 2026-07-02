@@ -159,14 +159,16 @@ export class SignalingClient {
       this._lastCloseReason = '';
       this.setState(ConnectionState.CONNECTED);
       this.onLog('WebSocket conectado', 'info');
-      // onOpen reenvia `entrar` — fila antiga causava duplicata e derrubava o host
-      this._pendingCritical = this._pendingCritical.filter((packet) => {
-        try {
-          return JSON.parse(packet).type !== 'entrar';
-        } catch {
-          return false;
-        }
-      });
+      // Em reconnect, onOpen reenvia entrar — descarta fila antiga para evitar duplicata no host
+      if (this.enableReconnect) {
+        this._pendingCritical = this._pendingCritical.filter((packet) => {
+          try {
+            return JSON.parse(packet).type !== 'entrar';
+          } catch {
+            return false;
+          }
+        });
+      }
       this._flushCriticalQueue();
       this.onOpen?.();
     };

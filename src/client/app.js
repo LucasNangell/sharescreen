@@ -22,12 +22,17 @@ import { HostAudioMonitor } from '../shared/host-audio-monitor.js';
 import { normalizeRemoteAudioSources, audioTraceSync, audioTrace, audioSourcesSignature } from '../shared/audio-sources.js';
 import { isSelectableSource, sortDisplaySources } from '../shared/display-sources.js';
 import { buildDisplaySourceCard } from '../shared/source-cards.js';
-import { initCoHost, teardownCoHost } from '../host/app.js';
+import { ClientSession, SessionPhase, requestRoomStateWithRetry, joinPayloadExtras } from './session.js';
+import { MediaPublisher } from './media-publisher.js';
+import { PublisherConnection } from './publisher-connection.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
+import { verifyServerBuild } from '../shared/build-verify.js';
+import { debugClientSessionLog } from '../shared/debug-session-client.js';
 
 const STORAGE_NAME = 'sharescreen_client_name';
 const STORAGE_MACHINE = 'sharescreen_agent_hostname';
+const STORAGE_MACHINE_ID = 'sharescreen_machine_id';
 
 function readQueryParam(key) {
   try {
@@ -118,6 +123,7 @@ let hostPeerId = null;
 let meetBridgeLiveMode = false;
 let audioHealthTimer = null;
 let deferScreenShareOnJoin = false;
+let skipJoinPublishOnJoin = false;
 let pendingPostPublishRemoteWork = null;
 let clientDisplayStream = null;
 let clientMicTrack = null;
@@ -129,6 +135,42 @@ let clientJoinPromise = null;
 let roomPin = readQueryParam('pin') || '';
 let displayControlActive = false;
 let displaySources = [];
+const clientSession = new ClientSession();
+let mediaPublisher = null;
+let suppressShareEndedHandler = false;
+let publisherSessionPromise = null;
+let publisherFlowPromise = null;
+let captureScreenInFlight = false;
+let publisherFlowGeneration = 0;
+const publisherConnection = new PublisherConnection();
+
+function ensureAgentHostname() {
+  if (agentHostname) return agentHostname;
+  let id = localStorage.getItem(STORAGE_MACHINE_ID);
+  if (!id) {
+    id =
+      globalThis.crypto?.randomUUID?.() ||
+      `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(STORAGE_MACHINE_ID, id);
+  }
+  agentHostname = id;
+  localStorage.setItem(STORAGE_MACHINE, id);
+  return agentHostname;
+}
+
+function beginPublisherFlow() {
+  publisherFlowGeneration += 1;
+  publisherConnection.reset();
+  return publisherFlowGeneration;
+}
+
+function isPublisherFlowCurrent(gen) {
+  return gen === publisherFlowGeneration;
+}
+
+function shouldIgnorePublisherFailure(gen) {
+  return !isPublisherFlowCurrent(gen) || !!media?.hasVideoProducer?.();
+}
 const viewerAccessToken = readQueryParam('token') || '';
 const hasExternalAccessToken = !!viewerAccessToken;
 const autoViewerEntry =
@@ -160,6 +202,7 @@ if (readQueryParam('nome') && !readQueryParam('token')) {
   localStorage.setItem(STORAGE_NAME, readQueryParam('nome'));
 }
 if (readQueryParam('maquina')) localStorage.setItem(STORAGE_MACHINE, readQueryParam('maquina'));
+ensureAgentHostname();
 
 bindLtOverlayResize(els.previewArea);
 
@@ -612,11 +655,19 @@ async function teardownClientSession({ keepDisplayStream = false, keepMicTrack =
   lastAppliedAudioSig = '';
   await roomAudioMonitor?.dispose();
   roomAudioMonitor = null;
-  await media?.dispose({
-    keepLocalScreenStream: keepDisplayStream,
-    keepMicTrack
-  });
+  suppressShareEndedHandler = true;
+  try {
+    await media?.dispose({
+      keepLocalScreenStream: keepDisplayStream,
+      keepMicTrack
+    });
+  } finally {
+    suppressShareEndedHandler = false;
+  }
   media = null;
+  mediaPublisher = null;
+  clientSession.reset();
+  publisherConnection.reset();
   if (signaling) {
     signaling.close();
     signaling = null;
@@ -636,8 +687,172 @@ async function teardownClientSession({ keepDisplayStream = false, keepMicTrack =
   }
 }
 
+function getLiveDisplayVideoTrack() {
+  return clientDisplayStream?.getVideoTracks?.().find((t) => t.readyState === 'live') || null;
+}
+
 function hasPendingDisplayStream() {
-  return clientDisplayStream?.getVideoTracks?.().some((t) => t.readyState === 'live');
+  return !!getLiveDisplayVideoTrack();
+}
+
+function logCaptureTrackState(label, extra = {}) {
+  const track = getLiveDisplayVideoTrack();
+  const firstTrack = clientDisplayStream?.getVideoTracks?.()[0];
+  // #region agent log
+  debugClientSessionLog('H9', 'client:capture-track', label, {
+    hasStream: !!clientDisplayStream,
+    trackState: track?.readyState || firstTrack?.readyState || null,
+    firstTrackState: firstTrack?.readyState || null,
+    hasProducer: !!media?.hasVideoProducer?.(),
+    wsConnected: !!signaling?.connected,
+    ...extra
+  });
+  // #endregion
+}
+
+function createClientSignalingClient() {
+  const client = new SignalingClient(wsUrl(), {
+    enableReconnect: false,
+    onLog: (m, l) => setStatus(m),
+    onStateChange: (state) => {
+      if (state === ConnectionState.RECONNECTING) setBadge('Reconectando', 'warn');
+      if (state === ConnectionState.CONNECTED) setBadge('Online', 'online');
+      if (state === ConnectionState.FAILED) setBadge('Falha', 'error');
+    },
+    onClose: () => {
+      if (sessionReady && !clientJoinInProgress && !bootstrapping) {
+        setStatus('Reconectando...');
+      }
+    }
+  });
+  client.addListener(handleServerMessage);
+  return client;
+}
+
+function enableSessionReconnect() {
+  if (!signaling) return;
+  signaling.onOpen = () => handleSignalingReconnect();
+  signaling.enableReconnect = true;
+}
+
+/** Conecta/join sem derrubar captura de tela nem fechar WS desnecessariamente. */
+async function ensurePublisherSession(flowGen = publisherFlowGeneration) {
+  if (publisherSessionPromise) return publisherSessionPromise;
+
+  publisherSessionPromise = (async () => {
+    if (!isPublisherFlowCurrent(flowGen)) return;
+
+    if (signaling?.connected && media && peerId && media.hasVideoProducer?.()) {
+      logCaptureTrackState('ensure-skip-already-publishing');
+      return;
+    }
+
+    viewerOnly = false;
+    clientSession.setPublishIntent('publisher');
+    deferScreenShareOnJoin = true;
+    skipJoinPublishOnJoin = false;
+    logCaptureTrackState('ensure-start');
+
+    const stale = () => !isPublisherFlowCurrent(flowGen);
+
+    if (signaling?.connected && signaling.authenticated && media && peerId) {
+      bootstrapping = true;
+      try {
+        await media.ensureSendTransport();
+      } finally {
+        bootstrapping = false;
+      }
+      logCaptureTrackState('ensure-reuse-session');
+      return;
+    }
+
+    if (media && (!signaling?.connected || !peerId)) {
+      const pendingStream = hasPendingDisplayStream() ? clientDisplayStream : null;
+      suppressShareEndedHandler = true;
+      try {
+        await media.dispose({
+          keepLocalScreenStream: !!pendingStream,
+          keepMicTrack: clientMicTrack?.readyState === 'live'
+        });
+      } finally {
+        suppressShareEndedHandler = false;
+      }
+      media = null;
+      mediaPublisher = null;
+      peerId = null;
+      sessionStarted = false;
+      sessionReady = false;
+      joinInFlight = false;
+      clientJoinPromise = null;
+      clientDisplayStream = pendingStream;
+      logCaptureTrackState('ensure-after-dispose');
+    }
+
+    if (signaling && !signaling.connected) {
+      try {
+        signaling.close();
+      } catch (_) {}
+      signaling = null;
+    }
+
+    bootstrapping = true;
+    try {
+      signaling = await publisherConnection.ensureWebSocket({
+        signaling,
+        createSignaling: () => createClientSignalingClient(),
+        isStale: stale
+      });
+
+      if (stale()) return;
+
+      if (signaling.connected && media && peerId && signaling.authenticated) {
+        await media.ensureSendTransport();
+        logCaptureTrackState('ensure-reuse-session');
+        return;
+      }
+
+      await publisherConnection.ensureJoined({
+        isStale: stale,
+        joinFn: async () => {
+          await runClientJoin();
+        }
+      });
+
+      logCaptureTrackState('ensure-connected');
+    } finally {
+      bootstrapping = false;
+    }
+  })().finally(() => {
+    publisherSessionPromise = null;
+  });
+
+  return publisherSessionPromise;
+}
+
+async function ensureLiveCaptureStream(capturePrefs) {
+  const liveTrack = getLiveDisplayVideoTrack();
+  if (liveTrack) {
+    logCaptureTrackState('ensure-live-ok', { trackId: liveTrack.id?.slice(0, 8) });
+    return clientDisplayStream;
+  }
+  if (clientDisplayStream) {
+    clientDisplayStream.getTracks?.().forEach((t) => {
+      try {
+        t.stop();
+      } catch (_) {}
+    });
+    clientDisplayStream = null;
+  }
+  logCaptureTrackState('ensure-live-recapture', {
+    previousState: 'ended'
+  });
+  setStatus('Selecione a tela no dialogo do navegador...');
+  clientDisplayStream = await promptDisplayCapture({
+    systemAudio: capturePrefs.systemAudio !== false,
+    microphone: false
+  });
+  mediaPublisher = null;
+  return clientDisplayStream;
 }
 
 function showIdentifyStep() {
@@ -666,11 +881,7 @@ function showAudioStep() {
     els.onboardIntro.textContent =
       'Tela selecionada. Confirme as opcoes de audio antes de transmitir.';
   }
-  if (els.chkMicrophone && !els.chkMicrophone.checked) {
-    els.chkMicrophone.checked = true;
-    saveCapturePrefs(getCapturePrefsFromUi());
-  }
-  if (els.micWrap) els.micWrap.hidden = false;
+  if (els.micWrap) els.micWrap.hidden = !els.chkMicrophone?.checked;
   populateMicrophoneSelect(els.micSelect, {
     deviceId: loadCapturePrefs().microphoneDeviceId || '',
     onLog: setStatus
@@ -700,26 +911,49 @@ async function promptDisplayCapture(capturePrefs) {
 }
 
 async function captureScreenFirst({ autoTransmitAfterCapture = false } = {}) {
+  if (captureScreenInFlight || publisherFlowPromise) {
+    debugClientSessionLog('H10', 'client:captureScreenFirst', 'dedupe', {
+      captureScreenInFlight,
+      hasPublisherFlow: !!publisherFlowPromise
+    });
+    return;
+  }
+  captureScreenInFlight = true;
+  const flowGen = beginPublisherFlow();
+  const t0 = performance.now();
+  debugClientSessionLog('H8', 'client:captureScreenFirst', 'start', {
+    autoTransmitAfterCapture,
+    elapsedMs: 0,
+    flowGen
+  });
   if (!media?.hasVideoProducer?.()) {
-    await teardownClientSession({ keepDisplayStream: false });
+    mediaPublisher = null;
   }
   clientJoinInProgress = true;
+  setStatus('Selecione a tela no dialogo do navegador...');
   hideOverlay();
   try {
+    debugClientSessionLog('H8', 'client:captureScreenFirst', 'before-getDisplayMedia', {
+      elapsedMs: Math.round(performance.now() - t0)
+    });
     const stream = await promptDisplayCapture({
       systemAudio: true,
       microphone: false
     });
+    if (!isPublisherFlowCurrent(flowGen)) return;
     clientDisplayStream = stream;
+    debugClientSessionLog('H8', 'client:captureScreenFirst', 'capture-ok', {
+      elapsedMs: Math.round(performance.now() - t0)
+    });
     if (autoTransmitAfterCapture && hasPendingDisplayStream()) {
-      clientJoinInProgress = false;
-      await confirmAudioAndTransmit();
+      await startPublisherFlow(flowGen);
       return;
     }
     showAudioStep();
     await attachVuMeterIfNeeded();
     setStatus('Tela capturada - configure o audio e confirme');
   } catch (e) {
+    if (shouldIgnorePublisherFailure(flowGen)) return;
     clientDisplayStream = null;
     onboardStep = 'identify';
     showIdentifyStep();
@@ -735,12 +969,184 @@ async function captureScreenFirst({ autoTransmitAfterCapture = false } = {}) {
       showErro(e.message);
     }
   } finally {
-    clientJoinInProgress = false;
+    captureScreenInFlight = false;
+    if (isPublisherFlowCurrent(flowGen)) {
+      clientJoinInProgress = false;
+    }
   }
 }
 
+async function runPublisherFlowBody(t0, flowGen) {
+  if (!isPublisherFlowCurrent(flowGen)) {
+    return;
+  }
+
+  const prefs = getCapturePrefsFromUi();
+  saveCapturePrefs(prefs);
+  viewerOnly = false;
+  clientSession.setPublishIntent('publisher');
+  if (els.chkViewerOnly) els.chkViewerOnly.checked = false;
+
+  if (media?.hasVideoProducer?.()) {
+    debugClientSessionLog('H10', 'client:startPublisherFlow', 'already-publishing', {
+      producerId: media.producers?.video?.id?.slice(0, 8) || null
+    });
+    enableSessionReconnect();
+    hideOverlay();
+    setStatus('Transmitindo - aguardando selecao do host');
+    updateClientStateAfterPublish();
+    return;
+  }
+
+  const nome = getNome();
+  if (!nome) {
+    throw new Error('Informe um nome para este computador');
+  }
+
+  clientJoinInProgress = true;
+  setStatus('Preparando transmissao...');
+  debugClientSessionLog('H1', 'client:startPublisherFlow', 'start', {
+    hasStreamBeforeJoin: hasPendingDisplayStream(),
+    elapsedMs: 0,
+    flowGen
+  });
+
+  if (!hasPendingDisplayStream()) {
+    setStatus('Selecione a tela no dialogo do navegador...');
+    hideOverlay();
+    debugClientSessionLog('H8', 'client:startPublisherFlow', 'before-getDisplayMedia', {
+      elapsedMs: Math.round(performance.now() - t0)
+    });
+    clientDisplayStream = await promptDisplayCapture({
+      systemAudio: prefs.systemAudio !== false,
+      microphone: false
+    });
+  }
+
+  if (!isPublisherFlowCurrent(flowGen)) {
+    throw new Error('Fluxo de publicacao interrompido');
+  }
+
+  setStatus('Conectando...');
+  hideOverlay();
+  debugClientSessionLog('H8', 'client:startPublisherFlow', 'before-connect', {
+    elapsedMs: Math.round(performance.now() - t0),
+    hasStream: hasPendingDisplayStream()
+  });
+  await ensurePublisherSession(flowGen);
+  if (!isPublisherFlowCurrent(flowGen)) {
+    throw new Error('Fluxo de publicacao interrompido');
+  }
+  if (!media) {
+    throw new Error('Sessao de midia nao iniciada');
+  }
+
+  if (!media.hasVideoProducer?.()) {
+    await ensureLiveCaptureStream(prefs);
+    if (!isPublisherFlowCurrent(flowGen)) {
+      throw new Error('Fluxo de publicacao interrompido');
+    }
+    logCaptureTrackState('before-publish', { elapsedMs: Math.round(performance.now() - t0) });
+
+    let publishPrefs = { ...prefs };
+    if (prefs.microphone) {
+      const track = await ensureClientMicTrack(prefs.microphoneDeviceId || '');
+      if (!track || track.readyState !== 'live') {
+        throw new Error('Nao foi possivel capturar o microfone - verifique permissoes');
+      }
+      publishPrefs = { ...prefs, prefetchedMicTrack: track };
+    }
+
+    await publishClientMedia(publishPrefs);
+    if (prefs.microphone && !media.hasPublishedMicrophone()) {
+      throw new Error('Microfone nao publicado - verifique permissoes do navegador');
+    }
+    await flushPostPublishRemoteWork();
+    await finalizeAfterPublish();
+    updateClientMicUi();
+    await attachVuMeterIfNeeded();
+  } else {
+    await finalizeAfterPublish();
+    updateClientStateAfterPublish();
+  }
+
+  if (!media.hasVideoProducer?.()) {
+    throw new Error('Falha ao publicar video - tente novamente');
+  }
+
+  onboardStep = 'identify';
+  setStatus('Transmitindo - aguardando selecao do host');
+  debugClientSessionLog('H1', 'client:startPublisherFlow', 'done', {
+    hasVideoProducer: media.hasVideoProducer(),
+    producerId: media.producers?.video?.id?.slice(0, 8) || null
+  });
+  enableSessionReconnect();
+  hideOverlay();
+}
+
+async function startPublisherFlow(existingFlowGen = null) {
+  if (publisherFlowPromise) {
+    debugClientSessionLog('H10', 'client:startPublisherFlow', 'dedupe', {});
+    return publisherFlowPromise;
+  }
+
+  const flowGen = existingFlowGen ?? beginPublisherFlow();
+  const t0 = performance.now();
+  publisherFlowPromise = (async () => {
+    try {
+      await runPublisherFlowBody(t0, flowGen);
+    } catch (e) {
+      debugClientSessionLog('H7', 'client:startPublisherFlow', 'failed', {
+        message: String(e?.message || e),
+        hasMedia: !!media,
+        wsConnected: !!signaling?.connected,
+        hasStream: hasPendingDisplayStream(),
+        hasProducer: !!media?.hasVideoProducer?.(),
+        flowGen,
+        currentFlowGen: publisherFlowGeneration
+      });
+      if (shouldIgnorePublisherFailure(flowGen)) {
+        debugClientSessionLog('H10', 'client:startPublisherFlow', 'ignored-stale-flow', {
+          flowGen,
+          currentFlowGen: publisherFlowGeneration
+        });
+        if (media?.hasVideoProducer?.()) {
+          enableSessionReconnect();
+          hideOverlay();
+          setStatus('Transmitindo - aguardando selecao do host');
+        }
+        return;
+      }
+      if (/cancelad/i.test(String(e?.message || ''))) {
+        return;
+      }
+      errors.handle(e, 'publisher-flow');
+      showErro(e.message);
+      if (/pista de v[ií]deo indispon|captura de tela|timeout ao conectar/i.test(String(e?.message || ''))) {
+        if (!media?.hasVideoProducer?.()) {
+          clientDisplayStream = null;
+          mediaPublisher = null;
+        }
+      }
+      showOverlay();
+      showIdentifyStep();
+    } finally {
+      if (isPublisherFlowCurrent(flowGen)) {
+        clientJoinInProgress = false;
+      }
+    }
+  })().finally(() => {
+    publisherFlowPromise = null;
+  });
+
+  return publisherFlowPromise;
+}
+
 async function confirmAudioAndTransmit() {
-  if (clientJoinInProgress || bootstrapping) return;
+  if (clientJoinInProgress || bootstrapping || publisherFlowPromise) {
+    if (publisherFlowPromise) return publisherFlowPromise;
+    return;
+  }
 
   const prefs = getCapturePrefsFromUi();
   saveCapturePrefs(prefs);
@@ -753,73 +1159,7 @@ async function confirmAudioAndTransmit() {
     return;
   }
 
-  clientJoinInProgress = true;
-  hideOverlay();
-  setStatus('Conectando...');
-  const capturedStream = clientDisplayStream;
-  try {
-    let prefetchedMicTrack = null;
-    if (prefs.microphone) {
-      prefetchedMicTrack = await ensureClientMicTrack(prefs.microphoneDeviceId || '');
-      if (!prefetchedMicTrack || prefetchedMicTrack.readyState !== 'live') {
-        throw new Error('Nao foi possivel capturar o microfone - verifique permissoes');
-      }
-    }
-
-    const publishPrefs = prefetchedMicTrack
-      ? { ...prefs, prefetchedMicTrack }
-      : prefs;
-    await teardownClientSession({ keepDisplayStream: true, keepMicTrack: !!prefetchedMicTrack });
-    clientDisplayStream = capturedStream;
-    await bootstrap(false, { deferScreenShare: true });
-    if (!media) throw new Error('Sessao de midia nao iniciada');
-    if (!media.hasVideoProducer()) {
-      if (!hasPendingDisplayStream()) {
-        throw new Error('Captura de tela expirada - selecione a tela novamente');
-      }
-      await media.publishDisplayStream(clientDisplayStream, publishPrefs);
-    }
-    if (!media.hasVideoProducer()) {
-      throw new Error('Falha ao publicar video - tente novamente');
-    }
-    if (prefs.microphone && !media.hasPublishedMicrophone()) {
-      throw new Error('Microfone nao publicado - verifique permissoes do navegador');
-    }
-    signaling.send('status', { status: 'transmitindo' });
-    await flushPostPublishRemoteWork();
-    await syncRoomPresenceAfterPublish();
-    updateClientMicUi();
-    await attachVuMeterIfNeeded();
-    onboardStep = 'identify';
-    const activeTx = txSync.lastActiveTransmission;
-    const watchingRemote =
-      activeTx &&
-      hasActiveVideo(activeTx) &&
-      String(activeTx.selectedPeerId) !== String(peerId);
-    if (!watchingRemote && !media?.hasVideoProducer?.()) {
-      setStatus(
-        prefs.microphone
-          ? 'Transmitindo com microfone - aguardando selecao do host'
-          : 'Transmitindo - aguardando selecao do host'
-      );
-    }
-    if (prefs.microphone) {
-      showToast('Microfone publicado com sucesso', 'success');
-    }
-  } catch (e) {
-    showAudioStep();
-    errors.handle(e, 'compartilhar');
-    showErro(e.message);
-    if (signaling?.connected && !media?.hasVideoProducer?.()) {
-      await teardownClientSession({ keepDisplayStream: true, keepMicTrack: true });
-      clientDisplayStream = capturedStream;
-      sessionStarted = false;
-      sessionReady = false;
-      updateClientStates('idle');
-    }
-  } finally {
-    clientJoinInProgress = false;
-  }
+  return startPublisherFlow();
 }
 
 function setStatus(text) {
@@ -917,8 +1257,8 @@ async function initOnboarding() {
       els.nomeInput.value = displayName;
     }
     if (displayName) {
-      hideOverlay();
-      await salvarEIniciar(false, { autoTransmitAfterCapture: true });
+      showIdentifyStep();
+      setStatus('Clique abaixo para compartilhar a tela');
       return;
     }
     showIdentifyStep();
@@ -960,8 +1300,8 @@ async function initOnboarding() {
       displayName = resolved;
       localStorage.setItem(STORAGE_NAME, resolved);
       if (els.nomeInput) els.nomeInput.value = resolved;
-      hideOverlay();
-      await salvarEIniciar(false, { autoTransmitAfterCapture: true });
+      showIdentifyStep();
+      setStatus('Nome identificado — clique abaixo para compartilhar a tela');
       return;
     }
   }
@@ -971,7 +1311,7 @@ async function initOnboarding() {
 }
 
 async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = false } = {}) {
-  if (clientJoinInProgress) return;
+  if (clientJoinInProgress || captureScreenInFlight || publisherFlowPromise) return;
 
   const nome = getNome();
   if (!nome) {
@@ -985,13 +1325,14 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
     await fetch('/api/registro-cliente', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome })
+      body: JSON.stringify({ nome, computerName: ensureAgentHostname() })
     });
   } catch (_) {}
   roomPin = els.clientPinInput?.value?.trim() || roomPin;
 
   if (asViewer || els.chkViewerOnly?.checked) {
     viewerOnly = true;
+    clientSession.setPublishIntent('viewer');
     clientJoinInProgress = true;
     setStatus('Conectando...');
     try {
@@ -1008,6 +1349,7 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
   }
 
   viewerOnly = false;
+  clientSession.setPublishIntent('publisher');
   if (els.chkViewerOnly) els.chkViewerOnly.checked = false;
 
   if (sessionStarted && signaling?.connected && media?.hasVideoProducer?.()) {
@@ -1023,10 +1365,17 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
     return;
   }
 
-  await captureScreenFirst({ autoTransmitAfterCapture });
+  if (autoTransmitAfterCapture) {
+    await captureScreenFirst({ autoTransmitAfterCapture: true });
+    return;
+  }
+  await captureScreenFirst({ autoTransmitAfterCapture: false });
 }
 
-els.btnSalvarNome?.addEventListener('click', () => salvarEIniciar(false));
+els.btnSalvarNome?.addEventListener('click', () => {
+  const asViewer = !!els.chkViewerOnly?.checked;
+  salvarEIniciar(asViewer, { autoTransmitAfterCapture: !asViewer });
+});
 els.btnViewerEnter?.addEventListener('click', () => salvarEIniciar(true));
 
 els.nomeInput?.addEventListener('keydown', (e) => {
@@ -1068,6 +1417,14 @@ async function attachVuMeterIfNeeded() {
 
 async function handleSignalingReconnect() {
   if (joinInFlight || clientJoinInProgress || bootstrapping) return;
+  if (publisherFlowPromise || publisherSessionPromise || captureScreenInFlight) {
+    return;
+  }
+  if (media?.hasVideoProducer?.() && hasPendingDisplayStream()) {
+    logCaptureTrackState('reconnect-skip-rejoin');
+    await requestRoomStateWithRetry(signaling).catch(() => {});
+    return;
+  }
   try {
     await rejoinSession();
   } catch (e) {
@@ -1119,57 +1476,75 @@ function updateClientStateAfterPublish() {
   updateClientStates('sharing');
 }
 
-async function requestFreshRoomState() {
-  if (!signaling?.connected || !signaling?.authenticated) return;
-  try {
-    const estadoPromise = signaling.onceType('estadoSala');
-    signaling.send('solicitarEstado', {});
-    const msg = await Promise.race([
-      estadoPromise,
-      new Promise((resolve) => setTimeout(() => resolve(null), 5000))
-    ]);
-    if (msg?.payload) {
-      await applyRoomSnapshot(msg.payload, { force: true });
-    }
-  } catch (e) {
-    errors.handle(e, 'estado-sala');
+async function publishClientMedia(publishPrefs) {
+  if (media?.hasVideoProducer?.()) {
+    debugClientSessionLog('H10', 'client:publishClientMedia', 'skip-already-published', {
+      producerId: media.producers?.video?.id?.slice(0, 8) || null
+    });
+    return;
   }
-}
-
-async function syncRoomPresenceAfterPublish() {
-  if (!signaling?.connected || !signaling?.authenticated) return;
-  try {
-    if (media?.hasVideoProducer?.()) {
-      signaling.send('sincronizarPresenca', {});
-    }
-    await requestFreshRoomState();
-  } catch (e) {
-    errors.handle(e, 'presenca');
+  // #region agent log
+  debugClientSessionLog('H1', 'client:publishClientMedia', 'start', {
+    hasMedia: !!media,
+    hasStream: hasPendingDisplayStream(),
+    peerId: peerId?.slice(0, 8),
+    mic: !!publishPrefs?.microphone,
+    system: !!publishPrefs?.systemAudio
+  });
+  // #endregion
+  if (!media || !hasPendingDisplayStream()) {
+    // #region agent log
+    debugClientSessionLog('H1', 'client:publishClientMedia', 'early-return-no-stream', {
+      hasMedia: !!media,
+      hasStream: hasPendingDisplayStream()
+    });
+    // #endregion
+    throw new Error('Captura de tela indisponivel — selecione a tela novamente');
   }
-  updateClientStateAfterPublish();
-}
+  mediaPublisher = mediaPublisher || new MediaPublisher(media, signaling);
+  clientSession.setPhase(SessionPhase.PUBLISHING);
 
-async function ensureClientVideoPublished() {
-  if (viewerOnly || !media || media.hasVideoProducer?.()) return;
-  if (!hasPendingDisplayStream()) return;
+  if (media.localScreenStream && media.localScreenStream !== clientDisplayStream) {
+    media.localScreenStream = null;
+  }
 
-  const joinPrefs = getCapturePrefsFromUi();
-  const publishPrefs =
-    clientMicTrack?.readyState === 'live'
-      ? { ...joinPrefs, prefetchedMicTrack: clientMicTrack }
-      : joinPrefs;
-
-  await media.ensureSendTransport();
-  await media.publishDisplayStream(clientDisplayStream, publishPrefs);
+  await mediaPublisher.publishVideo(clientDisplayStream, publishPrefs);
+  logCaptureTrackState('after-publish-video');
   if (!media.hasVideoProducer()) {
     throw new Error('Falha ao publicar video - tente novamente');
   }
+
+  if (publishPrefs.microphone) {
+    await mediaPublisher.publishMicrophone(publishPrefs);
+  }
+  if (publishPrefs.systemAudio) {
+    await mediaPublisher.publishSystemAudio(clientDisplayStream, publishPrefs);
+  }
+
+  const readyAck = await mediaPublisher.confirmMediaReady();
+  // #region agent log
+  debugClientSessionLog('H3', 'client:publishClientMedia', 'midiaPronta-result', {
+    readyAck,
+    hasVideoProducer: media.hasVideoProducer(),
+    producerId: media.producers?.video?.id?.slice(0, 8) || null
+  });
+  // #endregion
+  if (!readyAck?.ok) {
+    throw new Error(readyAck?.erro || 'Servidor nao confirmou midia pronta');
+  }
+  if (!media.hasVideoProducer()) {
+    throw new Error('Video nao publicado apos midiaPronta');
+  }
   signaling.send('status', { status: 'transmitindo' });
+  clientSession.setPhase(SessionPhase.ACTIVE);
 }
 
-async function notifyRoomAfterMicPublish() {
-  if (!media?.hasPublishedMicrophone?.()) return;
-  await requestFreshRoomState();
+async function finalizeAfterPublish() {
+  const snapshot = await requestRoomStateWithRetry(signaling);
+  if (snapshot) {
+    await applyRoomSnapshot(snapshot, { force: true });
+  }
+  updateClientStateAfterPublish();
 }
 
 async function applyRoomSnapshot(snapshot, { force = false } = {}) {
@@ -1266,18 +1641,20 @@ async function schedulePostJoinWork() {
   });
 
   await reconcileRemoteMediaState();
-  if (!viewerOnly) {
-    await ensureClientVideoPublished().catch((e) => errors.handle(e, 'publish-retry'));
+  if (!viewerOnly && media?.hasVideoProducer?.()) {
+    await finalizeAfterPublish();
+  } else if (viewerOnly) {
+    await finalizeAfterPublish();
   }
-  await syncRoomPresenceAfterPublish();
 }
 
-async function bootstrap(isViewer, { deferScreenShare = false } = {}) {
+async function bootstrap(isViewer, { deferScreenShare = false, skipJoinPublish = false } = {}) {
   if (bootstrapPromise) return bootstrapPromise;
 
   bootstrapPromise = (async () => {
     viewerOnly = isViewer;
     deferScreenShareOnJoin = deferScreenShare;
+    skipJoinPublishOnJoin = skipJoinPublish;
 
     const preserveCapture = hasPendingDisplayStream();
     const preserveMic = clientMicTrack?.readyState === 'live';
@@ -1332,7 +1709,9 @@ async function bootstrap(isViewer, { deferScreenShare = false } = {}) {
       });
 
       signaling.onOpen = () => handleSignalingReconnect();
-      signaling.enableReconnect = true;
+      if (isViewer) {
+        signaling.enableReconnect = true;
+      }
       await schedulePostJoinWork();
     } finally {
       bootstrapping = false;
@@ -1353,30 +1732,43 @@ function runClientJoin() {
 }
 
 async function executeJoinAndStart() {
-  if (joinInFlight) return;
   joinInFlight = true;
   try {
     sessionReady = false;
     stopAudioHealthWatchdog();
     hideErro();
 
-    const entrouPromise = signaling.onceType('entrou');
+    const nome = getNome();
+    if (!nome) {
+      throw new Error('Informe um nome para este computador');
+    }
+
+    if (!signaling?.connected) {
+      throw new Error('WebSocket nao conectado');
+    }
+
+    setStatus('Entrando na sala...');
+    const entrouPromise = signaling.onceType('entrou', () => true, 45000);
     signaling.send(
       'entrar',
       {
         papel: 'client',
-        nome: getNome(),
-        maquina: agentHostname,
+        nome,
+        maquina: ensureAgentHostname(),
         pin: roomPin || undefined,
-        viewerToken: viewerAccessToken || undefined
-      },
-      { critical: true }
+        viewerToken: viewerAccessToken || undefined,
+        ...joinPayloadExtras(clientSession, {
+          viewerOnly,
+          viewerToken: viewerAccessToken
+        })
+      }
     );
 
     const payload = await entrouPromise;
     peerId = payload.peerId;
     signaling.markAuthenticated(true);
 
+    setStatus('Preparando midia...');
     media = new MediaClient(signaling, {
       splitRecvTransports: true,
       onLog: (m, l) => setStatus(m)
@@ -1405,46 +1797,48 @@ async function executeJoinAndStart() {
     startAudioHealthWatchdog();
     setBadge('Online', 'online');
 
-    if (pendingRoomSnapshot || pendingTransmission || pendingAudioSources?.length) {
-      await reconcileRemoteMediaState();
-    }
-
-    if (!viewerOnly) {
+    if (!viewerOnly && !skipJoinPublishOnJoin) {
       if (deferShare) {
         if (hasPendingDisplayStream()) {
           setStatus('Publicando tela...');
-          await media.publishDisplayStream(clientDisplayStream, publishPrefs);
-          if (!media.hasVideoProducer()) {
-            throw new Error('Falha ao publicar video - tente novamente');
-          }
+          await publishClientMedia(publishPrefs);
         } else {
           throw new Error('Captura de tela expirada - selecione a tela novamente');
         }
       } else {
         setStatus('Selecione a tela para compartilhar...');
-        await media.startScreenShare(joinPrefs);
+        await media.startScreenShare({ ...joinPrefs, microphone: false, systemAudio: false });
         clientDisplayStream = media.localScreenStream;
         joinPrefs = getCapturePrefsFromUi();
-        if (joinPrefs.microphone && !media.hasPublishedMicrophone()) {
-          await media.publishMicrophone(joinPrefs);
-          await notifyRoomAfterMicPublish();
-        }
+        await publishClientMedia({
+          ...joinPrefs,
+          prefetchedMicTrack:
+            clientMicTrack?.readyState === 'live' ? clientMicTrack : joinPrefs.prefetchedMicTrack
+        });
       }
-      signaling.send('status', { status: 'transmitindo' });
-      await syncRoomPresenceAfterPublish();
+      await finalizeAfterPublish();
       updateClientMicUi();
       await attachVuMeterIfNeeded();
-    } else {
+    } else if (viewerOnly) {
+      if (pendingRoomSnapshot || pendingTransmission || pendingAudioSources?.length) {
+        await reconcileRemoteMediaState();
+      }
+      clientSession.setPhase(SessionPhase.VIEWER_ACTIVE);
       setStatus('Modo espectador - aguardando transmissao');
-      await syncRoomPresenceAfterPublish();
+      await finalizeAfterPublish();
+    } else {
+      clientSession.setPhase(SessionPhase.JOINING);
+      setStatus('Conectado - publicando tela...');
     }
+    skipJoinPublishOnJoin = false;
+    deferScreenShareOnJoin = false;
   } finally {
     joinInFlight = false;
   }
 }
 
 async function joinAndStart() {
-  return executeJoinAndStart();
+  return runClientJoin();
 }
 
 async function rejoinSession() {
@@ -1468,24 +1862,35 @@ async function rejoinSession() {
 
   await roomAudioMonitor?.dispose();
   roomAudioMonitor = null;
-  await media?.dispose({
-    keepLocalScreenStream: !!stream,
-    keepMicTrack: clientMicTrack?.readyState === 'live'
-  });
+  suppressShareEndedHandler = true;
+  try {
+    await media?.dispose({
+      keepLocalScreenStream: !!stream,
+      keepMicTrack: clientMicTrack?.readyState === 'live'
+    });
+  } finally {
+    suppressShareEndedHandler = false;
+  }
   media = null;
   peerId = null;
 
-  const entrouPromise = signaling.onceType('entrou');
+  const entrouPromise = signaling.onceType('entrou', () => true, 45000);
+  if (!signaling?.connected) {
+    throw new Error('WebSocket nao conectado');
+  }
   signaling.send(
     'entrar',
     {
       papel: 'client',
       nome: getNome(),
-      maquina: agentHostname,
+      maquina: ensureAgentHostname(),
       pin: roomPin || undefined,
-      viewerToken: viewerAccessToken || undefined
-    },
-    { critical: true }
+      viewerToken: viewerAccessToken || undefined,
+      ...joinPayloadExtras(clientSession, {
+        viewerOnly,
+        viewerToken: viewerAccessToken
+      })
+    }
   );
 
   const payload = await entrouPromise;
@@ -1513,14 +1918,8 @@ async function rejoinSession() {
   if (!viewerOnly) {
     if (stream) {
       clientDisplayStream = stream;
-      await media.publishDisplayStream(stream, publishPrefs);
-      if (prefs.microphone && !media.hasPublishedMicrophone()) {
-        await media.publishMicrophone(publishPrefs);
-      }
-      if (!media.hasVideoProducer()) {
-        throw new Error('Falha ao republicar video apos reconexao');
-      }
-      signaling.send('status', { status: 'transmitindo' });
+      mediaPublisher = new MediaPublisher(media, signaling);
+      await publishClientMedia(publishPrefs);
       setStatus('Transmitindo - reconectado');
     } else {
       setStatus('Reconectado - selecione a tela novamente');
@@ -1532,12 +1931,7 @@ async function rejoinSession() {
   }
 
   await schedulePostJoinWork();
-
-  if (!viewerOnly && stream) {
-    await syncRoomPresenceAfterPublish();
-  } else if (viewerOnly) {
-    await syncRoomPresenceAfterPublish();
-  }
+  await finalizeAfterPublish();
   } finally {
     joinInFlight = false;
   }
@@ -1620,6 +2014,10 @@ async function applyPendingMicrophoneFilters() {
   await media.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs);
 }
 async function handleServerMessage(msg) {
+  if (msg.type === 'roomState') {
+    await applyRoomSnapshot(msg.payload, { force: true });
+    return;
+  }
   if (msg.type === 'estadoSala') {
     await applyRoomSnapshot(msg.payload);
     return;
@@ -1723,12 +2121,10 @@ async function handleServerMessage(msg) {
     applyDisplayControlUpdate(msg.payload);
   }
   if (msg.type === 'promovidoCoHost') {
-    initCoHost(signaling, media, peerId);
-    syncRoomPresenceAfterPublish();
+    showToast('Funcoes de co-host estao disponiveis apenas no painel host', 'info');
   }
   if (msg.type === 'demovidoCoHost') {
-    teardownCoHost();
-    syncRoomPresenceAfterPublish();
+    showToast('Voce nao e mais co-host desta sala', 'info');
   }
 }
 
@@ -1759,7 +2155,11 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('sharescreen-ended', async () => {
-  const prefs = getCapturePrefsFromUi();
+  if (suppressShareEndedHandler || clientJoinInProgress || bootstrapping) {
+    logCaptureTrackState('share-ended-suppressed');
+    return;
+  }
+  logCaptureTrackState('share-ended-user');
   try {
     await media?.stopVideoShare();
   } catch (e) {
@@ -1809,6 +2209,12 @@ window.addEventListener('pageshow', async (event) => {
 });
 
 initOnboarding();
+verifyServerBuild({
+  onToast: (m, t) => showToast(m, t),
+  onTitlePrefix: (prefix) => {
+    document.title = prefix + (document.title.replace(/^\[[^\]]+\]\s*/, '') || 'ShareScreen Client');
+  }
+});
 
 installAudioUnlock(() => {
   roomAudioMonitor?.resume();

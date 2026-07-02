@@ -1,7 +1,4 @@
 import { WebSocketServer } from 'ws';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { room, logClientTrace } from './room-manager.js';
 import { getRtpCapabilities } from './mediasoup-manager.js';
 import { logger } from './logger.js';
@@ -11,6 +8,12 @@ import { validateJoinAuth, getSessionHostToken } from './auth-dev.js';
 import { debugLog } from './debug-log.js';
 import { registerClientByName, saveAudioFilterPreset, renameAudioFilterPreset } from './client-db.js';
 import { getClientIpFromWs } from './client-ip.js';
+import { debugSessionLog } from './debug-session-log.js';
+
+function transmissionHasActiveVideo(payload = {}) {
+  const producerIds = payload.producerIds || {};
+  return !!(producerIds.video || payload.producerId);
+}
 
 function parseMessage(raw) {
   try {
@@ -88,25 +91,15 @@ export function attachSignaling(server) {
 }
 
 function sendPeerJoinSnapshot(enviar, peer = null) {
-  const snapshot = room.buildRoomSnapshot(peer);
-  try {
-    const logPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'debug-0e898e.log');
-    fs.appendFileSync(
-      logPath,
-      `${JSON.stringify({
-        sessionId: '0e898e',
-        timestamp: Date.now(),
-        location: 'signaling.js:sendPeerJoinSnapshot',
-        message: '[ROOM_STATE] snapshot enviado',
-        data: {
-          peerId: peer?.id?.slice(0, 8) || null,
-          role: peer?.role || null,
-          activeProducerId: snapshot.transmission?.producerIds?.video?.slice(0, 8) || null
-        }
-      })}\n`
-    );
-  } catch (_) {}
-  enviar({ type: 'estadoSala', payload: snapshot });
+  if (!peer) {
+    enviar({ type: 'estadoSala', payload: room.buildRoomSnapshot(peer) });
+    return;
+  }
+  room.sendRoomSnapshot(peer);
+  const transmission = room.buildTransmissionPayload();
+  if (transmissionHasActiveVideo(transmission)) {
+    enviar({ type: 'transmissaoAtiva', payload: transmission });
+  }
 }
 
 async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
@@ -159,7 +152,12 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       }
 
       const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
-      const newPeer = room.addPeer(ws, papel, nome, maquina, { isExternal: !!viewerToken });
+      const publishIntent =
+        viewerToken || msg.payload?.publishIntent === 'viewer' ? 'viewer' : 'publisher';
+      const newPeer = room.addPeer(ws, papel, nome, maquina, {
+        isExternal: !!viewerToken,
+        publishIntent
+      });
       setPeer(newPeer);
       if (papel === 'client') {
         registerClientByName(nome.trim(), getClientIpFromWs(ws), maquina || '');
@@ -186,6 +184,14 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         }
       });
       sendPeerJoinSnapshot(enviar, newPeer);
+      // #region agent log
+      debugSessionLog('H6', 'signaling:entrar', 'client joined', {
+        peerId: newPeer.id.slice(0, 8),
+        papel,
+        publishIntent,
+        isExternal: !!viewerToken
+      });
+      // #endregion
       break;
     }
 
@@ -224,7 +230,34 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         throw new Error('Apenas host ou clients podem transmitir mídia');
       }
       const result = await room.produce(peer, msg.payload);
+      // #region agent log
+      debugSessionLog('H2', 'signaling:produzir', 'produce ok', {
+        peerId: peer.id.slice(0, 8),
+        kind: result?.kind,
+        source: result?.source,
+        producerId: result?.id?.slice(0, 8),
+        hasVideo: peer.hasVideoProducer(),
+        mediaReadyAck: peer.mediaReadyAck
+      });
+      // #endregion
       enviar({ type: 'produzido', payload: result });
+      break;
+    }
+
+    case 'midiaPronta': {
+      if (!peer || (peer.role !== 'client' && peer.role !== 'host')) {
+        throw new Error('Apenas host ou clients podem confirmar midia pronta');
+      }
+      const result = room.confirmMediaReady(peer);
+      // #region agent log
+      debugSessionLog('H3', 'signaling:midiaPronta', 'midiaPronta handled', {
+        peerId: peer.id.slice(0, 8),
+        result,
+        hasVideo: peer.hasVideoProducer(),
+        selectable: room.isPeerSelectable(peer)
+      });
+      // #endregion
+      enviar({ type: 'midiaProntaOk', payload: result });
       break;
     }
 
@@ -401,15 +434,14 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       break;
     }
 
-    case 'sincronizarPresenca': {
-      if (!peer) throw new Error('Não autenticado');
-      room.notifyHostState();
-      sendPeerJoinSnapshot(enviar, peer);
-      break;
-    }
-
     case 'solicitarEstado': {
       if (!peer) throw new Error('Não autenticado');
+      if (!config.useLegacyRoomSync) {
+        peer.send({
+          type: 'roomState',
+          payload: room.buildRoomState(peer, 'requested')
+        });
+      }
       sendPeerJoinSnapshot(enviar, peer);
       break;
     }

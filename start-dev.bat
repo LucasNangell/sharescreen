@@ -41,6 +41,12 @@ if not exist "certs\server.crt" (
     exit /b 1
 )
 
+echo [DEV] Liberando portas 3443 e 3080 (instancia anterior)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\liberar-portas.ps1" -Ports 3443,3080 2>nul
+call :kill_port 3443
+call :kill_port 3080
+timeout /t 1 /nobreak >nul
+
 echo [DEV] Compilando bundles (host/client)...
 call npm run build
 if errorlevel 1 (
@@ -49,15 +55,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
+for /f "usebackq delims=" %%i in (`node -e "try{console.log(require('./public/shared/build-id.json').buildId)}catch(e){console.log('unknown')}"`) do set "DEV_BUILD_ID=%%i"
+
 echo.
 echo ========================================
 echo  ShareScreen LAN - DESENVOLVIMENTO
+echo  Build ID: %DEV_BUILD_ID%
 echo  Host:   https://%SHARESCREEN_DEV_IP%:3443/host
 echo  Client: https://%SHARESCREEN_DEV_IP%:3443/client
 echo  Local:  https://127.0.0.1:3443/host
 echo  ICE WebRTC: %ANNOUNCED_IP% (UDP 40000-40100)
 echo  Gravacoes DEV: %SHARESCREEN_RECORDINGS_DIR%
 echo ========================================
+echo  IMPORTANTE: teste SOMENTE nas URLs acima.
+echo  http://cgrafsysvm/ aponta para PRODUCAO (VM),
+echo  nao para este servidor DEV local.
 echo  PRODUCAO NAO AFETADA
 echo  Nao rode start-producao.bat neste ambiente
 echo  Ctrl+C para encerrar
@@ -69,3 +81,11 @@ if errorlevel 1 (
     echo [ERRO DEV] Servidor encerrou com falha.
     pause
 )
+exit /b 0
+
+:kill_port
+set "_PORT=%~1"
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%_PORT%" ^| findstr "LISTENING"') do (
+    if not "%%a"=="0" taskkill /PID %%a /F >nul 2>&1
+)
+exit /b 0

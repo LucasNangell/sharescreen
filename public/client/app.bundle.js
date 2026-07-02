@@ -2178,12 +2178,12 @@
         }
         for (const extendedCodec of extendedRtpCapabilities.codecs) {
           const matchingLocalRtxCodec = localCaps.codecs.find((localCodec) => {
-            var _a60;
-            return isRtxCodec(localCodec) && ((_a60 = localCodec.parameters) == null ? void 0 : _a60["apt"]) === extendedCodec.localPayloadType;
+            var _a14;
+            return isRtxCodec(localCodec) && ((_a14 = localCodec.parameters) == null ? void 0 : _a14["apt"]) === extendedCodec.localPayloadType;
           });
           const matchingRemoteRtxCodec = remoteCaps.codecs.find((remoteCodec) => {
-            var _a60;
-            return isRtxCodec(remoteCodec) && ((_a60 = remoteCodec.parameters) == null ? void 0 : _a60["apt"]) === extendedCodec.remotePayloadType;
+            var _a14;
+            return isRtxCodec(remoteCodec) && ((_a14 = remoteCodec.parameters) == null ? void 0 : _a14["apt"]) === extendedCodec.remotePayloadType;
           });
           if (matchingLocalRtxCodec && matchingRemoteRtxCodec) {
             extendedCodec.localRtxPayloadType = matchingLocalRtxCodec.preferredPayloadType;
@@ -4075,12 +4075,12 @@
             this.safeEmit("open");
           });
           this._dataChannel.addEventListener("error", (event) => {
-            var _a60, _b;
+            var _a14, _b;
             if (this._closed) {
               return;
             }
             const error = event.error ?? new Error("unknown DataChannel error");
-            if (((_a60 = event.error) == null ? void 0 : _a60.errorDetail) === "sctp-failure") {
+            if (((_a14 = event.error) == null ? void 0 : _a14.errorDetail) === "sctp-failure") {
               logger.error("DataChannel SCTP error [sctpCauseCode:%s]: %s", (_b = event.error) == null ? void 0 : _b.sctpCauseCode, event.error.message);
             } else {
               logger.error('DataChannel "error" event: %o', error);
@@ -4255,12 +4255,12 @@
             this.safeEmit("open");
           });
           this._dataChannel.addEventListener("error", (event) => {
-            var _a60, _b;
+            var _a14, _b;
             if (this._closed) {
               return;
             }
             const error = event.error ?? new Error("unknown DataChannel error");
-            if (((_a60 = event.error) == null ? void 0 : _a60.errorDetail) === "sctp-failure") {
+            if (((_a14 = event.error) == null ? void 0 : _a14.errorDetail) === "sctp-failure") {
               logger.error("DataChannel SCTP error [sctpCauseCode:%s]: %s", (_b = event.error) == null ? void 0 : _b.sctpCauseCode, event.error.message);
             } else {
               logger.error('DataChannel "error" event: %o', error);
@@ -5548,13 +5548,13 @@
       var grammar = require_grammar();
       var validLine = RegExp.prototype.test.bind(/^([a-z])=(.*)/);
       exports.parse = function(sdp) {
-        var session = {}, media3 = [], location2 = session;
+        var session = {}, media2 = [], location2 = session;
         sdp.split(/(\r\n|\r|\n)/).filter(validLine).forEach(function(l) {
           var type = l[0];
           var content = l.slice(2);
           if (type === "m") {
-            media3.push({ rtp: [], fmtp: [] });
-            location2 = media3[media3.length - 1];
+            media2.push({ rtp: [], fmtp: [] });
+            location2 = media2[media2.length - 1];
           }
           for (var j = 0; j < (grammar[type] || []).length; j += 1) {
             var obj = grammar[type][j];
@@ -5563,7 +5563,7 @@
             }
           }
         });
-        session.media = media3;
+        session.media = media2;
         return session;
       };
       var paramReducer = function(acc, expr) {
@@ -6052,8 +6052,8 @@
           this._mediaObject.direction = "recvonly";
         }
         muxSimulcastStreams(encodings) {
-          var _a60, _b;
-          if (!((_a60 = this._mediaObject.simulcast) == null ? void 0 : _a60.list1)) {
+          var _a14, _b;
+          if (!((_a14 = this._mediaObject.simulcast) == null ? void 0 : _a14.list1)) {
             return;
           }
           const layers = {};
@@ -6075,7 +6075,7 @@
       exports.AnswerMediaSection = AnswerMediaSection;
       var OfferMediaSection = class extends MediaSection {
         constructor({ iceParameters, iceCandidates, dtlsParameters, sctpParameters, plainRtpParameters, mid, kind, offerRtpParameters, streamId, trackId }) {
-          var _a60;
+          var _a14;
           super({ iceParameters, iceCandidates, dtlsParameters });
           this._mediaObject.mid = String(mid);
           this._mediaObject.type = kind;
@@ -6147,7 +6147,7 @@
               this._mediaObject.rtcpRsize = "rtcp-rsize";
               const encoding = offerRtpParameters.encodings[0];
               const ssrc = encoding.ssrc;
-              const rtxSsrc = (_a60 = encoding.rtx) == null ? void 0 : _a60.ssrc;
+              const rtxSsrc = (_a14 = encoding.rtx) == null ? void 0 : _a14.ssrc;
               this._mediaObject.ssrcs = [];
               this._mediaObject.ssrcGroups = [];
               if (ssrc && offerRtpParameters.rtcp.cname) {
@@ -6303,7 +6303,7 @@
           return { idx: this._mediaSections.length };
         }
         send({ offerMediaObject, reuseMid, offerRtpParameters, answerRtpParameters, codecOptions }) {
-          var _a60;
+          var _a14;
           const mediaSection = new MediaSection_1.AnswerMediaSection({
             iceParameters: this._iceParameters,
             iceCandidates: this._iceCandidates,
@@ -6317,7 +6317,7 @@
           const mediaObject = mediaSection.getObject();
           const ddCodec = mediaObject.rtp.find((rtp) => DependencyDescriptorCodecs.includes(rtp.codec.toLowerCase()));
           if (!ddCodec) {
-            mediaObject.ext = (_a60 = mediaObject.ext) == null ? void 0 : _a60.filter((extmap) => extmap.uri !== "https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension");
+            mediaObject.ext = (_a14 = mediaObject.ext) == null ? void 0 : _a14.filter((extmap) => extmap.uri !== "https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension");
           }
           if (reuseMid) {
             this.replaceMediaSection(mediaSection, reuseMid);
@@ -6598,7 +6598,7 @@
         return ssrcCnameLine.value;
       }
       function applyCodecParameters({ offerRtpParameters, answerMediaObject }) {
-        var _a60;
+        var _a14;
         for (const codec of offerRtpParameters.codecs) {
           const mimeType = codec.mimeType.toLowerCase();
           if (mimeType !== "audio/opus") {
@@ -6617,7 +6617,7 @@
           const parameters = sdpTransform.parseParams(fmtp.config);
           switch (mimeType) {
             case "audio/opus": {
-              const spropStereo = (_a60 = codec.parameters) == null ? void 0 : _a60["sprop-stereo"];
+              const spropStereo = (_a14 = codec.parameters) == null ? void 0 : _a14["sprop-stereo"];
               if (spropStereo !== void 0) {
                 parameters["stereo"] = Number(spropStereo) ? 1 : 0;
               }
@@ -6775,9 +6775,9 @@
       exports.addHeaderExtensionSupport = addHeaderExtensionSupport;
       exports.getMsidStreamIdAndTrackId = getMsidStreamIdAndTrackId;
       function addNackSupportForOpus(rtpCapabilities) {
-        var _a60;
+        var _a14;
         for (const codec of rtpCapabilities.codecs ?? []) {
-          if ((codec.mimeType.toLowerCase() === "audio/opus" || codec.mimeType.toLowerCase() === "audio/multiopus") && !((_a60 = codec.rtcpFeedback) == null ? void 0 : _a60.some((fb) => fb.type === "nack" && !fb.parameter))) {
+          if ((codec.mimeType.toLowerCase() === "audio/opus" || codec.mimeType.toLowerCase() === "audio/multiopus") && !((_a14 = codec.rtcpFeedback) == null ? void 0 : _a14.some((fb) => fb.type === "nack" && !fb.parameter))) {
             if (!codec.rtcpFeedback) {
               codec.rtcpFeedback = [];
             }
@@ -6786,9 +6786,9 @@
         }
       }
       function addHeaderExtensionSupport(rtpCapabilities, headerExtension) {
-        var _a60;
+        var _a14;
         let preferredId;
-        const existingHeaderExtension = (_a60 = rtpCapabilities.headerExtensions) == null ? void 0 : _a60.find((exten) => exten.uri === headerExtension.uri);
+        const existingHeaderExtension = (_a14 = rtpCapabilities.headerExtensions) == null ? void 0 : _a14.find((exten) => exten.uri === headerExtension.uri);
         if (existingHeaderExtension) {
           if (existingHeaderExtension.kind === headerExtension.kind) {
             return;
@@ -7314,7 +7314,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a60;
+          var _a14;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -7329,7 +7329,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a60 = rtpParameters.rtcp) == null ? void 0 : _a60.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a14 = rtpParameters.rtcp) == null ? void 0 : _a14.cname) ?? "-",
               trackId
             });
           }
@@ -7512,8 +7512,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a60;
-          return (_a60 = this._pc.sctp) == null ? void 0 : _a60.maxMessageSize;
+          var _a14;
+          return (_a14 = this._pc.sctp) == null ? void 0 : _a14.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -8084,7 +8084,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a60;
+          var _a14;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -8099,7 +8099,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a60 = rtpParameters.rtcp) == null ? void 0 : _a60.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a14 = rtpParameters.rtcp) == null ? void 0 : _a14.cname) ?? "-",
               trackId
             });
           }
@@ -8271,8 +8271,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a60;
-          return (_a60 = this._pc.sctp) == null ? void 0 : _a60.maxMessageSize;
+          var _a14;
+          return (_a14 = this._pc.sctp) == null ? void 0 : _a14.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -8809,7 +8809,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a60;
+          var _a14;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -8824,7 +8824,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a60 = rtpParameters.rtcp) == null ? void 0 : _a60.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a14 = rtpParameters.rtcp) == null ? void 0 : _a14.cname) ?? "-",
               trackId
             });
           }
@@ -8999,8 +8999,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a60;
-          return (_a60 = this._pc.sctp) == null ? void 0 : _a60.maxMessageSize;
+          var _a14;
+          return (_a14 = this._pc.sctp) == null ? void 0 : _a14.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -9565,7 +9565,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a60;
+          var _a14;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -9580,7 +9580,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a60 = rtpParameters.rtcp) == null ? void 0 : _a60.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a14 = rtpParameters.rtcp) == null ? void 0 : _a14.cname) ?? "-",
               trackId
             });
           }
@@ -9762,8 +9762,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a60;
-          return (_a60 = this._pc.sctp) == null ? void 0 : _a60.maxMessageSize;
+          var _a14;
+          return (_a14 = this._pc.sctp) == null ? void 0 : _a14.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -10348,7 +10348,7 @@
           return { dataChannel, sctpStreamParameters: newSctpStreamParameters };
         }
         async receive(optionsList) {
-          var _a60;
+          var _a14;
           this.assertNotClosed();
           this.assertRecvDirection();
           const results = [];
@@ -10363,7 +10363,7 @@
               mid: localId,
               kind,
               offerRtpParameters: rtpParameters,
-              streamId: streamId ?? msidStreamId ?? ((_a60 = rtpParameters.rtcp) == null ? void 0 : _a60.cname) ?? "-",
+              streamId: streamId ?? msidStreamId ?? ((_a14 = rtpParameters.rtcp) == null ? void 0 : _a14.cname) ?? "-",
               trackId
             });
           }
@@ -10546,8 +10546,8 @@
           return { dataChannel };
         }
         getDataChannelMaxMessageSize() {
-          var _a60;
-          return (_a60 = this._pc.sctp) == null ? void 0 : _a60.maxMessageSize;
+          var _a14;
+          return (_a14 = this._pc.sctp) == null ? void 0 : _a14.maxMessageSize;
         }
         async setupTransport({ localDtlsRole, localSdpObject }) {
           if (!localSdpObject) {
@@ -12815,8 +12815,8 @@
       return this._state;
     }
     get connected() {
-      var _a60;
-      return ((_a60 = this.ws) == null ? void 0 : _a60.readyState) === WebSocket.OPEN;
+      var _a14;
+      return ((_a14 = this.ws) == null ? void 0 : _a14.readyState) === WebSocket.OPEN;
     }
     setState(next) {
       if (this._state === next) return;
@@ -12884,10 +12884,10 @@
         const entry = {
           resolve,
           filter: (msg) => {
-            var _a60;
+            var _a14;
             if (msg.type === "erro") {
               clearTimeout(timer);
-              reject(new Error(((_a60 = msg.payload) == null ? void 0 : _a60.mensagem) || "Erro do servidor"));
+              reject(new Error(((_a14 = msg.payload) == null ? void 0 : _a14.mensagem) || "Erro do servidor"));
               return true;
             }
             return msg.type === type && filter(msg);
@@ -12915,7 +12915,7 @@
       const socket = new WebSocket(this.url);
       this.ws = socket;
       socket.onopen = () => {
-        var _a60;
+        var _a14;
         if (this.ws !== socket) return;
         this.reconnectAttempt = 0;
         this.authenticated = false;
@@ -12923,15 +12923,17 @@
         this._lastCloseReason = "";
         this.setState(ConnectionState.CONNECTED);
         this.onLog("WebSocket conectado", "info");
-        this._pendingCritical = this._pendingCritical.filter((packet) => {
-          try {
-            return JSON.parse(packet).type !== "entrar";
-          } catch {
-            return false;
-          }
-        });
+        if (this.enableReconnect) {
+          this._pendingCritical = this._pendingCritical.filter((packet) => {
+            try {
+              return JSON.parse(packet).type !== "entrar";
+            } catch {
+              return false;
+            }
+          });
+        }
         this._flushCriticalQueue();
-        (_a60 = this.onOpen) == null ? void 0 : _a60.call(this);
+        (_a14 = this.onOpen) == null ? void 0 : _a14.call(this);
       };
       socket.onmessage = (ev) => {
         if (this.ws !== socket) return;
@@ -12943,13 +12945,13 @@
         }
       };
       socket.onclose = (ev) => {
-        var _a60;
+        var _a14;
         if (this.ws !== socket) return;
         this.authenticated = false;
         this._lastCloseCode = (ev == null ? void 0 : ev.code) ?? null;
         this._lastCloseReason = (ev == null ? void 0 : ev.reason) || "";
         this.setState(ConnectionState.DISCONNECTED);
-        (_a60 = this.onClose) == null ? void 0 : _a60.call(this, this._lastCloseCode, this._lastCloseReason);
+        (_a14 = this.onClose) == null ? void 0 : _a14.call(this, this._lastCloseCode, this._lastCloseReason);
         if (!this.intentionalClose && this.enableReconnect) {
           this.scheduleReconnect();
         }
@@ -13082,9 +13084,6 @@
   function getDefaultPresetId() {
     return "highQuality";
   }
-  function bitrateMbps(preset) {
-    return Math.round(((preset == null ? void 0 : preset.maxBitrate) ?? 0) / 1e6);
-  }
   function loadPresetId() {
     try {
       return localStorage.getItem(STORAGE_KEY) || getDefaultPresetId();
@@ -13156,8 +13155,8 @@
     return base;
   }
   function pickScreenCodec(device, preferH264 = true) {
-    var _a60;
-    if (!((_a60 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a60.codecs)) return null;
+    var _a14;
+    if (!((_a14 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a14.codecs)) return null;
     const codecs = device.rtpCapabilities.codecs;
     if (preferH264) {
       return codecs.find((c) => c.mimeType.toLowerCase() === "video/h264") || codecs.find((c) => c.mimeType.toLowerCase() === "video/vp8");
@@ -13191,14 +13190,14 @@
     return opts;
   }
   function buildAudioProduceOptions(device, quality = {}) {
-    var _a60, _b;
+    var _a14, _b;
     const maxBitrate = quality.maxAudioBitrate ?? 128e3;
     const opts = {
       track: null,
       encodings: [{ maxBitrate }],
       appData: { mediaTag: "audio" }
     };
-    const opus = (_b = (_a60 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a60.codecs) == null ? void 0 : _b.find(
+    const opus = (_b = (_a14 = device == null ? void 0 : device.rtpCapabilities) == null ? void 0 : _a14.codecs) == null ? void 0 : _b.find(
       (c) => c.mimeType.toLowerCase() === "audio/opus"
     );
     if (opus) opts.codec = opus;
@@ -13241,7 +13240,7 @@
     const reader = processor.readable.getReader();
     const scratch = new Float32Array(2048);
     const pump = async () => {
-      var _a60;
+      var _a14;
       while (!stopped) {
         let value = null;
         try {
@@ -13258,7 +13257,7 @@
         } catch (e) {
           break;
         } finally {
-          (_a60 = value == null ? void 0 : value.close) == null ? void 0 : _a60.call(value);
+          (_a14 = value == null ? void 0 : value.close) == null ? void 0 : _a14.call(value);
         }
       }
     };
@@ -13375,10 +13374,10 @@
   async function listMicrophoneDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices.filter((d) => d.kind === "audioinput" && d.deviceId).map((d, i) => {
-      var _a60;
+      var _a14;
       return {
         deviceId: d.deviceId,
-        label: ((_a60 = d.label) == null ? void 0 : _a60.trim()) || `Microfone ${i + 1}`
+        label: ((_a14 = d.label) == null ? void 0 : _a14.trim()) || `Microfone ${i + 1}`
       };
     });
   }
@@ -13426,17 +13425,17 @@
       this.onLevel = onLevel;
       this.stopMeter = startTrackLevelMeter(track, {
         onLevel: (smoothed) => {
-          var _a60;
+          var _a14;
           this.level = Math.min(100, Math.round(smoothed * 115));
-          (_a60 = this.onLevel) == null ? void 0 : _a60.call(this, this.level);
+          (_a14 = this.onLevel) == null ? void 0 : _a14.call(this, this.level);
         }
       });
     }
     async resume() {
     }
     detach() {
-      var _a60;
-      (_a60 = this.stopMeter) == null ? void 0 : _a60.call(this);
+      var _a14;
+      (_a14 = this.stopMeter) == null ? void 0 : _a14.call(this);
       this.stopMeter = null;
       this.level = 0;
     }
@@ -13495,14 +13494,14 @@
     }
   }
   function normalizeRemoteAudioSources(sources, { excludePeerId = null, excludeSourceTypes = [] } = {}) {
-    var _a60;
+    var _a14;
     const excludedTypes = new Set(
       (excludeSourceTypes || []).map((t) => normalizeAudioSource(t, t))
     );
     const byProducer = /* @__PURE__ */ new Map();
     for (const raw of sources || []) {
       const peerId2 = (raw == null ? void 0 : raw.peerId) || (raw == null ? void 0 : raw.id);
-      const producerId = (raw == null ? void 0 : raw.producerId) || ((_a60 = raw == null ? void 0 : raw.producerIds) == null ? void 0 : _a60.audio);
+      const producerId = (raw == null ? void 0 : raw.producerId) || ((_a14 = raw == null ? void 0 : raw.producerIds) == null ? void 0 : _a14.audio);
       const source = normalizeAudioSource((raw == null ? void 0 : raw.source) || "microphone", "microphone");
       if (!peerId2 || !producerId) continue;
       if (excludePeerId && String(peerId2) === String(excludePeerId)) continue;
@@ -13585,21 +13584,6 @@
     micSensitivity: false,
     micCaptureDistance: 6
   };
-  var CLIENT_MIC_PUBLISH_DEFAULTS = {
-    gain: 1.2,
-    bass: 0,
-    treble: 0,
-    highpass: false,
-    highpassFreq: 80,
-    peaking: false,
-    peakingFreq: 3e3,
-    peakingGain: 3,
-    compressor: true,
-    noiseGate: false,
-    noiseGateThreshold: -45,
-    micSensitivity: false,
-    micCaptureDistance: 6
-  };
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
@@ -13626,12 +13610,12 @@
     return Math.abs(p.gain - 1) > 0.01 || Math.abs(p.bass) > 0.01 || Math.abs(p.treble) > 0.01 || p.highpass || p.peaking || p.compressor || p.noiseGate || p.micSensitivity;
   }
   function closeMicrophoneFilterGraph(graph) {
-    var _a60, _b, _c;
+    var _a14, _b, _c;
     if (!graph) return;
     if (graph.rafId) cancelAnimationFrame(graph.rafId);
     for (const node of graph.nodes || []) {
       try {
-        (_a60 = node.disconnect) == null ? void 0 : _a60.call(node);
+        (_a14 = node.disconnect) == null ? void 0 : _a14.call(node);
       } catch (_) {
       }
     }
@@ -13766,8 +13750,8 @@
 
   // src/shared/media-client.js
   var MediaClient = class {
-    constructor(signaling3, { onLog, onIceState, splitRecvTransports = false, applyHostMicPublishChain = false } = {}) {
-      this.signaling = signaling3;
+    constructor(signaling2, { onLog, onIceState, splitRecvTransports = false, applyHostMicPublishChain = false } = {}) {
+      this.signaling = signaling2;
       this.onLog = onLog || (() => {
       });
       this.onIceState = onIceState || (() => {
@@ -13803,14 +13787,14 @@
       return this.producers[key] || null;
     }
     hasPublishedMicrophone() {
-      var _a60;
+      var _a14;
       const producer = this.producers.microphone;
-      return !!(producer && !producer.closed && ((_a60 = producer.track) == null ? void 0 : _a60.readyState) === "live");
+      return !!(producer && !producer.closed && ((_a14 = producer.track) == null ? void 0 : _a14.readyState) === "live");
     }
     hasPublishedSystemAudio() {
-      var _a60;
+      var _a14;
       const producer = this.producers.system;
-      return !!(producer && !producer.closed && ((_a60 = producer.track) == null ? void 0 : _a60.readyState) === "live");
+      return !!(producer && !producer.closed && ((_a14 = producer.track) == null ? void 0 : _a14.readyState) === "live");
     }
     hasPublishedAudio() {
       return this.hasPublishedMicrophone() || this.hasPublishedSystemAudio() || !!(this.producers.mixed && !this.producers.mixed.closed);
@@ -13828,8 +13812,8 @@
       return this.setPublishedAudioMuted(!this.isPublishedAudioMuted());
     }
     getLocalMicrophoneTrack() {
-      var _a60, _b;
-      const published = (_a60 = this.producers.microphone) == null ? void 0 : _a60.track;
+      var _a14, _b;
+      const published = (_a14 = this.producers.microphone) == null ? void 0 : _a14.track;
       if ((published == null ? void 0 : published.readyState) === "live") return published;
       if (((_b = this._micTrack) == null ? void 0 : _b.readyState) === "live") return this._micTrack;
       return this.localMicTracks.find((t) => t.readyState === "live") || null;
@@ -13901,8 +13885,8 @@
       const createdPromise = this.signaling.onceType(
         "transporteCriado",
         (m) => {
-          var _a60, _b;
-          return ((_a60 = m.payload) == null ? void 0 : _a60.direction) === direction && (((_b = m.payload) == null ? void 0 : _b.tag) || "default") === recvTag;
+          var _a14, _b;
+          return ((_a14 = m.payload) == null ? void 0 : _a14.direction) === direction && (((_b = m.payload) == null ? void 0 : _b.tag) || "default") === recvTag;
         }
       );
       this.signaling.send("criarTransporte", {
@@ -13929,8 +13913,8 @@
           const connectedPromise = this.signaling.onceType(
             "transporteConectado",
             (m) => {
-              var _a60;
-              return ((_a60 = m.payload) == null ? void 0 : _a60.transportId) === transport.id;
+              var _a14;
+              return ((_a14 = m.payload) == null ? void 0 : _a14.transportId) === transport.id;
             }
           );
           this.signaling.send("conectarTransporte", {
@@ -13944,11 +13928,11 @@
         }
       });
       transport.on("connectionstatechange", (state) => {
-        var _a60, _b, _c, _d, _e;
+        var _a14, _b, _c, _d, _e;
         const level = state === "failed" ? "error" : "info";
         let msg = `Transport ${direction}${recvTag !== "default" ? `/${recvTag}` : ""}: ${state}`;
         if (state === "failed") {
-          const ice = ((_a60 = transport.iceCandidates) == null ? void 0 : _a60.map((c) => c.ip).filter(Boolean).join(", ")) || ((_b = this.videoQuality) == null ? void 0 : _b.serverHost) || "?";
+          const ice = ((_a14 = transport.iceCandidates) == null ? void 0 : _a14.map((c) => c.ip).filter(Boolean).join(", ")) || ((_b = this.videoQuality) == null ? void 0 : _b.serverHost) || "?";
           const ports = ((_c = this.videoQuality) == null ? void 0 : _c.rtcPortRange) || "40000-40100";
           msg += ` i?,???? verifique firewall UDP ${ports} em ${ice}`;
           (_d = this.onIceState) == null ? void 0 : _d.call(this, "failed", direction);
@@ -13964,8 +13948,8 @@
             const producedPromise = this.signaling.onceType(
               "produzido",
               (m) => {
-                var _a60, _b;
-                if (((_a60 = m.payload) == null ? void 0 : _a60.kind) !== kind) return false;
+                var _a14, _b;
+                if (((_a14 = m.payload) == null ? void 0 : _a14.kind) !== kind) return false;
                 if (kind === "audio" && source) {
                   return ((_b = m.payload) == null ? void 0 : _b.source) === source;
                 }
@@ -14029,9 +14013,9 @@
       return this.recvTransports.get(tag);
     }
     hasVideoProducer() {
-      var _a60;
+      var _a14;
       const producer = this.producers.video;
-      return !!(producer && !producer.closed && ((_a60 = producer.track) == null ? void 0 : _a60.readyState) === "live");
+      return !!(producer && !producer.closed && ((_a14 = producer.track) == null ? void 0 : _a14.readyState) === "live");
     }
     isSharingVideo() {
       return this.hasVideoProducer();
@@ -14052,13 +14036,13 @@
       this.localMicTracks = kept;
     }
     async _closeAudioProducerBySource(source, { stopMicTrack = false } = {}) {
-      var _a60;
+      var _a14;
       const key = normalizeAudioSource(source, "mixed");
       const producer = this.producers[key];
       if (producer && !producer.closed) {
         audioTrace("producer fechado", {
           source: key,
-          producerId: (_a60 = producer.id) == null ? void 0 : _a60.slice(0, 8)
+          producerId: (_a14 = producer.id) == null ? void 0 : _a14.slice(0, 8)
         });
         producer.close();
       }
@@ -14079,12 +14063,12 @@
       }
     }
     async _publishAudioTrack(audioTrack, source) {
-      var _a60, _b, _c;
+      var _a14, _b, _c;
       const key = normalizeAudioSource(source, "mixed");
       if (!audioTrack || audioTrack.readyState !== "live") return false;
       await this.ensureSendTransport();
       const existing = this.producers[key];
-      if (existing && !existing.closed && existing.track === audioTrack && ((_a60 = existing.track) == null ? void 0 : _a60.readyState) === "live") {
+      if (existing && !existing.closed && existing.track === audioTrack && ((_a14 = existing.track) == null ? void 0 : _a14.readyState) === "live") {
         return true;
       }
       if (existing && !existing.closed) {
@@ -14145,9 +14129,9 @@
       return ok;
     }
     async setMicrophoneFilterPrefs(prefs) {
-      var _a60, _b;
+      var _a14, _b;
       this._micFilterPrefs = normalizeMicrophoneFilterPrefs(prefs || {});
-      if (((_a60 = this.capturePrefs) == null ? void 0 : _a60.microphone) && ((_b = this._micTrack) == null ? void 0 : _b.readyState) === "live") {
+      if (((_a14 = this.capturePrefs) == null ? void 0 : _a14.microphone) && ((_b = this._micTrack) == null ? void 0 : _b.readyState) === "live") {
         return this.publishMicrophone({ ...this.capturePrefs, microphone: true });
       }
       return true;
@@ -14231,7 +14215,7 @@
       return navigator.mediaDevices.getDisplayMedia(constraints);
     }
     async publishDisplayStream(displayStream, capturePrefs2) {
-      var _a60;
+      var _a14;
       if (!displayStream) throw new Error("Nenhuma captura de tela fornecida");
       this.setCapturePrefs(capturePrefs2);
       await this.ensureSendTransport();
@@ -14240,7 +14224,9 @@
         this.producers.video = null;
       }
       if (this.localScreenStream && this.localScreenStream !== displayStream) {
+        const keepTrackIds = new Set(displayStream.getTracks().map((t) => t.id));
         for (const track of this.localScreenStream.getTracks()) {
+          if (keepTrackIds.has(track.id)) continue;
           try {
             track.stop();
           } catch (_) {
@@ -14248,14 +14234,14 @@
         }
         await this.stopSystemAudio();
       }
-      const videoTrack = displayStream.getVideoTracks()[0];
-      if (!videoTrack || videoTrack.readyState !== "live") {
-        throw new Error("Pista de v?fideo indispon?fivel i?,???? selecione a tela novamente");
+      const videoTrack = displayStream.getVideoTracks().find((t) => t.readyState === "live");
+      if (!videoTrack) {
+        throw new Error("Pista de video indisponivel - selecione a tela novamente");
       }
       this.localScreenStream = displayStream;
       try {
         applyContentHint(videoTrack, this.videoQuality.contentHint || "detail");
-        const settings = ((_a60 = videoTrack.getSettings) == null ? void 0 : _a60.call(videoTrack)) || {};
+        const settings = ((_a14 = videoTrack.getSettings) == null ? void 0 : _a14.call(videoTrack)) || {};
         if (settings.width && settings.height) {
           this.onLog(
             `Captura: ${settings.width}?f??"${settings.height} @ ${settings.frameRate || "?"}fps`,
@@ -14335,9 +14321,9 @@
       }
     }
     async _resumeRemoteConsumer(consumer) {
-      var _a60;
+      var _a14;
       if (!consumer || consumer.closed) return;
-      if (consumer.kind === "audio" || ((_a60 = consumer.track) == null ? void 0 : _a60.kind) === "audio") {
+      if (consumer.kind === "audio" || ((_a14 = consumer.track) == null ? void 0 : _a14.kind) === "audio") {
         this._ensureAudioPlaybackContext();
       }
       if (!consumer.paused) return;
@@ -14345,8 +14331,8 @@
         const resumePromise = this.signaling.onceType(
           "consumerRetomado",
           (m) => {
-            var _a61;
-            return ((_a61 = m.payload) == null ? void 0 : _a61.consumerId) === consumer.id;
+            var _a15;
+            return ((_a15 = m.payload) == null ? void 0 : _a15.consumerId) === consumer.id;
           }
         );
         this.signaling.send("retomarConsumer", { consumerId: consumer.id });
@@ -14369,16 +14355,16 @@
           reject(new Error(`Timeout aguardando: consumido (${producerId.slice(0, 8)})`));
         }, 25e3);
         const onConsumido = (msg) => {
-          var _a60;
+          var _a14;
           if (msg.type !== "consumido") return;
-          if (((_a60 = msg.payload) == null ? void 0 : _a60.producerId) !== producerId) return;
+          if (((_a14 = msg.payload) == null ? void 0 : _a14.producerId) !== producerId) return;
           cleanup();
           resolve(msg.payload);
         };
         const onErro = (msg) => {
-          var _a60, _b;
+          var _a14, _b;
           if (msg.type !== "erro") return;
-          const text = String(((_a60 = msg.payload) == null ? void 0 : _a60.mensagem) || "").toLowerCase();
+          const text = String(((_a14 = msg.payload) == null ? void 0 : _a14.mensagem) || "").toLowerCase();
           const consumeRelated = text.includes("consumir") || text.includes("producer") || text.includes("capacidades") || text.includes("transport");
           if (!consumeRelated) return;
           cleanup();
@@ -14496,13 +14482,13 @@
     async closeAuxiliaryAudio(peerId2, source = null) {
       return this._runAudioMediaOp(async () => {
         const closeEntry = (key, entry) => {
-          var _a60;
+          var _a14;
           if (!entry || entry.consumer.closed) return;
           const { source: entrySource } = parseAudioChannelKey(key);
           audioTrace("consumer fechado", {
             peerId: String(peerId2).slice(0, 8),
             source: entrySource,
-            consumerId: (_a60 = entry.consumer.id) == null ? void 0 : _a60.slice(0, 8)
+            consumerId: (_a14 = entry.consumer.id) == null ? void 0 : _a14.slice(0, 8)
           });
           entry.consumer.close();
           try {
@@ -14536,7 +14522,7 @@
     }
     async consumeAuxiliaryAudio(peerId2, producerId, source = "microphone") {
       return this._runAudioMediaOp(async () => {
-        var _a60;
+        var _a14;
         const channelKey = `${String(peerId2)}:${normalizeAudioSource(source, "microphone")}`;
         const existing = this.auxAudioConsumers.get(channelKey);
         if (existing && !existing.consumer.closed && existing.producerId === producerId) {
@@ -14568,17 +14554,17 @@
           peerId: String(peerId2).slice(0, 8),
           producerId: String(producerId).slice(0, 8),
           source: normalizeAudioSource(source, "microphone"),
-          consumerId: (_a60 = consumer.id) == null ? void 0 : _a60.slice(0, 8)
+          consumerId: (_a14 = consumer.id) == null ? void 0 : _a14.slice(0, 8)
         });
         return consumer;
       });
     }
     async consumeRemoteMedia(producerIds, { videoEl: videoEl2 = null, audioEl = null, ownProducerIds = null } = {}) {
       return this._runVideoMediaOp(async () => {
-        var _a60, _b;
+        var _a14, _b;
         if ((producerIds == null ? void 0 : producerIds.video) && videoEl2) {
           const ownVideoIds = new Set(
-            [ownProducerIds == null ? void 0 : ownProducerIds.video, (_a60 = this.producers.video) == null ? void 0 : _a60.id].filter(Boolean)
+            [ownProducerIds == null ? void 0 : ownProducerIds.video, (_a14 = this.producers.video) == null ? void 0 : _a14.id].filter(Boolean)
           );
           if (ownVideoIds.has(producerIds.video)) {
             this.onLog("Ignorando consumo do proprio producer de video", "warn");
@@ -14689,11 +14675,11 @@
       });
     }
     detachMedia({ videoEl: videoEl2 = null, audioEl = null } = {}) {
-      var _a60;
+      var _a14;
       if (videoEl2) videoEl2.srcObject = null;
       if (audioEl) {
         audioEl.srcObject = null;
-        (_a60 = audioEl.pause) == null ? void 0 : _a60.call(audioEl);
+        (_a14 = audioEl.pause) == null ? void 0 : _a14.call(audioEl);
       }
       return this.closeRemoteConsumers();
     }
@@ -14710,15 +14696,15 @@
       const consumer = this.remoteConsumers.audio;
       return !!consumer && !consumer.closed && consumer.paused;
     }
-    getRecordableStream({ hostPeerId: hostPeerId3, selectedPeerId } = {}) {
-      var _a60;
-      const own = hostPeerId3 && selectedPeerId && String(selectedPeerId) === String(hostPeerId3);
+    getRecordableStream({ hostPeerId: hostPeerId2, selectedPeerId } = {}) {
+      var _a14;
+      const own = hostPeerId2 && selectedPeerId && String(selectedPeerId) === String(hostPeerId2);
       if (own && this.localScreenStream) {
         const vt = this.localScreenStream.getVideoTracks()[0];
         if ((vt == null ? void 0 : vt.readyState) === "live") return this.localScreenStream;
       }
       const tracks = [];
-      const rv = (_a60 = this.remoteConsumers.video) == null ? void 0 : _a60.track;
+      const rv = (_a14 = this.remoteConsumers.video) == null ? void 0 : _a14.track;
       const audioConsumer = this.remoteConsumers.audio;
       const ra = audioConsumer == null ? void 0 : audioConsumer.track;
       if ((rv == null ? void 0 : rv.readyState) === "live") tracks.push(rv);
@@ -14770,7 +14756,7 @@
       }
     }
     async dispose({ notifyServer = false, keepLocalScreenStream = false, keepMicTrack = false } = {}) {
-      var _a60;
+      var _a14;
       if (keepLocalScreenStream) {
         await this.detachProducers({ notifyServer, keepMicTrack });
       } else {
@@ -14778,7 +14764,7 @@
       }
       await this.closeRemoteConsumers();
       await this.closeAllAuxiliaryAudio();
-      (_a60 = this.sendTransport) == null ? void 0 : _a60.close();
+      (_a14 = this.sendTransport) == null ? void 0 : _a14.close();
       for (const transport of this.recvTransports.values()) {
         transport == null ? void 0 : transport.close();
       }
@@ -14810,11 +14796,11 @@
     return !!producerIds.video;
   }
   function parseRoomSnapshot(snapshot = {}) {
-    var _a60;
+    var _a14;
     const transmission = normalizeTransmission(
       snapshot.transmission || snapshot.transmissaoAtiva || snapshot
     );
-    const audioSources = snapshot.audioSources || snapshot.audioProducers || ((_a60 = snapshot.fontesAudio) == null ? void 0 : _a60.sources) || [];
+    const audioSources = snapshot.audioSources || snapshot.audioProducers || ((_a14 = snapshot.fontesAudio) == null ? void 0 : _a14.sources) || [];
     return {
       transmission,
       audioSources,
@@ -14822,109 +14808,70 @@
       host: snapshot.host || null,
       displayControl: snapshot.displayControl || null,
       snapshotAt: snapshot.snapshotAt || 0,
-      mutedPeerIds: snapshot.mutedPeerIds || []
+      mutedPeerIds: snapshot.mutedPeerIds || [],
+      version: snapshot.version || 0,
+      reason: snapshot.reason || null
     };
   }
-  function roomSnapshotMediaKey(snapshot = {}) {
-    var _a60;
-    const { transmission, audioSources } = parseRoomSnapshot(snapshot);
-    const videoId = ((_a60 = transmission.producerIds) == null ? void 0 : _a60.video) || "";
-    const audioIds = (audioSources || []).map((s) => `${s.peerId || s.id}:${s.producerId}`).sort().join("|");
-    return `${transmission.selectedPeerId || ""}:${videoId}:${transmission.paused ? "1" : "0"}:${audioIds}`;
-  }
   function activeVideoTransmissionKey(transmission) {
-    var _a60;
+    var _a14;
     const t = normalizeTransmission(transmission);
-    return `${t.selectedPeerId || ""}:${((_a60 = t.producerIds) == null ? void 0 : _a60.video) || ""}:${t.paused ? "1" : "0"}`;
+    return `${t.selectedPeerId || ""}:${((_a14 = t.producerIds) == null ? void 0 : _a14.video) || ""}:${t.paused ? "1" : "0"}`;
   }
   function remoteVideoConsumeNeeded(transmission, { currentProducerId = null, isSelfSelected = false, hasVideoElement = false, consumerClosed = false } = {}) {
-    var _a60;
+    var _a14;
     const tx = normalizeTransmission(transmission);
     if (isSelfSelected) return false;
     if (!hasActiveVideo(tx) || tx.paused) return false;
-    const nextId = (_a60 = tx.producerIds) == null ? void 0 : _a60.video;
+    const nextId = (_a14 = tx.producerIds) == null ? void 0 : _a14.video;
     if (!nextId) return false;
     if (consumerClosed || !currentProducerId || currentProducerId !== nextId) return true;
     return !hasVideoElement;
   }
   function mergeSourceWithTransmission(source, tx, { isSelected = false } = {}) {
-    var _a60, _b, _c;
+    var _a14, _b, _c, _d;
     if (!source) return source;
     const normalized = normalizeTransmission(tx);
     if (!hasActiveVideo(normalized)) return source;
-    const videoId = ((_a60 = normalized.producerIds) == null ? void 0 : _a60.video) || null;
+    const videoId = ((_a14 = normalized.producerIds) == null ? void 0 : _a14.video) || null;
     return {
       ...source,
+      selectable: source.selectable ?? ((_b = source.mediaReady) == null ? void 0 : _b.video) ?? true,
       isProducing: true,
       hasVideo: true,
       producerIds: {
         ...source.producerIds || {},
-        video: videoId || ((_b = source.producerIds) == null ? void 0 : _b.video) || source.producerId || null
+        video: videoId || ((_c = source.producerIds) == null ? void 0 : _c.video) || source.producerId || null
       },
-      producerId: videoId || ((_c = source.producerIds) == null ? void 0 : _c.video) || source.producerId || null,
+      producerId: videoId || ((_d = source.producerIds) == null ? void 0 : _d.video) || source.producerId || null,
       selecionado: !!isSelected,
       pausado: isSelected ? normalized.paused : source.pausado
     };
   }
-  function enrichRoomSourcesState(estado2 = {}, transmission) {
-    var _a60;
-    if (!estado2) return estado2;
-    const tx = normalizeTransmission(transmission || {});
-    if (!hasActiveVideo(tx)) return { ...estado2 };
-    const selectedId = tx.selectedPeerId;
-    const videoId = (_a60 = tx.producerIds) == null ? void 0 : _a60.video;
-    const clients = (estado2.clients || []).map((c) => {
-      var _a61;
-      if (selectedId && String(c.id) === String(selectedId)) {
-        return mergeSourceWithTransmission(c, tx, { isSelected: true });
-      }
-      if (videoId && (((_a61 = c.producerIds) == null ? void 0 : _a61.video) === videoId || c.producerId === videoId)) {
-        return mergeSourceWithTransmission(c, tx);
-      }
-      return selectedId ? { ...c, selecionado: false } : c;
-    });
-    let selecionado = estado2.selecionado;
-    if (selectedId) {
-      const match = clients.find((c) => String(c.id) === String(selectedId));
-      selecionado = match ? { ...match, selecionado: true, pausado: tx.paused } : {
-        id: selectedId,
-        displayName: tx.peerName || "Fonte",
-        isProducing: true,
-        hasVideo: true,
-        producerIds: tx.producerIds,
-        producerId: tx.producerId,
-        selecionado: true,
-        pausado: tx.paused
-      };
-    } else if (selecionado) {
-      selecionado = mergeSourceWithTransmission(selecionado, tx, { isSelected: true });
-    }
-    return { ...estado2, clients, selecionado };
-  }
   function enrichDisplaySources(sources, transmission) {
-    var _a60;
+    var _a14;
     if (!(sources == null ? void 0 : sources.length) || !transmission) return sources || [];
     const tx = normalizeTransmission(transmission);
     if (!hasActiveVideo(tx)) return sources;
     const selectedId = tx.selectedPeerId;
-    const videoId = (_a60 = tx.producerIds) == null ? void 0 : _a60.video;
+    const videoId = (_a14 = tx.producerIds) == null ? void 0 : _a14.video;
     return sources.map((s) => {
-      var _a61;
+      var _a15;
       if (selectedId && String(s.id) === String(selectedId)) {
         return mergeSourceWithTransmission(s, tx, { isSelected: true });
       }
-      if (videoId && (((_a61 = s.producerIds) == null ? void 0 : _a61.video) === videoId || s.producerId === videoId)) {
+      if (videoId && (((_a15 = s.producerIds) == null ? void 0 : _a15.video) === videoId || s.producerId === videoId)) {
         return mergeSourceWithTransmission(s, tx);
       }
       return selectedId ? { ...s, selecionado: false } : s;
     });
   }
   function transmissionSelectionKey(tx) {
-    var _a60;
+    var _a14;
     const n = normalizeTransmission(tx);
     return [
       n.selectedPeerId || "",
-      ((_a60 = n.producerIds) == null ? void 0 : _a60.video) || "",
+      ((_a14 = n.producerIds) == null ? void 0 : _a14.video) || "",
       n.paused ? "1" : "0"
     ].join(":");
   }
@@ -14979,20 +14926,20 @@
       this._appliedVideoKey = "";
     }
     _needsVideoSync(tx, force) {
-      var _a60, _b, _c;
+      var _a14, _b, _c;
       if (force) return true;
-      const media3 = this.getMedia();
-      if (!media3) return false;
+      const media2 = this.getMedia();
+      if (!media2) return false;
       const activeKey = activeVideoTransmissionKey(tx);
       const peerId2 = this.getPeerId();
       const videoEl2 = this.getVideoEl();
-      const currentProducerId = media3.currentActiveVideoProducerId || ((_b = (_a60 = media3.remoteConsumers) == null ? void 0 : _a60.video) == null ? void 0 : _b.producerId) || null;
+      const currentProducerId = media2.currentActiveVideoProducerId || ((_b = (_a14 = media2.remoteConsumers) == null ? void 0 : _a14.video) == null ? void 0 : _b.producerId) || null;
       const isSelfSelected = String(normalizeTransmission(tx).selectedPeerId) === String(peerId2);
       const needsConsume = remoteVideoConsumeNeeded(tx, {
         currentProducerId,
         isSelfSelected,
         hasVideoElement: !!(videoEl2 == null ? void 0 : videoEl2.srcObject),
-        consumerClosed: !((_c = media3.remoteConsumers) == null ? void 0 : _c.video) || media3.remoteConsumers.video.closed
+        consumerClosed: !((_c = media2.remoteConsumers) == null ? void 0 : _c.video) || media2.remoteConsumers.video.closed
       });
       const keyChanged = activeKey !== this._appliedVideoKey;
       if (!hasActiveVideo(tx)) return keyChanged || !!currentProducerId;
@@ -15009,23 +14956,23 @@
       }
       const gen = ++this._generation;
       this._work = this._work.then(() => this._runApply(tx, gen)).catch((e) => {
-        var _a60;
-        (_a60 = this.onError) == null ? void 0 : _a60.call(this, e);
+        var _a14;
+        (_a14 = this.onError) == null ? void 0 : _a14.call(this, e);
         throw e;
       });
       return this._work;
     }
     onConsumerClosed(consumerId) {
-      var _a60, _b;
-      const media3 = this.getMedia();
-      if (!media3) return this._work;
-      const wasVideoConsumer = ((_b = (_a60 = media3.remoteConsumers) == null ? void 0 : _a60.video) == null ? void 0 : _b.id) === consumerId;
+      var _a14, _b;
+      const media2 = this.getMedia();
+      if (!media2) return this._work;
+      const wasVideoConsumer = ((_b = (_a14 = media2.remoteConsumers) == null ? void 0 : _a14.video) == null ? void 0 : _b.id) === consumerId;
       if (wasVideoConsumer) {
-        media3.remoteConsumers.video = null;
-        media3.currentActiveVideoProducerId = null;
-        if (consumerId && media3.videoConsumersByProducerId) {
-          for (const [pid, c] of media3.videoConsumersByProducerId.entries()) {
-            if ((c == null ? void 0 : c.id) === consumerId) media3.videoConsumersByProducerId.delete(pid);
+        media2.remoteConsumers.video = null;
+        media2.currentActiveVideoProducerId = null;
+        if (consumerId && media2.videoConsumersByProducerId) {
+          for (const [pid, c] of media2.videoConsumersByProducerId.entries()) {
+            if ((c == null ? void 0 : c.id) === consumerId) media2.videoConsumersByProducerId.delete(pid);
           }
         }
         const videoEl2 = this.getVideoEl();
@@ -15041,9 +14988,9 @@
       return this._work;
     }
     async _runApply(tx, gen) {
-      var _a60, _b, _c, _d, _e, _f, _g, _h, _i;
+      var _a14, _b, _c, _d, _e, _f, _g, _h, _i;
       if (gen !== this._generation) return;
-      const media3 = this.getMedia();
+      const media2 = this.getMedia();
       const videoEl2 = this.getVideoEl();
       const peerId2 = this.getPeerId();
       const viewerOnly2 = this.isViewerOnly();
@@ -15052,7 +14999,7 @@
       try {
         if (!hasActiveVideo(tx)) {
           this._appliedVideoKey = "";
-          await (media3 == null ? void 0 : media3.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
+          await (media2 == null ? void 0 : media2.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
           this.onLtOverlay(tx);
           if (tx.interrompidaPor) {
             const el = this.getInterruptedMessageEl();
@@ -15078,7 +15025,7 @@
         );
         if (isSelectedSelf && !tx.paused) {
           this.onStatus("Voce esta selecionado \u2014 transmitindo para todos");
-          await (media3 == null ? void 0 : media3.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
+          await (media2 == null ? void 0 : media2.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
           this._appliedVideoKey = selectionKey;
         } else {
           const watchingLabel = this.getWatchingLabelEl();
@@ -15088,19 +15035,19 @@
           this.onStatus(
             tx.paused ? "Transmissao pausada pelo host" : `Assistindo: ${tx.peerName || "fonte"}`
           );
-          const nextVideoProducer = (_a60 = tx.producerIds) == null ? void 0 : _a60.video;
-          if (nextVideoProducer && !tx.paused && media3) {
+          const nextVideoProducer = (_a14 = tx.producerIds) == null ? void 0 : _a14.video;
+          if (nextVideoProducer && !tx.paused && media2) {
             if (gen !== this._generation) return;
-            const ownProducerId = ((_c = (_b = media3.producers) == null ? void 0 : _b.video) == null ? void 0 : _c.id) || null;
-            const currentProducerId = media3.currentActiveVideoProducerId || ((_e = (_d = media3.remoteConsumers) == null ? void 0 : _d.video) == null ? void 0 : _e.producerId);
+            const ownProducerId = ((_c = (_b = media2.producers) == null ? void 0 : _b.video) == null ? void 0 : _c.id) || null;
+            const currentProducerId = media2.currentActiveVideoProducerId || ((_e = (_d = media2.remoteConsumers) == null ? void 0 : _d.video) == null ? void 0 : _e.producerId);
             const needsConsume = remoteVideoConsumeNeeded(tx, {
               currentProducerId,
               isSelfSelected: false,
               hasVideoElement: !!(videoEl2 == null ? void 0 : videoEl2.srcObject),
-              consumerClosed: !((_f = media3.remoteConsumers) == null ? void 0 : _f.video) || media3.remoteConsumers.video.closed
+              consumerClosed: !((_f = media2.remoteConsumers) == null ? void 0 : _f.video) || media2.remoteConsumers.video.closed
             });
             if (needsConsume) {
-              await media3.consumeRemoteMedia(tx.producerIds, {
+              await media2.consumeRemoteMedia(tx.producerIds, {
                 videoEl: videoEl2,
                 audioEl: null,
                 ownProducerIds: { video: ownProducerId }
@@ -15114,7 +15061,7 @@
           } else if (tx.paused) {
             this._appliedVideoKey = activeKey;
           } else if (!nextVideoProducer) {
-            await (media3 == null ? void 0 : media3.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
+            await (media2 == null ? void 0 : media2.closeActiveVideoConsumer({ videoEl: videoEl2, notifyServer: true }));
             this._appliedVideoKey = "";
           }
         }
@@ -15200,9 +15147,9 @@
     }
     return null;
   }
-  function isTransientServerError(msg, { joinInProgress: joinInProgress3 = false } = {}) {
+  function isTransientServerError(msg, { joinInProgress: joinInProgress2 = false } = {}) {
     const text = String(msg || "").toLowerCase();
-    if (joinInProgress3 && (text.includes("n\xE3o autenticado") || text.includes("nao autenticado"))) {
+    if (joinInProgress2 && (text.includes("n\xE3o autenticado") || text.includes("nao autenticado"))) {
       return true;
     }
     if (text.includes("tipo de mensagem desconhecido")) return true;
@@ -15292,9 +15239,9 @@
       }
       return entry;
     }
-    handleServerMessage(message, context = "servidor", { joinInProgress: joinInProgress3 = false } = {}) {
+    handleServerMessage(message, context = "servidor", { joinInProgress: joinInProgress2 = false } = {}) {
       const technical = String(message || "");
-      if (isTransientServerError(technical, { joinInProgress: joinInProgress3 })) {
+      if (isTransientServerError(technical, { joinInProgress: joinInProgress2 })) {
         this.onTechnicalLog(`[transient] ${context}: ${technical}`, "warn");
         return null;
       }
@@ -15339,6 +15286,23 @@
   }
 
   // src/shared/host-audio-monitor.js
+  function sourcePriority(source) {
+    if (source === "microphone") return 0;
+    if (source === "system") return 1;
+    return 2;
+  }
+  function pickAntiEchoSources(list, { allowDualPeerAudio = false } = {}) {
+    if (allowDualPeerAudio) return list || [];
+    const byPeer = /* @__PURE__ */ new Map();
+    for (const entry of list || []) {
+      const pid = String(entry.peerId);
+      const existing = byPeer.get(pid);
+      if (!existing || sourcePriority(entry.source) < sourcePriority(existing.source)) {
+        byPeer.set(pid, entry);
+      }
+    }
+    return [...byPeer.values()];
+  }
   function loadPresetFromLocalStorage(name) {
     try {
       const raw = localStorage.getItem("sharescreen_audio_presets");
@@ -15347,35 +15311,6 @@
       return presets[name] || null;
     } catch {
       return null;
-    }
-  }
-  function savePresetToLocalStorage(name, prefs) {
-    try {
-      const raw = localStorage.getItem("sharescreen_audio_presets") || "{}";
-      const presets = JSON.parse(raw);
-      presets[name] = prefs;
-      localStorage.setItem("sharescreen_audio_presets", JSON.stringify(presets));
-    } catch {
-    }
-  }
-  function renamePresetInLocalStorage(oldName, newName) {
-    const oldTrimmed = String(oldName || "").trim();
-    const newTrimmed = String(newName || "").trim();
-    if (!oldTrimmed || !newTrimmed) return;
-    if (oldTrimmed.toLowerCase() === newTrimmed.toLowerCase()) return;
-    const prefs = loadPresetFromLocalStorage(oldTrimmed);
-    if (!prefs) return;
-    try {
-      const raw = localStorage.getItem("sharescreen_audio_presets") || "{}";
-      const presets = JSON.parse(raw);
-      for (const key of Object.keys(presets)) {
-        if (key.toLowerCase() === oldTrimmed.toLowerCase()) {
-          delete presets[key];
-        }
-      }
-      presets[newTrimmed] = prefs;
-      localStorage.setItem("sharescreen_audio_presets", JSON.stringify(presets));
-    } catch {
     }
   }
   function waitForPlayingTrack(track, timeoutMs = 8e3) {
@@ -15409,8 +15344,8 @@
     });
   }
   var HostAudioMonitor = class {
-    constructor(media3, options = {}) {
-      this.media = media3;
+    constructor(media2, options = {}) {
+      this.media = media2;
       this.opts = options;
       this.excludePeerId = options.excludePeerId ? String(options.excludePeerId) : null;
       this.channels = /* @__PURE__ */ new Map();
@@ -15430,34 +15365,35 @@
         [...options.pinnedPeerIds || []].map((id) => String(id))
       );
       this.allChannelsRoutedToDest = false;
+      this.allowDualPeerAudio = options.allowDualPeerAudio === true;
     }
     setPinnedPeerIds(peerIds = []) {
       this.pinnedPeerIds = new Set([...peerIds || []].map((id) => String(id)));
     }
     countLiveChannelsForPeer(peerId2) {
-      var _a60, _b;
+      var _a14, _b;
       if (!peerId2) return 0;
       const key = String(peerId2);
       let count = 0;
       for (const ch of this.channels.values()) {
         if (String(ch.peerId) !== key) continue;
-        const track = (_a60 = ch.consumer) == null ? void 0 : _a60.track;
+        const track = (_a14 = ch.consumer) == null ? void 0 : _a14.track;
         if ((track == null ? void 0 : track.readyState) === "live" && !((_b = ch.consumer) == null ? void 0 : _b.closed)) count += 1;
       }
       return count;
     }
     _log(event, data = {}) {
-      var _a60, _b;
+      var _a14, _b;
       audioTrace(event, data);
-      (_b = (_a60 = this.opts).onLog) == null ? void 0 : _b.call(_a60, event, data);
+      (_b = (_a14 = this.opts).onLog) == null ? void 0 : _b.call(_a14, event, data);
     }
     setManualMuted(mutedPeerIds) {
-      var _a60;
+      var _a14;
       this._mutedPeerIds = new Set(
         [...mutedPeerIds || []].map((id) => String(id))
       );
       for (const ch of this.channels.values()) {
-        const track = (_a60 = ch.consumer) == null ? void 0 : _a60.track;
+        const track = (_a14 = ch.consumer) == null ? void 0 : _a14.track;
         if (track) {
           const silenced = this._isChannelMuted(ch.peerId);
           track.enabled = !silenced;
@@ -15478,19 +15414,19 @@
       return this.channels.size;
     }
     countLiveChannels() {
-      var _a60, _b;
+      var _a14, _b;
       let count = 0;
       for (const ch of this.channels.values()) {
-        const track = (_a60 = ch.consumer) == null ? void 0 : _a60.track;
+        const track = (_a14 = ch.consumer) == null ? void 0 : _a14.track;
         if ((track == null ? void 0 : track.readyState) === "live" && !((_b = ch.consumer) == null ? void 0 : _b.closed)) count += 1;
       }
       return count;
     }
     async recoverOutputIfSilent() {
-      var _a60, _b, _c, _d;
+      var _a14, _b, _c, _d;
       if (!this.channels.size) return;
       this._rebuildAudioRoutes();
-      const mixedTrack = (_c = (_b = (_a60 = this.dest) == null ? void 0 : _a60.stream) == null ? void 0 : _b.getAudioTracks) == null ? void 0 : _c.call(_b)[0];
+      const mixedTrack = (_c = (_b = (_a14 = this.dest) == null ? void 0 : _a14.stream) == null ? void 0 : _b.getAudioTracks) == null ? void 0 : _c.call(_b)[0];
       const hasLiveOutput = (mixedTrack == null ? void 0 : mixedTrack.readyState) === "live" || this.stream.getAudioTracks().some((t) => t.readyState === "live");
       if (!hasLiveOutput) {
         this._ensureAudioContext();
@@ -15515,7 +15451,7 @@
       await this._tryPlayOutput();
     }
     async _tryPlayOutput() {
-      var _a60, _b;
+      var _a14, _b;
       const el = this.outputEl;
       if (!el || !this.channels.size) return;
       try {
@@ -15527,23 +15463,23 @@
         if ((err == null ? void 0 : err.name) === "NotAllowedError" || /autoplay/i.test(String((err == null ? void 0 : err.message) || ""))) {
           this._autoplayBlocked = true;
           this._log("autoplay bloqueado", { channels: this.channels.size });
-          (_b = (_a60 = this.opts).onAutoplayBlocked) == null ? void 0 : _b.call(_a60, err);
+          (_b = (_a14 = this.opts).onAutoplayBlocked) == null ? void 0 : _b.call(_a14, err);
         }
       }
     }
     getOutputTrack() {
-      var _a60;
+      var _a14;
       for (const ch of this.channels.values()) {
-        const track = (_a60 = ch.consumer) == null ? void 0 : _a60.track;
+        const track = (_a14 = ch.consumer) == null ? void 0 : _a14.track;
         if ((track == null ? void 0 : track.readyState) === "live") return track;
       }
       return null;
     }
     getMixedOutputTrack() {
-      var _a60, _b, _c;
+      var _a14, _b, _c;
       this._ensureAudioContext();
       this._rebuildAudioRoutes();
-      const dspTrack = (_c = (_b = (_a60 = this.dest) == null ? void 0 : _a60.stream) == null ? void 0 : _b.getAudioTracks) == null ? void 0 : _c.call(_b)[0];
+      const dspTrack = (_c = (_b = (_a14 = this.dest) == null ? void 0 : _a14.stream) == null ? void 0 : _b.getAudioTracks) == null ? void 0 : _c.call(_b)[0];
       if ((dspTrack == null ? void 0 : dspTrack.readyState) === "live") {
         return dspTrack;
       }
@@ -15553,10 +15489,10 @@
       return this.getOutputTrack();
     }
     _rebuildAudioRoutes() {
-      var _a60, _b, _c, _d;
+      var _a14, _b, _c, _d;
       const liveChannels = [];
       for (const ch of this.channels.values()) {
-        const track = (_a60 = ch.consumer) == null ? void 0 : _a60.track;
+        const track = (_a14 = ch.consumer) == null ? void 0 : _a14.track;
         if (!track || track.readyState !== "live") continue;
         liveChannels.push({ ch, track });
       }
@@ -15619,7 +15555,7 @@
     _startLevelsLoop() {
       if (this._levelsRaf) return;
       const tick = () => {
-        var _a60;
+        var _a14;
         const levels = /* @__PURE__ */ new Map();
         for (const ch of this.channels.values()) {
           if (ch.analyserNode) {
@@ -15642,7 +15578,7 @@
             speaking: (ch.rawLevel || 0) > 0.04 || (ch.smoothedLevel || 0) > 0.05
           });
         }
-        if (levels.size) (_a60 = this.onLevels) == null ? void 0 : _a60.call(this, levels);
+        if (levels.size) (_a14 = this.onLevels) == null ? void 0 : _a14.call(this, levels);
         this._levelsRaf = requestAnimationFrame(tick);
       };
       tick();
@@ -15653,8 +15589,8 @@
       this._levelsRaf = null;
     }
     _startChannelMeter(ch) {
-      var _a60, _b;
-      (_a60 = ch.stopMeter) == null ? void 0 : _a60.call(ch);
+      var _a14, _b;
+      (_a14 = ch.stopMeter) == null ? void 0 : _a14.call(ch);
       const track = (_b = ch.consumer) == null ? void 0 : _b.track;
       if (!track) return;
       ch.stopMeter = startTrackLevelMeter(track, {
@@ -15673,8 +15609,8 @@
         console.error("[HostAudioMonitor] Falha ao criar AudioContext:", e);
       }
     }
-    _hasAnyFilter(peerId2) {
-      return hasActiveMicrophoneFilter(this.getFilterPrefs(peerId2));
+    _hasAnyFilter(channelKeyOrPeerId) {
+      return hasActiveMicrophoneFilter(this.getFilterPrefs(channelKeyOrPeerId));
     }
     _clearChannelDsp(ch) {
       if (ch.gateInterval) {
@@ -15747,23 +15683,27 @@
       }
       ch.stream = null;
     }
-    getFilterPrefs(peerId2) {
-      const key = String(peerId2);
+    getFilterPrefs(channelKeyOrPeerId) {
+      const key = String(channelKeyOrPeerId);
+      const peerId2 = key.includes(":") ? key.split(":")[0] : key;
+      const source = key.includes(":") ? key.split(":").slice(1).join(":") : "microphone";
       if (!this.filterPrefs.has(key)) {
-        const name = this.peerNames.get(key) || "";
+        const name = this.peerNames.get(peerId2) || "";
         let saved = null;
-        if (name) {
+        if (name && source === "microphone") {
           saved = loadPresetFromLocalStorage(name);
         }
-        this.filterPrefs.set(key, saved || { ...MIC_FILTER_DEFAULTS });
+        const defaults = source === "system" ? { ...MIC_FILTER_DEFAULTS, noiseGate: false, micSensitivity: false } : { ...MIC_FILTER_DEFAULTS };
+        this.filterPrefs.set(key, saved || defaults);
       }
       return this.filterPrefs.get(key);
     }
-    setFilterPrefs(peerId2, prefs) {
-      const key = String(peerId2);
+    setFilterPrefs(channelKeyOrPeerId, prefs) {
+      const key = String(channelKeyOrPeerId);
       this.filterPrefs.set(key, { ...this.getFilterPrefs(key), ...prefs });
       for (const ch of this.channels.values()) {
-        if (ch.peerId === key) {
+        const chKey = audioChannelKey(ch.peerId, ch.source);
+        if (chKey === key || ch.peerId === key) {
           this._applyChannelFilters(ch);
         }
       }
@@ -15847,11 +15787,13 @@
     }
     _applyChannelFilters(ch) {
       if (!this.ctx) return;
-      const prefs = this.getFilterPrefs(ch.peerId);
+      const channelKey = audioChannelKey(ch.peerId, ch.source);
+      const prefs = this.getFilterPrefs(channelKey);
+      const useDsp = ch.source !== "system";
       if (ch.gainNode) {
         if (this._isChannelMuted(ch.peerId)) {
           ch.gainNode.gain.value = 0;
-        } else if (this._hasAnyFilter(ch.peerId)) {
+        } else if (useDsp && this._hasAnyFilter(channelKey)) {
           ch.gainNode.gain.value = prefs.gain !== void 0 ? prefs.gain : 1;
         } else {
           ch.gainNode.gain.value = 1;
@@ -15900,9 +15842,10 @@
           isOpen = false;
           return;
         }
-        const prefs = this.getFilterPrefs(ch.peerId);
+        const channelKey = audioChannelKey(ch.peerId, ch.source);
+        const prefs = this.getFilterPrefs(channelKey);
         const targetGain = prefs.gain !== void 0 ? prefs.gain : 1;
-        const gateActive = prefs.noiseGate || prefs.micSensitivity;
+        const gateActive = ch.source !== "system" && (prefs.noiseGate || prefs.micSensitivity);
         if (!gateActive) {
           if (!isOpen) isOpen = true;
           ch.gainNode.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
@@ -15924,16 +15867,19 @@
       }, 35);
     }
     async syncFromSources(sources) {
-      var _a60, _b;
+      var _a14, _b;
       if (!this.media) return;
       for (const s of sources || []) {
         if (s.peerId && s.name) {
           this.peerNames.set(String(s.peerId), s.name);
         }
       }
-      const list = normalizeRemoteAudioSources(sources, {
-        excludePeerId: this.excludePeerId
-      });
+      const list = pickAntiEchoSources(
+        normalizeRemoteAudioSources(sources, {
+          excludePeerId: this.excludePeerId
+        }),
+        { allowDualPeerAudio: this.allowDualPeerAudio }
+      );
       const wanted = /* @__PURE__ */ new Map();
       for (const entry of list) {
         const channelKey = audioChannelKey(entry.peerId, entry.source);
@@ -15951,7 +15897,7 @@
       for (const channelKey of [...this.channels.keys()]) {
         if (wanted.has(channelKey)) continue;
         const ch = this.channels.get(channelKey);
-        if ((ch == null ? void 0 : ch.producerId) && wantedProducerIds.has(ch.producerId) && ch.consumer && !ch.consumer.closed && ((_a60 = ch.consumer.track) == null ? void 0 : _a60.readyState) === "live") {
+        if ((ch == null ? void 0 : ch.producerId) && wantedProducerIds.has(ch.producerId) && ch.consumer && !ch.consumer.closed && ((_a14 = ch.consumer.track) == null ? void 0 : _a14.readyState) === "live") {
           continue;
         }
         const isPinned = (ch == null ? void 0 : ch.peerId) && this.pinnedPeerIds.has(String(ch.peerId));
@@ -16004,10 +15950,12 @@
           sources.push({ peerId: c.id, producerId: ids.audio, source: "microphone" });
         }
       }
-      return this.syncFromSources(sources);
+      return this.syncFromSources(
+        pickAntiEchoSources(sources, { allowDualPeerAudio: this.allowDualPeerAudio })
+      );
     }
     async _addChannel(channelKey, peerId2, producerId, source = "microphone", attempt = 0) {
-      var _a60, _b, _c, _d;
+      var _a14, _b, _c, _d;
       const existing = this.channels.get(channelKey);
       if (existing && existing.producerId === producerId && existing.consumer && !existing.consumer.closed) {
         return;
@@ -16023,7 +15971,7 @@
           source
         });
         track.enabled = true;
-        await ((_b = (_a60 = this.media)._resumeRemoteConsumer) == null ? void 0 : _b.call(_a60, consumer));
+        await ((_b = (_a14 = this.media)._resumeRemoteConsumer) == null ? void 0 : _b.call(_a14, consumer));
         if (consumer.paused) await consumer.resume();
         const onProducerClosed = () => {
           this._log("producer fechado", {
@@ -16063,8 +16011,8 @@
         wireMeter();
         track.addEventListener("unmute", wireMeter, { once: false });
         track.addEventListener("ended", () => {
-          var _a61;
-          (_a61 = ch.stopMeter) == null ? void 0 : _a61.call(ch);
+          var _a15;
+          (_a15 = ch.stopMeter) == null ? void 0 : _a15.call(ch);
           this._removeChannel(channelKey).catch(() => {
           });
         }, { once: true });
@@ -16081,10 +16029,10 @@
       }
     }
     async removeByConsumerId(consumerId) {
-      var _a60;
+      var _a14;
       if (!consumerId) return;
       for (const [channelKey, ch] of this.channels.entries()) {
-        if (((_a60 = ch.consumer) == null ? void 0 : _a60.id) === consumerId) {
+        if (((_a14 = ch.consumer) == null ? void 0 : _a14.id) === consumerId) {
           await this._removeChannel(channelKey);
           return;
         }
@@ -16094,10 +16042,10 @@
       return !!this._autoplayBlocked;
     }
     async _removeChannel(channelKey) {
-      var _a60, _b, _c, _d;
+      var _a14, _b, _c, _d;
       const ch = this.channels.get(channelKey);
       if (!ch) return;
-      (_a60 = ch.stopMeter) == null ? void 0 : _a60.call(ch);
+      (_a14 = ch.stopMeter) == null ? void 0 : _a14.call(ch);
       this._clearChannelDsp(ch);
       if (ch.consumer && ch._onProducerClosed) {
         try {
@@ -16142,8 +16090,8 @@
 
   // src/shared/display-sources.js
   function isSelectableSource(client) {
-    var _a60;
-    return !!((client == null ? void 0 : client.isProducing) || (client == null ? void 0 : client.hasVideo) || ((_a60 = client == null ? void 0 : client.producerIds) == null ? void 0 : _a60.video) || (client == null ? void 0 : client.producerId) || (client == null ? void 0 : client.status) === "transmitindo");
+    var _a14, _b;
+    return !!((client == null ? void 0 : client.selectable) || ((_a14 = client == null ? void 0 : client.mediaReady) == null ? void 0 : _a14.video) || (client == null ? void 0 : client.isProducing) || (client == null ? void 0 : client.hasVideo) || ((_b = client == null ? void 0 : client.producerIds) == null ? void 0 : _b.video) || (client == null ? void 0 : client.producerId) || (client == null ? void 0 : client.status) === "transmitindo");
   }
   function sortDisplaySources(clients) {
     return [...clients || []].sort((a, b) => {
@@ -16157,8 +16105,8 @@
 
   // src/shared/source-cards.js
   function hasVideoAvailable(c) {
-    var _a60;
-    return !!((c == null ? void 0 : c.isProducing) || (c == null ? void 0 : c.hasVideo) || ((_a60 = c == null ? void 0 : c.producerIds) == null ? void 0 : _a60.video) || (c == null ? void 0 : c.producerId) || (c == null ? void 0 : c.status) === "transmitindo");
+    var _a14, _b;
+    return !!((c == null ? void 0 : c.selectable) || ((_a14 = c == null ? void 0 : c.mediaReady) == null ? void 0 : _a14.video) || (c == null ? void 0 : c.isProducing) || (c == null ? void 0 : c.hasVideo) || ((_b = c == null ? void 0 : c.producerIds) == null ? void 0 : _b.video) || (c == null ? void 0 : c.producerId) || (c == null ? void 0 : c.status) === "transmitindo");
   }
   function isConnectedPeer(c) {
     return !!(c == null ? void 0 : c.id) && (c == null ? void 0 : c.status) !== "desconectado";
@@ -16228,7 +16176,7 @@
     return bar;
   }
   function buildDisplaySourceCard(c, onSelect, options = {}) {
-    var _a60, _b;
+    var _a14, _b;
     const cardState = getSourceCardState(c);
     const li = document.createElement("li");
     li.className = "card card-selectable source-card";
@@ -16243,7 +16191,7 @@
     if (cardState.kind === "available") li.classList.add("available");
     const body = document.createElement("div");
     body.className = "source-card-body";
-    (_a60 = options.decorateBody) == null ? void 0 : _a60.call(options, body, c);
+    (_a14 = options.decorateBody) == null ? void 0 : _a14.call(options, body, c);
     const nameWrap = document.createElement("div");
     nameWrap.className = "source-name-wrap";
     const name = document.createElement("div");
@@ -16265,659 +16213,221 @@
     return li;
   }
 
-  // src/shared/recording-filename.js
-  var MESES = [
-    "Janeiro",
-    "Fevereiro",
-    "Mar\xE7o",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro"
-  ];
-  function formatLegacyRecordingFilename(endDate) {
-    const y = endDate.getFullYear();
-    const m = endDate.getMonth();
-    const mes = MESES[m] || "Mes";
-    const mm = String(m + 1).padStart(2, "0");
-    const dd = String(endDate.getDate()).padStart(2, "0");
-    const hh = String(endDate.getHours()).padStart(2, "0");
-    const nn = String(endDate.getMinutes()).padStart(2, "0");
-    return `${y} ${mes}${mm} ${dd} ${hh}h${nn}.webm`;
-  }
-  function buildRecordingFilenameVars(endDate) {
-    const m = endDate.getMonth();
-    return {
-      YYYY: String(endDate.getFullYear()),
-      MM: String(m + 1).padStart(2, "0"),
-      DD: String(endDate.getDate()).padStart(2, "0"),
-      HH: String(endDate.getHours()).padStart(2, "0"),
-      NN: String(endDate.getMinutes()).padStart(2, "0"),
-      MES: MESES[m] || "Mes"
-    };
-  }
-  function formatRecordingFilename(endDate = /* @__PURE__ */ new Date(), pattern) {
-    const trimmed = String(pattern ?? "").trim();
-    if (!trimmed) {
-      return formatLegacyRecordingFilename(endDate);
-    }
-    const vars = buildRecordingFilenameVars(endDate);
-    let name = trimmed;
-    for (const [key, value] of Object.entries(vars)) {
-      const token = `{${key}}`;
-      name = name.split(token).join(value);
-    }
-    if (!name.toLowerCase().endsWith(".webm")) {
-      name += ".webm";
-    }
-    return name;
-  }
-  function isValidRecordingFilename(name) {
-    if (!name || typeof name !== "string") return false;
-    const base = name.replace(/\\/g, "/").split("/").pop();
-    if (!base || base === "." || base === "..") return false;
-    if (!base.toLowerCase().endsWith(".webm")) return false;
-    if (base.length > 200 || base.length <= 5) return false;
-    if (/[<>:"|?*\x00-\x1f]/.test(base)) return false;
-    if (base.includes("..")) return false;
-    return true;
-  }
-
-  // src/shared/recording-client.js
-  var RecordingState = {
+  // src/client/session.js
+  var SessionPhase = {
     IDLE: "idle",
-    RECORDING: "recording",
-    FINALIZING: "finalizing",
-    UPLOADING: "uploading",
-    SAVED: "saved",
-    ERROR: "error"
+    CAPTURING: "capturing",
+    JOINING: "joining",
+    PUBLISHING: "publishing",
+    ACTIVE: "active",
+    VIEWER_ACTIVE: "viewer_active"
   };
-  var RecordingClient = class {
-    constructor({ onLog, onStateChange, onProgress, onTimer } = {}) {
-      this.onLog = onLog || (() => {
-      });
-      this.onStateChange = onStateChange || (() => {
-      });
-      this.onProgress = onProgress || (() => {
-      });
-      this.onTimer = onTimer || (() => {
-      });
-      this.mediaRecorder = null;
-      this.chunks = [];
-      this._mimeType = "video/webm";
-      this._state = RecordingState.IDLE;
-      this._timerInterval = null;
-      this._startedAt = 0;
-      this._approxBytes = 0;
-      this._hostToken = "";
+  var ClientSession = class {
+    constructor() {
+      this.phase = SessionPhase.IDLE;
+      this.publishIntent = "publisher";
     }
-    get state() {
-      return this._state;
+    setPhase(phase) {
+      this.phase = phase;
     }
-    setState(s) {
-      this._state = s;
-      this.onStateChange(s);
+    setPublishIntent(intent) {
+      this.publishIntent = intent === "viewer" ? "viewer" : "publisher";
     }
-    setHostToken(token) {
-      this._hostToken = token || "";
+    isViewer() {
+      return this.publishIntent === "viewer";
     }
-    _pickMimeType() {
-      const candidates = [
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/webm"
-      ];
-      for (const t of candidates) {
-        if (MediaRecorder.isTypeSupported(t)) return t;
-      }
-      return "video/webm";
-    }
-    start(stream, quality = {}) {
-      var _a60, _b;
-      if (!((_a60 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a60.call(stream).length)) {
-        throw new Error("Nenhum v\xEDdeo dispon\xEDvel para gravar");
-      }
-      const liveVideo = stream.getVideoTracks().some((t) => t.readyState === "live");
-      if (!liveVideo) throw new Error("Stream de v\xEDdeo n\xE3o est\xE1 ativo");
-      if (((_b = this.mediaRecorder) == null ? void 0 : _b.state) === "recording") {
-        throw new Error("Grava\xE7\xE3o j\xE1 em andamento");
-      }
-      this.chunks = [];
-      this._approxBytes = 0;
-      this._mimeType = this._pickMimeType();
-      const vbps = quality.videoBitsPerSecond ?? 25e5;
-      this.mediaRecorder = new MediaRecorder(stream, {
-        mimeType: this._mimeType,
-        videoBitsPerSecond: vbps
-      });
-      this.mediaRecorder.ondataavailable = (e) => {
-        var _a61;
-        if (((_a61 = e.data) == null ? void 0 : _a61.size) > 0) {
-          this.chunks.push(e.data);
-          this._approxBytes += e.data.size;
-        }
-      };
-      this.mediaRecorder.onerror = () => {
-        this.setState(RecordingState.ERROR);
-        this.onLog("Erro no MediaRecorder", "error");
-      };
-      this.mediaRecorder.start(1e3);
-      this._startedAt = Date.now();
-      this._timerInterval = setInterval(() => {
-        const sec = Math.floor((Date.now() - this._startedAt) / 1e3);
-        this.onTimer(sec, this._approxBytes);
-      }, 1e3);
-      this.setState(RecordingState.RECORDING);
-      this.onLog("Grava\xE7\xE3o iniciada", "info");
-    }
-    stop() {
-      return new Promise((resolve, reject) => {
-        const mr = this.mediaRecorder;
-        if (!mr || mr.state === "inactive") {
-          resolve(null);
-          return;
-        }
-        this.setState(RecordingState.FINALIZING);
-        clearInterval(this._timerInterval);
-        mr.onstop = () => {
-          const blob = new Blob(this.chunks, { type: this._mimeType });
-          this.chunks = [];
-          this.mediaRecorder = null;
-          resolve(blob.size > 0 ? blob : null);
-        };
-        mr.onerror = () => {
-          this.setState(RecordingState.ERROR);
-          reject(new Error("Falha ao finalizar grava\xE7\xE3o"));
-        };
-        try {
-          mr.stop();
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }
-    resetIdle() {
-      this.setState(RecordingState.IDLE);
-    }
-    isRecording() {
-      var _a60;
-      return ((_a60 = this.mediaRecorder) == null ? void 0 : _a60.state) === "recording";
-    }
-    async upload(blob, filename = formatRecordingFilename(/* @__PURE__ */ new Date()), customDir = "") {
-      if (!(blob == null ? void 0 : blob.size)) throw new Error("Grava\xE7\xE3o vazia");
-      this.setState(RecordingState.UPLOADING);
-      const headers = {
-        "Content-Type": "application/octet-stream",
-        "X-Recording-Filename": filename
-      };
-      if (customDir) headers["X-Recording-Dir"] = customDir;
-      if (this._hostToken) headers["X-Host-Token"] = this._hostToken;
-      const useChunked = blob.size > 8 * 1024 * 1024;
-      try {
-        if (useChunked && typeof fetch === "function") {
-          return await this._uploadChunked(blob, filename, headers, customDir);
-        }
-        return await this._uploadSimple(blob, filename, headers);
-      } catch (e) {
-        this.setState(RecordingState.ERROR);
-        throw e;
-      }
-    }
-    _uploadSimple(blob, filename, headers) {
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/gravacao");
-        for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
-        xhr.upload.onprogress = (ev) => {
-          if (ev.lengthComputable) {
-            this.onProgress(Math.round(ev.loaded / ev.total * 100));
-          }
-        };
-        xhr.onload = () => {
-          let data = {};
-          try {
-            data = JSON.parse(xhr.responseText);
-          } catch (_) {
-          }
-          if (xhr.status >= 200 && xhr.status < 300) {
-            this.setState(RecordingState.SAVED);
-            this.onProgress(100);
-            resolve(data);
-          } else {
-            reject(new Error(data.erro || `HTTP ${xhr.status}`));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Falha de rede ao enviar grava\xE7\xE3o"));
-        xhr.send(blob);
-      });
-    }
-    async _uploadChunked(blob, filename, headers, customDir = "") {
-      const chunkSize = 2 * 1024 * 1024;
-      const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const total = Math.ceil(blob.size / chunkSize);
-      for (let i = 0; i < total; i++) {
-        const start = i * chunkSize;
-        const part = blob.slice(start, start + chunkSize);
-        const res = await fetch("/api/gravacao/chunk", {
-          method: "POST",
-          headers: {
-            ...headers,
-            "X-Upload-Id": uploadId,
-            "X-Chunk-Index": String(i),
-            "X-Chunk-Total": String(total),
-            "Content-Type": "application/octet-stream"
-          },
-          body: part
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.erro || `Chunk ${i} falhou`);
-        this.onProgress(Math.round((i + 1) / total * 90));
-      }
-      const finishRes = await fetch("/api/gravacao/complete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...this._hostToken ? { "X-Host-Token": this._hostToken } : {}
-        },
-        body: JSON.stringify({ uploadId, filename, customDir })
-      });
-      const result = await finishRes.json().catch(() => ({}));
-      if (!finishRes.ok) throw new Error(result.erro || "Falha ao finalizar upload");
-      this.setState(RecordingState.SAVED);
-      this.onProgress(100);
-      return result;
-    }
-    async stopAndUpload(stream, quality) {
-      const blob = await this.stop();
-      if (!blob) {
-        this.setState(RecordingState.IDLE);
-        return null;
-      }
-      const filename = formatRecordingFilename(/* @__PURE__ */ new Date());
-      return this.upload(blob, filename);
+    reset() {
+      this.phase = SessionPhase.IDLE;
     }
   };
-
-  // src/shared/recording-compositor.js
-  function getLiveVideoTrack(stream) {
-    var _a60;
-    return ((_a60 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a60.call(stream).find((track) => track.readyState === "live")) || null;
-  }
-  function getVideoDimensions(videoEl2, fallbackStream) {
-    var _a60;
-    const fallbackTrack = getLiveVideoTrack(fallbackStream);
-    const settings = ((_a60 = fallbackTrack == null ? void 0 : fallbackTrack.getSettings) == null ? void 0 : _a60.call(fallbackTrack)) || {};
-    const width = (videoEl2 == null ? void 0 : videoEl2.videoWidth) || settings.width || 1280;
-    const height = (videoEl2 == null ? void 0 : videoEl2.videoHeight) || settings.height || 720;
-    return {
-      width: Math.max(2, Math.floor(width)),
-      height: Math.max(2, Math.floor(height))
-    };
-  }
-  function createFallbackVideo(fallbackStream) {
-    if (!getLiveVideoTrack(fallbackStream)) return null;
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.autoplay = true;
-    video.srcObject = fallbackStream;
-    video.play().catch(() => {
+  var BACKOFF_MS = [0, 1e3, 2500];
+  function waitForRoomSnapshot(signaling2, timeoutMs) {
+    return new Promise((resolve) => {
+      var _a14, _b;
+      let settled = false;
+      const finish = (payload) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(payload || null);
+      };
+      const onRoomState = (msg) => {
+        if ((msg == null ? void 0 : msg.type) === "roomState" && msg.payload) finish(msg.payload);
+      };
+      const onEstadoSala = (msg) => {
+        if ((msg == null ? void 0 : msg.type) === "estadoSala" && msg.payload) finish(msg.payload);
+      };
+      const cleanup = () => {
+        var _a15, _b2;
+        clearTimeout(timer);
+        (_a15 = signaling2 == null ? void 0 : signaling2.removeListener) == null ? void 0 : _a15.call(signaling2, onRoomState);
+        (_b2 = signaling2 == null ? void 0 : signaling2.removeListener) == null ? void 0 : _b2.call(signaling2, onEstadoSala);
+      };
+      const timer = setTimeout(() => finish(null), timeoutMs);
+      (_a14 = signaling2 == null ? void 0 : signaling2.addListener) == null ? void 0 : _a14.call(signaling2, onRoomState);
+      (_b = signaling2 == null ? void 0 : signaling2.addListener) == null ? void 0 : _b.call(signaling2, onEstadoSala);
     });
-    return video;
   }
-  function drawBadge(ctx, canvas, text) {
-    const label = String(text || "").trim();
-    if (!label) return;
-    const fontSize = 11;
-    const paddingX = 14;
-    const paddingTop = 3;
-    const paddingBottom = 5;
-    const radius = 5;
-    const maxWidth = Math.min(420, Math.round(canvas.width * 0.72));
-    ctx.save();
-    ctx.font = `400 ${fontSize}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    let displayText = label;
-    let textWidth = ctx.measureText(displayText).width;
-    if (textWidth > maxWidth - paddingX * 2) {
-      while (displayText.length > 1 && ctx.measureText(`${displayText}...`).width > maxWidth - paddingX * 2) {
-        displayText = displayText.slice(0, -1);
+  async function requestRoomStateWithRetry(signaling2, { attempts = 3, timeoutMs = 5e3 } = {}) {
+    if (!(signaling2 == null ? void 0 : signaling2.connected) || !(signaling2 == null ? void 0 : signaling2.authenticated)) return null;
+    for (let i = 0; i < attempts; i += 1) {
+      if (BACKOFF_MS[i]) {
+        await new Promise((r) => setTimeout(r, BACKOFF_MS[i]));
       }
-      displayText = `${displayText}...`;
-      textWidth = ctx.measureText(displayText).width;
-    }
-    const width = Math.min(maxWidth, Math.ceil(textWidth + paddingX * 2));
-    const height = fontSize * 1.35 + paddingTop + paddingBottom;
-    const x = Math.round((canvas.width - width) / 2);
-    const y = 0;
-    const bottom = y + height;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + width, y);
-    ctx.lineTo(x + width, bottom - radius);
-    ctx.quadraticCurveTo(x + width, bottom, x + width - radius, bottom);
-    ctx.lineTo(x + radius, bottom);
-    ctx.quadraticCurveTo(x, bottom, x, bottom - radius);
-    ctx.closePath();
-    const gradient = ctx.createLinearGradient(0, y, 0, bottom);
-    gradient.addColorStop(0, "#5a9fd4");
-    gradient.addColorStop(0.55, "#2a6eb5");
-    gradient.addColorStop(1, "#1e5a96");
-    ctx.fillStyle = gradient;
-    ctx.fill();
-    ctx.strokeStyle = "#174a7a";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
-    ctx.fillStyle = "#fff";
-    ctx.fillText(displayText, x + width / 2, y + height / 2);
-    ctx.restore();
-  }
-  function drawVideoFrame(ctx, canvas, source) {
-    if (!source || source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return false;
-    if (!source.videoWidth || !source.videoHeight) return false;
-    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-    return true;
-  }
-  var RecordingCompositor = {
-    start({ videoEl: videoEl2, fallbackStream, badgeText, visible = true } = {}) {
-      const sourceStream = (videoEl2 == null ? void 0 : videoEl2.srcObject) instanceof MediaStream ? videoEl2.srcObject : fallbackStream;
-      const rawTrack = getLiveVideoTrack(sourceStream) || getLiveVideoTrack(fallbackStream);
-      if (!rawTrack) return null;
-      const canvas = document.createElement("canvas");
-      const dims = getVideoDimensions(videoEl2, fallbackStream || sourceStream);
-      canvas.width = dims.width;
-      canvas.height = dims.height;
-      const ctx = canvas.getContext("2d", { alpha: false });
-      if (!ctx || typeof canvas.captureStream !== "function") {
-        console.warn("[RecordingCompositor] canvas.captureStream indisponivel; gravando video bruto");
-        return {
-          stream: new MediaStream([rawTrack]),
-          stop() {
-          }
-        };
-      }
-      const fallbackVideo = createFallbackVideo(fallbackStream);
-      let raf = 0;
-      let stopped = false;
-      const tick = () => {
-        if (stopped) return;
-        const drawn = drawVideoFrame(ctx, canvas, videoEl2) || drawVideoFrame(ctx, canvas, fallbackVideo);
-        if (!drawn) {
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-        if (visible) drawBadge(ctx, canvas, badgeText);
-        raf = requestAnimationFrame(tick);
-      };
-      tick();
-      const capturedStream = canvas.captureStream(30);
-      return {
-        stream: capturedStream,
-        stop() {
-          stopped = true;
-          if (raf) cancelAnimationFrame(raf);
-          for (const track of capturedStream.getTracks()) {
-            track.stop();
-          }
-          if (fallbackVideo) {
-            fallbackVideo.pause();
-            fallbackVideo.srcObject = null;
-          }
-        }
-      };
-    }
-  };
-
-  // src/shared/recording-audio-mixer.js
-  function liveAudioTrack(track) {
-    return (track == null ? void 0 : track.readyState) === "live" ? track : null;
-  }
-  function addTrackOnce(list, track) {
-    const live = liveAudioTrack(track);
-    if (!live || list.some((item) => item.track === live || item.track.id === live.id)) return;
-    list.push({ track: live });
-  }
-  function matchesPeerFilter(peerId2, restrictToPeerId) {
-    if (!restrictToPeerId) return true;
-    return String(peerId2) === String(restrictToPeerId);
-  }
-  function collectOwnAudioTracks(media3, { excludeSystem = false } = {}) {
-    var _a60, _b, _c, _d, _e, _f, _g;
-    const tracks = [];
-    if (!excludeSystem) {
-      addTrackOnce(tracks, (_b = (_a60 = media3 == null ? void 0 : media3.producers) == null ? void 0 : _a60.system) == null ? void 0 : _b.track);
-      addTrackOnce(tracks, (_d = (_c = media3 == null ? void 0 : media3.localScreenStream) == null ? void 0 : _c.getAudioTracks) == null ? void 0 : _d.call(_c)[0]);
-    }
-    addTrackOnce(tracks, (_f = (_e = media3 == null ? void 0 : media3.producers) == null ? void 0 : _e.microphone) == null ? void 0 : _f.track);
-    addTrackOnce(tracks, (_g = media3 == null ? void 0 : media3.getLocalMicrophoneTrack) == null ? void 0 : _g.call(media3));
-    return tracks;
-  }
-  function collectMonitorAudioTracks(hostAudioMonitor2, mutedClients3, restrictToPeerId = null) {
-    var _a60, _b;
-    const sources = [];
-    if (!hostAudioMonitor2) return sources;
-    const muted = new Set([...mutedClients3 || []].map(String));
-    const peerFilter = restrictToPeerId ? String(restrictToPeerId) : null;
-    for (const ch of ((_a60 = hostAudioMonitor2.channels) == null ? void 0 : _a60.values()) || []) {
-      if (muted.has(String(ch.peerId))) continue;
-      if (peerFilter && !matchesPeerFilter(ch.peerId, peerFilter)) continue;
-      addTrackOnce(sources, (_b = ch.consumer) == null ? void 0 : _b.track);
-    }
-    return sources;
-  }
-  var RecordingAudioMixer = {
-    async build({
-      hostAudioMonitor: hostAudioMonitor2,
-      media: media3,
-      own = false,
-      mutedClients: mutedClients3,
-      excludeOwnSystem = false,
-      restrictToPeerId = null
-    } = {}) {
-      var _a60;
-      await ((_a60 = hostAudioMonitor2 == null ? void 0 : hostAudioMonitor2.resume) == null ? void 0 : _a60.call(hostAudioMonitor2));
-      const sources = collectMonitorAudioTracks(hostAudioMonitor2, mutedClients3, restrictToPeerId);
-      if (own) {
-        for (const source of collectOwnAudioTracks(media3, { excludeSystem: excludeOwnSystem })) {
-          addTrackOnce(sources, source.track);
-        }
-      }
-      if (!sources.length) {
-        return { track: null, stop() {
-        } };
-      }
-      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextCtor) {
-        return { track: sources[0].track, stop() {
-        } };
-      }
-      const ctx = new AudioContextCtor();
-      const dest = ctx.createMediaStreamDestination();
-      const nodes = [];
-      for (const source of sources) {
-        try {
-          const stream = new MediaStream([source.track]);
-          const input = ctx.createMediaStreamSource(stream);
-          const gain = ctx.createGain();
-          gain.gain.value = 1;
-          input.connect(gain);
-          gain.connect(dest);
-          nodes.push({ input, gain });
-        } catch (err) {
-          console.warn("[RecordingAudioMixer] falha ao conectar audio", err);
-        }
-      }
-      if (ctx.state === "suspended") {
-        await ctx.resume().catch(() => {
-        });
-      }
-      const track = dest.stream.getAudioTracks()[0] || null;
-      return {
-        track: liveAudioTrack(track),
-        stop() {
-          for (const node of nodes) {
-            try {
-              node.input.disconnect();
-            } catch (_) {
-            }
-            try {
-              node.gain.disconnect();
-            } catch (_) {
-            }
-          }
-          ctx.close().catch(() => {
-          });
-        }
-      };
-    }
-  };
-
-  // src/shared/ui-state.js
-  var UiState = {
-    IDLE: "idle",
-    CONNECTING: "connecting",
-    CONNECTED: "connected",
-    WAITING_PERMISSION: "waiting-permission",
-    SHARING: "sharing",
-    SELECTED_LIVE: "selected-live",
-    WATCHING: "watching",
-    PAUSED: "paused",
-    RECONNECTING: "reconnecting",
-    RECORDING: "recording",
-    ERROR: "error"
-  };
-  var UiStateMachine = class {
-    constructor({ onChange } = {}) {
-      this.state = UiState.IDLE;
-      this.onChange = onChange || (() => {
-      });
-      this._flags = {
-        hasSelection: false,
-        isPaused: false,
-        isSharing: false,
-        isRecording: false,
-        isUploading: false,
-        isRecordingBusy: false,
-        wsConnected: false,
-        wsWasConnected: false,
-        hasPreview: false
-      };
-    }
-    set(partial) {
-      Object.assign(this._flags, partial);
-      const next = this._derive();
-      if (next !== this.state) {
-        this.state = next;
-      }
-      this.onChange(this.state, { ...this._flags });
-      return this.state;
-    }
-    _derive() {
-      const f = this._flags;
-      if (f.isRecording) return UiState.RECORDING;
-      if (!f.wsConnected && f.wsWasConnected) return UiState.RECONNECTING;
-      if (!f.wsConnected) return UiState.CONNECTING;
-      if (f.isPaused && f.hasSelection) return UiState.PAUSED;
-      if (f.isSharing && f.hasSelection) return UiState.SELECTED_LIVE;
-      if (f.isSharing) return UiState.SHARING;
-      if (f.hasPreview) return UiState.WATCHING;
-      if (f.wsConnected) return UiState.CONNECTED;
-      return UiState.IDLE;
-    }
-    /** Controles host */
-    canSelect() {
-      return this._flags.wsConnected && !this._flags.isRecording;
-    }
-    canPause() {
-      return this._flags.wsConnected && this._flags.hasSelection && !this._flags.isPaused;
-    }
-    canResume() {
-      return this._flags.wsConnected && this._flags.hasSelection && this._flags.isPaused;
-    }
-    canRecord() {
-      return this._flags.wsConnected && this._flags.hasPreview && !this._flags.isRecording && !this._flags.isUploading;
-    }
-    canStopRecord() {
-      return this._flags.isRecording;
-    }
-  };
-
-  // src/shared/stats-collector.js
-  var prevSamples = /* @__PURE__ */ new WeakMap();
-  async function collectWebRtcStats(mediaClient) {
-    var _a60;
-    const out = {
-      bitrateKbps: null,
-      packetLoss: null,
-      rttMs: null,
-      fps: null,
-      timestamp: Date.now()
-    };
-    const targets = ((_a60 = mediaClient == null ? void 0 : mediaClient.getStatsTargets) == null ? void 0 : _a60.call(mediaClient)) || [];
-    if (!targets.length) return out;
-    let packetsLost = 0;
-    let packetsReceived = 0;
-    let rttSum = 0;
-    let rttCount = 0;
-    let bytesReceived = 0;
-    for (const { consumer, producer, kind } of targets) {
-      const target = consumer || producer;
-      if (!(target == null ? void 0 : target.getStats)) continue;
       try {
-        const statsReport = await target.getStats();
-        statsReport.forEach((report) => {
-          if (report.type === "inbound-rtp" && report.kind === kind) {
-            packetsLost += report.packetsLost || 0;
-            packetsReceived += report.packetsReceived || 0;
-            bytesReceived += report.bytesReceived || 0;
-            if (report.framesPerSecond) out.fps = report.framesPerSecond;
-          }
-          if (report.type === "candidate-pair" && report.state === "succeeded") {
-            if (report.currentRoundTripTime != null) {
-              rttSum += report.currentRoundTripTime * 1e3;
-              rttCount += 1;
-            }
-          }
-        });
+        const waitPromise = waitForRoomSnapshot(signaling2, timeoutMs);
+        signaling2.send("solicitarEstado", {});
+        const payload = await waitPromise;
+        if (payload) return payload;
       } catch (_) {
       }
     }
-    if (packetsReceived + packetsLost > 0) {
-      out.packetLoss = Math.round(packetsLost / (packetsReceived + packetsLost) * 1e3) / 10;
-    }
-    if (rttCount) out.rttMs = Math.round(rttSum / rttCount);
-    const prev = prevSamples.get(mediaClient);
-    if (prev && bytesReceived > prev.bytes && out.timestamp > prev.ts) {
-      const dtSec = (out.timestamp - prev.ts) / 1e3;
-      if (dtSec > 0) {
-        out.bitrateKbps = Math.round((bytesReceived - prev.bytes) * 8 / dtSec / 1e3);
-      }
-    }
-    prevSamples.set(mediaClient, { bytes: bytesReceived, ts: out.timestamp });
-    return out;
+    return null;
+  }
+  function joinPayloadExtras(session, { viewerOnly: viewerOnly2 = false, viewerToken = "" } = {}) {
+    const publishIntent = viewerOnly2 || viewerToken ? "viewer" : (session == null ? void 0 : session.publishIntent) || "publisher";
+    return { publishIntent };
   }
 
-  // src/shared/stream-source-badge.js
-  function updateStreamSourceBadge(el, name, visible = true) {
-    if (!el) return;
-    const show = visible && String(name || "").trim();
-    if (!show) {
-      el.hidden = true;
-      el.textContent = "";
-      return;
+  // src/client/media-publisher.js
+  var MediaPublisher = class {
+    constructor(media2, signaling2) {
+      this.media = media2;
+      this.signaling = signaling2;
     }
-    el.textContent = String(name).trim();
-    el.hidden = false;
-  }
+    async publishVideo(stream, prefs = {}) {
+      await this.media.publishDisplayStream(stream, {
+        ...prefs,
+        microphone: false,
+        systemAudio: false
+      });
+      return this.media.hasVideoProducer();
+    }
+    async publishMicrophone(prefs) {
+      return this.media.publishMicrophone(prefs);
+    }
+    async publishSystemAudio(stream, prefs = {}) {
+      if (stream) this.media.localScreenStream = stream;
+      this.media.setCapturePrefs({ ...prefs, systemAudio: true });
+      return this.media.publishSystemAudioFromDisplay(stream);
+    }
+    async syncAudioToggles(prefs, stream = null) {
+      return this.media.syncPublishedAudio(prefs, stream);
+    }
+    async confirmMediaReady() {
+      var _a14, _b;
+      if (!((_b = (_a14 = this.media) == null ? void 0 : _a14.hasVideoProducer) == null ? void 0 : _b.call(_a14))) {
+        return { ok: false, erro: "Sem producer de video local" };
+      }
+      this.signaling.send("midiaPronta", {});
+      try {
+        const ack = await Promise.race([
+          this.signaling.onceType("midiaProntaOk"),
+          new Promise(
+            (_, reject) => setTimeout(() => reject(new Error("Timeout midiaProntaOk")), 8e3)
+          )
+        ]);
+        if (ack && ack.ok === false) {
+          return ack;
+        }
+        return ack || { ok: true };
+      } catch (err) {
+        return { ok: false, erro: err.message || "midiaPronta falhou" };
+      }
+    }
+  };
+
+  // src/client/publisher-connection.js
+  var CONNECT_TIMEOUT_MS = 45e3;
+  var PublisherConnection = class {
+    constructor() {
+      this.connectPromise = null;
+      this.joinPromise = null;
+      this.activeConnectId = 0;
+    }
+    reset() {
+      this.connectPromise = null;
+      this.joinPromise = null;
+      this.activeConnectId += 1;
+    }
+    /**
+     * Garante SignalingClient conectado (cria se necessario).
+     */
+    async ensureWebSocket({ signaling: signaling2, createSignaling, isStale = () => false }) {
+      if (signaling2 == null ? void 0 : signaling2.connected) {
+        return signaling2;
+      }
+      if (this.connectPromise) {
+        return this.connectPromise;
+      }
+      const connectId = ++this.activeConnectId;
+      this.connectPromise = (async () => {
+        let client = signaling2;
+        if (client && !client.connected) {
+          try {
+            client.close();
+          } catch (_) {
+          }
+          client = null;
+        }
+        if (!client) {
+          client = createSignaling();
+        }
+        if (client.connected) {
+          return client;
+        }
+        await new Promise((resolve, reject) => {
+          let settled = false;
+          const finish = (fn, value) => {
+            if (settled || connectId !== this.activeConnectId) return;
+            settled = true;
+            clearTimeout(timer);
+            fn(value);
+          };
+          const timer = setTimeout(() => {
+            finish(reject, new Error("Timeout ao conectar WebSocket"));
+          }, CONNECT_TIMEOUT_MS);
+          client.onOpen = () => {
+            if (connectId !== this.activeConnectId || isStale()) return;
+            finish(resolve);
+          };
+          client.connect();
+        });
+        if (connectId !== this.activeConnectId || isStale()) {
+          throw new Error("Conexao cancelada");
+        }
+        if (!client.connected) {
+          throw new Error("WebSocket nao conectado apos connect()");
+        }
+        return client;
+      })().finally(() => {
+        if (connectId === this.activeConnectId) {
+          this.connectPromise = null;
+        }
+      });
+      return this.connectPromise;
+    }
+    /**
+     * Join single-flight — delega para joinFn (runClientJoin) sem timeout global.
+     */
+    async ensureJoined({ joinFn, isStale = () => false }) {
+      if (this.joinPromise) {
+        return this.joinPromise;
+      }
+      this.joinPromise = (async () => {
+        try {
+          const result = await joinFn();
+          if (isStale()) {
+            throw new Error("Join cancelado");
+          }
+          return result;
+        } finally {
+          this.joinPromise = null;
+        }
+      })();
+      return this.joinPromise;
+    }
+  };
 
   // src/shared/lt-overlay.js
   var REF_WIDTH = 1920;
@@ -16971,2838 +16481,128 @@
     });
   }
 
-  // src/host/app.js
-  var STORAGE_HOST_NAME = "sharescreen_host_name";
-  var STORAGE_RECORDINGS_DIR = "sharescreen_recordings_dir";
-  var STORAGE_RECORDING_FILENAME_PATTERN = "sharescreen_recording_filename_pattern";
-  var STORAGE_REC_EXCLUDE_OWN_SYSTEM = "sharescreen_rec_exclude_own_system";
-  var STORAGE_REC_SELECTED_PEER_ONLY = "sharescreen_rec_selected_peer_only";
-  var STORAGE_REC_DEFAULT_AUDIO_CLIENT = "sharescreen_rec_default_audio_client";
-  function showToast2(message, type, durationMs) {
-    const lower = String(message || "").toLowerCase();
-    if (lower.includes("fonte selecionada") || lower.includes("tela compartilhada")) {
+  // src/shared/stream-source-badge.js
+  function updateStreamSourceBadge(el, name, visible = true) {
+    if (!el) return;
+    const show = visible && String(name || "").trim();
+    if (!show) {
+      el.hidden = true;
+      el.textContent = "";
       return;
     }
-    showToast(message, type, durationMs);
+    el.textContent = String(name).trim();
+    el.hidden = false;
   }
-  function readQueryParam(key) {
-    var _a60;
+
+  // src/shared/build-verify.js
+  async function verifyServerBuild({ onToast, onTitlePrefix } = {}) {
     try {
-      return ((_a60 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a60.trim()) || "";
+      const info = await fetch("/api/info", { cache: "no-store" }).then((r) => r.json());
+      const env = info.dev ? "DEV" : "PROD";
+      const proto = info.roomStateProtocol ? "roomState" : "legacy";
+      const label = `${env} ${info.buildId} ${proto}`;
+      onTitlePrefix == null ? void 0 : onTitlePrefix(`[${label}] `);
+      if (info.dev) {
+        onToast == null ? void 0 : onToast(`Servidor DEV ativo (${info.buildId}, ${proto})`, "info");
+      } else if (!info.roomStateProtocol) {
+        onToast == null ? void 0 : onToast(
+          "Servidor PROD/legado \u2014 para testar mudancas use start-dev.bat neste PC (nao cgrafsysvm)",
+          "warn"
+        );
+      }
+      return info;
+    } catch (e) {
+      onToast == null ? void 0 : onToast("Nao foi possivel verificar /api/info do servidor", "warn");
+      return null;
+    }
+  }
+
+  // src/shared/debug-session-client.js
+  function debugClientSessionLog(hypothesisId, location2, message, data = {}) {
+    fetch("/api/client-debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hypothesisId, location: location2, message, data })
+    }).catch(() => {
+    });
+  }
+
+  // src/client/app.js
+  var STORAGE_NAME = "sharescreen_client_name";
+  var STORAGE_MACHINE = "sharescreen_agent_hostname";
+  var STORAGE_MACHINE_ID = "sharescreen_machine_id";
+  function readQueryParam(key) {
+    var _a14;
+    try {
+      return ((_a14 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a14.trim()) || "";
     } catch {
       return "";
     }
   }
   var $ = (id) => document.getElementById(id);
   var els = {
-    statusBadge: $("status-badge"),
-    secureBadge: $("secure-badge"),
-    preview: $("preview-video") || $("video-remoto"),
-    previewAudio: $("preview-audio") || $("audio-remoto"),
-    previewEmpty: $("preview-empty"),
-    previewWaiting: $("preview-waiting"),
-    previewPaused: $("preview-paused"),
-    previewReconnecting: $("preview-reconnecting"),
-    previewError: $("preview-error"),
-    previewErrorMsg: $("preview-error-msg"),
-    previewInfo: $("preview-info"),
-    previewSourceName: $("preview-source-name"),
-    streamSourceBadge: $("stream-source-badge"),
-    previewQuality: $("preview-quality-label"),
-    lista: $("lista-clients"),
-    selecionado: $("selecionado-info"),
-    logs: $("logs"),
-    sidebar: $("sidebar"),
-    appMain: document.querySelector(".app-main") || document.querySelector(".client-main"),
-    btnPausar: $("btn-pausar"),
-    btnRetomar: $("btn-retomar"),
-    btnLimpar: $("btn-limpar"),
-    btnGravar: $("btn-gravar"),
-    btnPararGravar: $("btn-parar-gravar"),
-    btnPlayPause: $("btn-playpause"),
-    btnRecordingToggle: $("btn-gravacao-toggle"),
-    recordingsDirInput: $("recordings-dir-input"),
-    recordingFilenamePatternInput: $("recording-filename-pattern-input"),
-    btnSaveFilenamePattern: $("btn-save-filename-pattern"),
-    recordingFilenamePatternStatus: $("recording-filename-pattern-status"),
-    transmissionCardContainer: $("transmission-card-container"),
-    transmissionVuColumn: $("transmission-vu-column"),
-    transmissionVuFill: $("transmission-vu-fill"),
-    recordingStatus: $("recording-status"),
-    recordingTimer: $("recording-timer"),
-    uploadProgressWrap: $("upload-progress-wrap"),
-    uploadProgress: $("upload-progress"),
-    recordingFilename: $("recording-filename"),
-    recExcludeOwnSystem: $("rec-exclude-own-system"),
-    recSelectedPeerOnly: $("rec-selected-peer-only"),
-    chkMeetBridgeLive: $("chk-meet-bridge-live"),
-    btnRecMeetBridgePreset: $("btn-rec-meet-bridge-preset"),
-    recMeetBridgeHint: $("rec-meet-bridge-hint"),
-    recDefaultAudioHint: $("rec-default-audio-hint"),
-    btnRecClearDefaultAudio: $("btn-rec-clear-default-audio"),
-    controlesAudio: $("controles-audio"),
-    volumeSlider: $("volume-slider"),
-    btnMute: $("btn-mute-audio"),
-    hostChkSystem: $("host-chk-system-audio"),
-    hostChkMic: $("host-chk-microphone"),
-    hostMicWrap: $("host-mic-picker-wrap"),
-    hostMicSelect: $("host-mic-select"),
-    hostBtnRefreshMics: $("host-btn-refresh-mics"),
-    hostMicGainSlider: $("host-mic-gain-slider"),
-    hostMicGainVal: $("host-mic-gain-val"),
-    btnHostMic: $("btn-host-mic"),
+    overlay: $("overlay"),
+    nomeInput: $("nome-input"),
+    pinWrap: $("pin-wrap"),
+    clientPinInput: $("client-pin-input"),
+    chkSystemAudio: $("chk-system-audio"),
+    chkMicrophone: $("chk-microphone"),
+    chkViewerOnly: $("chk-viewer-only"),
+    micWrap: $("mic-picker-wrap"),
+    micSelect: $("mic-select"),
+    btnRefreshMics: $("btn-refresh-mics"),
+    vuFill: $("vu-fill"),
+    btnSalvarNome: $("btn-salvar-nome"),
+    btnViewerEnter: $("btn-viewer-enter"),
+    btnEditarNome: $("btn-editar-nome"),
+    video: $("video-remoto"),
+    audio: $("audio-remoto"),
     statusBar: $("status-bar"),
-    qualityPreset: $("quality-preset"),
-    qualityHint: $("quality-hint"),
-    techDrawer: $("tech-drawer"),
-    btnTech: $("btn-tech-panel"),
-    btnCloseTech: $("btn-close-tech"),
-    btnCopyClient: $("btn-copy-client"),
-    btnCopyHost: $("btn-copy-host"),
-    btnExternalLink: $("btn-external-link"),
-    externalLinkModal: $("external-link-modal"),
-    externalGuestName: $("external-guest-name"),
-    btnExternalLinkSubmit: $("btn-external-link-submit"),
-    btnExternalLinkCancel: $("btn-external-link-cancel"),
+    statusBadge: $("client-status-badge"),
+    stateSharing: $("state-sharing"),
+    stateSelected: $("state-selected"),
+    stateWatching: $("state-watching"),
+    stateWaiting: $("state-waiting"),
+    statePaused: $("state-paused"),
+    stateInterrupted: $("state-interrupted"),
+    interruptedMessage: $("interrupted-message"),
+    stateFinalized: $("state-finalized"),
+    finalizedMessage: $("finalized-message"),
+    watchingLabel: $("watching-label"),
+    erro: $("erro-box"),
+    btnClientMic: $("btn-client-mic"),
+    btnSettings: $("btn-settings"),
+    settingsModal: $("settings-modal"),
+    settingsNomeInput: $("settings-nome-input"),
+    settingsChkSystem: $("settings-chk-system-audio"),
+    settingsChkMic: $("settings-chk-microphone"),
+    settingsMicWrap: $("settings-mic-picker-wrap"),
+    settingsMicSelect: $("settings-mic-select"),
+    settingsBtnRefreshMics: $("settings-btn-refresh-mics"),
+    btnSettingsSave: $("btn-settings-save"),
+    btnSettingsClose: $("btn-settings-close"),
     btnFullscreen: $("btn-fullscreen"),
     btnFsSources: $("btn-fs-sources"),
     fsSourceMenu: $("fs-source-menu"),
     fsSourceList: $("fs-source-list"),
+    clientMain: document.querySelector(".client-main"),
     previewArea: $("preview-area"),
-    btnSidebarCollapse: $("btn-sidebar-collapse"),
-    hostEntryModal: $("host-entry-modal"),
-    hostNameInput: $("host-name-input"),
-    hostPinWrap: $("host-pin-wrap"),
-    pinInput: $("pin-input"),
-    btnHostEntrySubmit: $("btn-host-entry-submit"),
-    statBitrate: $("stat-bitrate"),
-    statLoss: $("stat-loss"),
-    statRtt: $("stat-rtt"),
-    statFps: $("stat-fps")
+    streamSourceBadge: $("stream-source-badge"),
+    insecureWarning: $("insecure-warning"),
+    onboardIntro: $("onboard-intro"),
+    onboardStepIdentify: $("onboard-step-identify"),
+    onboardStepAudio: $("onboard-step-audio"),
+    onboardStepsIdentify: $("onboard-steps-identify"),
+    onboardStepsAudio: $("onboard-steps-audio")
   };
   var signaling = null;
   var media = null;
-  var estado = { clients: [], selecionado: null, controleExibicao: [] };
-  var hostPeerId = null;
-  var hostReady = false;
-  var joinInProgress2 = false;
-  var joinGeneration = 0;
-  var transmissionWork = Promise.resolve();
-  var transmissionGeneration = 0;
-  var audioMuted = false;
-  var mutedClients = /* @__PURE__ */ new Set();
-  var cardVuElements = /* @__PURE__ */ new Map();
-  var hostAudioMonitor = null;
-  var syncAudioMonitorPromise = null;
-  var syncAudioMonitorPending = false;
-  var hostMicAutoplayNeeded = false;
-  var lastAudioSources = [];
-  var lastAppliedAudioSig = "";
-  var fontesAudioDebounceTimer = null;
-  var meetBridgeLiveMode = false;
-  var pendingRoomSnapshot = null;
-  var lastAppliedSnapshotKey = "";
-  var lastAppliedActiveVideoKey = "";
-  var lastActiveTransmission = null;
-  var pendingHostAudioSync = null;
-  var peerDisplayNameById = /* @__PURE__ */ new Map();
-  var HOST_MIC_GAIN_STORAGE_KEY = "sharescreen_host_mic_gain";
-  async function fetchAudioFilterPresetApi(kind, name) {
-    const trimmed = String(name || "").trim();
-    if (!trimmed) return null;
-    try {
-      const res = await fetch(
-        `/api/audio-filter/${encodeURIComponent(kind)}/${encodeURIComponent(trimmed)}`
-      );
-      const data = await res.json();
-      return (data == null ? void 0 : data.preset) || null;
-    } catch {
-      return null;
-    }
-  }
-  async function saveAudioFilterPresetApi(kind, name, prefs) {
-    const trimmed = String(name || "").trim();
-    if (!trimmed || !hostToken) return { ok: false };
-    try {
-      const res = await fetch("/api/audio-filter", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...hostToken ? { "X-Host-Token": hostToken } : {}
-        },
-        body: JSON.stringify({ kind, name: trimmed, prefs: normalizeMicrophoneFilterPrefs(prefs) })
-      });
-      return await res.json();
-    } catch {
-      return { ok: false };
-    }
-  }
-  function getDefaultRecordingAudioClientName() {
-    return String(localStorage.getItem(STORAGE_REC_DEFAULT_AUDIO_CLIENT) || "").trim();
-  }
-  function setDefaultRecordingAudioClientName(name) {
-    const trimmed = String(name || "").trim();
-    if (trimmed) {
-      localStorage.setItem(STORAGE_REC_DEFAULT_AUDIO_CLIENT, trimmed);
-    } else {
-      localStorage.removeItem(STORAGE_REC_DEFAULT_AUDIO_CLIENT);
-    }
-    syncRecordingDefaultAudioClientUi();
-  }
-  function syncRecordingDefaultAudioClientUi() {
-    const name = getDefaultRecordingAudioClientName();
-    if (els.recDefaultAudioHint) {
-      els.recDefaultAudioHint.textContent = name ? `\xC1udio padr\xE3o da grava\xE7\xE3o: ${name}` : "\xC1udio padr\xE3o da grava\xE7\xE3o: nenhum";
-    }
-    if (els.btnRecClearDefaultAudio) {
-      els.btnRecClearDefaultAudio.hidden = !name;
-    }
-  }
-  function resolveRecordingAudioPeer(clients, displayName2) {
-    const wanted = String(displayName2 || "").trim().toLowerCase();
-    if (!wanted) return null;
-    const withAudio = (clients || []).find((c) => {
-      var _a60, _b, _c;
-      if (c.ehHost || String(c.id) === String(hostPeerId)) return false;
-      if (String(c.displayName || "").trim().toLowerCase() !== wanted) return false;
-      return !!(c.hasAudio || ((_a60 = c.producerIds) == null ? void 0 : _a60.microphone) || ((_b = c.producerIds) == null ? void 0 : _b.system) || ((_c = c.producerIds) == null ? void 0 : _c.audio));
-    });
-    if (withAudio) return withAudio;
-    return (clients || []).find((c) => {
-      if (c.ehHost) return false;
-      return String(c.displayName || "").trim().toLowerCase() === wanted;
-    }) || null;
-  }
-  function trackClientDisplayNameChanges(clients) {
-    for (const c of clients || []) {
-      if (!(c == null ? void 0 : c.id) || c.ehHost) continue;
-      const id = String(c.id);
-      const newName = String(c.displayName || "").trim();
-      if (!newName) continue;
-      const oldName = peerDisplayNameById.get(id);
-      if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
-        renamePresetInLocalStorage(oldName, newName);
-        const defaultRec = getDefaultRecordingAudioClientName();
-        if (defaultRec && defaultRec.toLowerCase() === oldName.toLowerCase()) {
-          setDefaultRecordingAudioClientName(newName);
-        }
-      }
-      peerDisplayNameById.set(id, newName);
-    }
-  }
-  function toggleDefaultRecordingAudioClient(client) {
-    if (!(client == null ? void 0 : client.displayName)) return;
-    const current = getDefaultRecordingAudioClientName();
-    if (current && current.toLowerCase() === client.displayName.toLowerCase()) {
-      setDefaultRecordingAudioClientName("");
-      showToast2("\xC1udio padr\xE3o da grava\xE7\xE3o removido", "info");
-    } else {
-      setDefaultRecordingAudioClientName(client.displayName);
-      showToast2(`${client.displayName} definido como \xE1udio padr\xE3o da grava\xE7\xE3o`, "success");
-    }
-    renderLista();
-  }
-  function loadHostMicPublishGain(fallback = 1.4) {
-    try {
-      const raw = localStorage.getItem(HOST_MIC_GAIN_STORAGE_KEY);
-      if (raw == null || raw === "") return fallback;
-      const value = Number(raw);
-      if (!Number.isFinite(value)) return fallback;
-      return Math.max(0.5, Math.min(2.5, value));
-    } catch {
-      return fallback;
-    }
-  }
-  function saveHostMicPublishGain(value) {
-    localStorage.setItem(HOST_MIC_GAIN_STORAGE_KEY, String(value));
-  }
-  function getDefaultHostMicPublishGain() {
-    var _a60;
-    return Number(((_a60 = media == null ? void 0 : media.videoQuality) == null ? void 0 : _a60.hostMicPublishGain) ?? 1.4);
-  }
-  function syncHostMicGainUi(value = loadHostMicPublishGain(getDefaultHostMicPublishGain())) {
-    if (els.hostMicGainSlider) els.hostMicGainSlider.value = String(value);
-    if (els.hostMicGainVal) els.hostMicGainVal.textContent = `${value.toFixed(1)}x`;
-  }
-  async function applyHostMicPublishGain(value) {
-    const gain = Math.max(0.5, Math.min(2.5, Number(value)));
-    saveHostMicPublishGain(gain);
-    syncHostMicGainUi(gain);
-    if (!(media == null ? void 0 : media.applyHostMicPublishChain)) return;
-    const prefs = normalizeMicrophoneFilterPrefs({
-      ...HOST_MIC_PUBLISH_DEFAULTS,
-      gain,
-      compressor: true,
-      peaking: true,
-      peakingGain: 2
-    });
-    await media.setMicrophoneFilterPrefs(prefs);
-    if (hostDisplayName) {
-      saveAudioFiltersPresetDebounced(hostDisplayName, prefs, "host");
-    }
-  }
-  var localHostVuStop = null;
-  var isCoHostInstance = readQueryParam("cohost") === "true";
-  if (readQueryParam("nome")) localStorage.setItem(STORAGE_HOST_NAME, readQueryParam("nome"));
-  function promptHostEntry(roomPinRequired) {
-    return new Promise((resolve) => {
-      var _a60, _b, _c;
-      if (els.hostNameInput && hostDisplayName) {
-        els.hostNameInput.value = hostDisplayName;
-      }
-      if (els.hostPinWrap) {
-        els.hostPinWrap.hidden = !roomPinRequired;
-      }
-      if (els.hostEntryModal) {
-        els.hostEntryModal.hidden = false;
-      }
-      const submit = () => {
-        var _a61, _b2, _c2, _d;
-        const name = ((_a61 = els.hostNameInput) == null ? void 0 : _a61.value.trim()) || "";
-        if (!name) {
-          showToast2("Informe seu nome para aparecer no painel", "warn");
-          (_b2 = els.hostNameInput) == null ? void 0 : _b2.focus();
-          return;
-        }
-        if (roomPinRequired) {
-          roomPin = ((_c2 = els.pinInput) == null ? void 0 : _c2.value.trim()) || "";
-          if (!roomPin) {
-            showToast2("Informe o PIN da sala", "warn");
-            (_d = els.pinInput) == null ? void 0 : _d.focus();
-            return;
-          }
-        }
-        hostDisplayName = name;
-        localStorage.setItem(STORAGE_HOST_NAME, name);
-        if (els.hostEntryModal) els.hostEntryModal.hidden = true;
-        resolve();
-      };
-      els.btnHostEntrySubmit.onclick = submit;
-      (_a60 = els.hostNameInput) == null ? void 0 : _a60.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          submit();
-        }
-      });
-      (_b = els.pinInput) == null ? void 0 : _b.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          submit();
-        }
-      });
-      (_c = els.hostNameInput) == null ? void 0 : _c.focus();
-    });
-  }
-  var roomPin = "";
-  var hostToken = "";
-  var hostDisplayName = readQueryParam("nome") || localStorage.getItem(STORAGE_HOST_NAME) || "";
-  var statsTimer = null;
-  var HOST_TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  var HOST_LOCK_KEY = "sharescreen-host-lock";
-  var HOST_LOCK_TTL_MS = 8e3;
-  var hostTabBlocked = false;
-  var hostLockTimer = null;
-  var hostSessionJoined = false;
-  function debugHostLog(_hypothesisId, _message, _data = {}) {
-  }
-  function readHostLock() {
-    try {
-      return JSON.parse(localStorage.getItem(HOST_LOCK_KEY) || "null");
-    } catch {
-      return null;
-    }
-  }
-  function tryAcquireHostLock() {
-    const now = Date.now();
-    const current = readHostLock();
-    if (current && current.tabId !== HOST_TAB_ID && now - current.ts < HOST_LOCK_TTL_MS) {
-      return false;
-    }
-    localStorage.setItem(HOST_LOCK_KEY, JSON.stringify({ tabId: HOST_TAB_ID, ts: now }));
-    const verify = readHostLock();
-    return (verify == null ? void 0 : verify.tabId) === HOST_TAB_ID;
-  }
-  function refreshHostLock() {
-    var _a60;
-    if (((_a60 = readHostLock()) == null ? void 0 : _a60.tabId) !== HOST_TAB_ID) return;
-    localStorage.setItem(HOST_LOCK_KEY, JSON.stringify({ tabId: HOST_TAB_ID, ts: Date.now() }));
-  }
-  function releaseHostLock() {
-    const current = readHostLock();
-    if ((current == null ? void 0 : current.tabId) === HOST_TAB_ID) {
-      localStorage.removeItem(HOST_LOCK_KEY);
-    }
-  }
-  var ui = new UiStateMachine({ onChange: syncControlButtons });
-  var errors = new ErrorManager({
-    onToast: (msg, type) => showToast2(msg, type),
-    onTechnicalLog: (msg, level) => log(msg, level)
-  });
-  var recorder = new RecordingClient({
-    onLog: log,
-    onStateChange: updateRecordingUi,
-    onProgress: (pct) => {
-      if (els.uploadProgress) els.uploadProgress.style.width = `${pct}%`;
-    },
-    onTimer: (sec) => {
-      if (els.recordingTimer) {
-        els.recordingTimer.textContent = formatTimer(sec);
-        els.recordingTimer.hidden = false;
-      }
-    }
-  });
-  var recordingCapture = null;
-  var hostCapturePrefs = loadCapturePrefs();
-  if (els.hostChkSystem) els.hostChkSystem.checked = hostCapturePrefs.systemAudio !== false;
-  if (els.hostChkMic) els.hostChkMic.checked = !!hostCapturePrefs.microphone;
-  if (els.qualityPreset) {
-    els.qualityPreset.value = loadPresetId();
-    updateQualityHint();
-    els.qualityPreset.addEventListener("change", () => applyHostQuality(els.qualityPreset.value));
-  }
-  function updateQualityHint() {
-    var _a60;
-    const preset = getPreset(((_a60 = els.qualityPreset) == null ? void 0 : _a60.value) || loadPresetId());
-    if (els.qualityHint) {
-      els.qualityHint.textContent = `${preset.description} - ate ${bitrateMbps(preset)} Mbps`;
-    }
-  }
-  function applyHostQuality(presetId) {
-    savePresetId(presetId);
-    updateQualityHint();
-    const quality = mergeServerQuality((media == null ? void 0 : media.videoQuality) || {}, presetId);
-    media == null ? void 0 : media.setVideoQuality(quality);
-    if (els.previewQuality && ui._flags.hasPreview) {
-      els.previewQuality.textContent = getPreset(presetId).label;
-    }
-    if (canHostCommand()) {
-      signaling.send("definirQualidade", { presetId });
-    }
-    showToast2(`Qualidade: ${getPreset(presetId).label}`, "info");
-  }
-  setupMicrophonePicker({
-    checkbox: els.hostChkMic,
-    wrap: els.hostMicWrap,
-    select: els.hostMicSelect,
-    refreshBtn: els.hostBtnRefreshMics,
-    savedDeviceId: hostCapturePrefs.microphoneDeviceId || "",
-    onLog: log,
-    onError: (m) => errors.handle(new Error(m), "microfone"),
-    onSelectChange: () => onHostAudioPrefsChange()
-  });
-  var _a;
-  (_a = els.hostChkMic) == null ? void 0 : _a.addEventListener("change", () => onHostAudioPrefsChange());
-  var _a2;
-  (_a2 = els.hostChkSystem) == null ? void 0 : _a2.addEventListener("change", () => onHostAudioPrefsChange());
-  syncHostMicGainUi(loadHostMicPublishGain(1.4));
-  var _a3;
-  (_a3 = els.hostMicGainSlider) == null ? void 0 : _a3.addEventListener("input", () => {
-    var _a60;
-    const gain = Number(((_a60 = els.hostMicGainSlider) == null ? void 0 : _a60.value) || 1.4);
-    if (els.hostMicGainVal) els.hostMicGainVal.textContent = `${gain.toFixed(1)}x`;
-  });
-  var _a4;
-  (_a4 = els.hostMicGainSlider) == null ? void 0 : _a4.addEventListener("change", () => {
-    var _a60;
-    applyHostMicPublishGain(Number(((_a60 = els.hostMicGainSlider) == null ? void 0 : _a60.value) || 1.4)).catch(
-      (e) => errors.handle(e, "host-mic-gain")
-    );
-  });
-  async function onHostAudioPrefsChange() {
-    var _a60, _b;
-    saveCapturePrefs(getHostCapturePrefs());
-    if (els.hostMicWrap) {
-      els.hostMicWrap.hidden = !((_a60 = els.hostChkMic) == null ? void 0 : _a60.checked);
-    }
-    updateHostMicUi();
-    if (!media || !hostReady) return;
-    try {
-      const prefs = getHostCapturePrefs();
-      await media.ensureSendTransport();
-      if (prefs.microphone) {
-        await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
-        await media.publishMicrophone(prefs);
-      } else {
-        await media.stopMicrophone();
-      }
-      if (((_b = media.hasVideoProducer) == null ? void 0 : _b.call(media)) || media.localScreenStream) {
-        if (prefs.systemAudio !== false) {
-          await media.publishSystemAudioFromDisplay();
-        } else {
-          await media.stopSystemAudio();
-        }
-      } else if (!prefs.systemAudio) {
-        await media.stopSystemAudio();
-      }
-      syncLocalHostVu();
-      if (prefs.microphone && !media.hasPublishedMicrophone()) {
-        showToast2("Microfone nao publicado - verifique permissao do navegador", "warn");
-      } else if (!prefs.microphone && !prefs.systemAudio) {
-        showToast2("Audio desativado", "info");
-      } else if (!prefs.microphone) {
-        showToast2("Microfone desativado - so audio do sistema", "info");
-      } else if (media.hasPublishedMicrophone()) {
-        showToast2("Microfone atualizado", "info");
-      }
-    } catch (e) {
-      errors.handle(e, "audio-prefs");
-    }
-  }
-  function formatTimer(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  }
-  function log(msg, level = "info") {
-    var _a60;
-    if (!els.logs) return;
-    const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-BR");
-    const line = document.createElement("div");
-    line.className = `log-line log-${level}`;
-    line.textContent = `[${time}] ${msg}`;
-    els.logs.prepend(line);
-    while (els.logs.children.length > 150) (_a60 = els.logs.lastChild) == null ? void 0 : _a60.remove();
-    if (level === "error") console.error(msg);
-  }
-  function setStatus(text) {
-    if (els.statusBar) els.statusBar.textContent = text;
-  }
-  function setBadge(text, type = "muted") {
-    if (!els.statusBadge) return;
-    els.statusBadge.textContent = text;
-    els.statusBadge.className = `badge badge-${type}`;
-  }
-  function getHostCapturePrefs() {
-    var _a60, _b, _c;
-    return {
-      systemAudio: ((_a60 = els.hostChkSystem) == null ? void 0 : _a60.checked) !== false,
-      microphone: !!((_b = els.hostChkMic) == null ? void 0 : _b.checked),
-      microphoneDeviceId: ((_c = els.hostMicSelect) == null ? void 0 : _c.value) || ""
-    };
-  }
-  function syncControlButtons() {
-    if (els.btnPausar) {
-      els.btnPausar.disabled = !ui.canPause();
-      els.btnPausar.hidden = ui._flags.isPaused;
-    }
-    if (els.btnRetomar) {
-      els.btnRetomar.hidden = !ui._flags.isPaused;
-      els.btnRetomar.disabled = !ui.canResume();
-    }
-    if (els.btnLimpar) {
-      els.btnLimpar.disabled = !ui._flags.hasSelection;
-    }
-    if (els.btnGravar) {
-      els.btnGravar.disabled = !ui.canRecord();
-    }
-    if (els.btnPararGravar) {
-      els.btnPararGravar.disabled = !ui.canStopRecord();
-      els.btnPararGravar.hidden = !ui._flags.isRecording;
-    }
-    if (els.btnPlayPause) {
-      const isPaused = ui._flags.isPaused;
-      els.btnPlayPause.disabled = isPaused ? !ui.canResume() : !ui.canPause();
-      els.btnPlayPause.title = isPaused ? "Retomar transmissao" : "Pausar transmissao";
-      els.btnPlayPause.innerHTML = isPaused ? `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>` : `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
-    }
-    if (els.btnRecordingToggle) {
-      const isRec = ui._flags.isRecording;
-      const busy = ui._flags.isUploading || ui._flags.isRecordingBusy;
-      els.btnRecordingToggle.disabled = isRec ? !ui.canStopRecord() : !ui.canRecord() || busy;
-      els.btnRecordingToggle.title = isRec ? "Parar gravacao" : "Gravar transmissao";
-      if (isRec) {
-        els.btnRecordingToggle.classList.add("btn-danger");
-        els.btnRecordingToggle.classList.remove("btn-secondary");
-        els.btnRecordingToggle.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="white"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>`;
-      } else {
-        els.btnRecordingToggle.classList.add("btn-secondary");
-        els.btnRecordingToggle.classList.remove("btn-danger");
-        els.btnRecordingToggle.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="red"><circle cx="12" cy="12" r="8"></circle></svg>`;
-      }
-    }
-  }
-  function updatePreviewOverlays() {
-    if (!els.previewEmpty) return;
-    const sel = estado.selecionado;
-    const paused = sel == null ? void 0 : sel.pausado;
-    const hasPreview = ui._flags.hasPreview;
-    els.previewEmpty.hidden = hasPreview || paused || !!sel;
-    els.previewWaiting.hidden = hasPreview || paused || !sel;
-    els.previewPaused.hidden = !paused;
-    els.previewInfo.hidden = true;
-    const showBadge = hasPreview && sel && !paused;
-    updateStreamSourceBadge(els.streamSourceBadge, sel == null ? void 0 : sel.displayName, showBadge);
-    if (sel && hasPreview && els.previewSourceName) {
-      els.previewSourceName.textContent = sel.displayName || "Fonte";
-      if (els.previewQuality) {
-        els.previewQuality.textContent = getPreset(loadPresetId()).label;
-      }
-    }
-  }
-  function sortClientsForDisplay(clients) {
-    return sortDisplaySources(clients);
-  }
-  function buildSourceCard(c, onSelect, isTransmissionSection = false) {
-    const card = buildDisplaySourceCard(c, onSelect, {
-      noSharingHighlight: !isTransmissionSection,
-      decorateBody: (body, source) => {
-        if (source.hasAudio) {
-          const isMuted = mutedClients.has(source.id);
-          const muteBtn = document.createElement("button");
-          muteBtn.type = "button";
-          muteBtn.className = `source-mute-btn${isMuted ? " is-muted" : ""}`;
-          muteBtn.setAttribute("aria-label", isMuted ? "Ativar audio do client" : "Silenciar audio do client");
-          muteBtn.title = isMuted ? "Ativar audio" : "Silenciar audio";
-          muteBtn.innerHTML = isMuted ? '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c0 3.28-2.64 5.91-5.91 5.91S6.09 14.28 6.09 11H4.07c0 3.95 2.87 7.23 6.65 7.88v2.02h2.56v-2.02c3.78-.65 6.65-3.93 6.65-7.88h-2.02z"/></svg>';
-          muteBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            toggleClientMute(source.id);
-          });
-          body.append(muteBtn);
-        }
-      },
-      decorateRow: (row, source) => {
-        const defaultRecName = getDefaultRecordingAudioClientName();
-        if (defaultRecName && source.displayName && defaultRecName.toLowerCase() === String(source.displayName).toLowerCase()) {
-          const badge = document.createElement("span");
-          badge.className = "source-role-badge source-role-badge--rec-audio";
-          badge.textContent = "\xE1udio grava\xE7\xE3o";
-          badge.title = "\xC1udio padr\xE3o da grava\xE7\xE3o";
-          const nameWrap = row.querySelector(".source-name-wrap");
-          if (nameWrap) nameWrap.append(badge);
-        }
-        if (!source.hasAudio) return;
-        const vuColumn = document.createElement("div");
-        vuColumn.className = "source-vu-column";
-        vuColumn.title = "Nivel de audio";
-        const vuFill = document.createElement("div");
-        vuFill.className = "source-vu-fill";
-        vuColumn.append(vuFill);
-        row.append(vuColumn);
-        const key = String(source.id);
-        if (!cardVuElements.has(key)) {
-          cardVuElements.set(key, []);
-        }
-        cardVuElements.get(key).push({ fill: vuFill, column: vuColumn });
-      }
-    });
-    if (!isTransmissionSection) {
-      card.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        openContextMenu(e, c);
-      });
-    }
-    return card;
-  }
-  function updateHostMicUi() {
-    var _a60, _b;
-    const btn = els.btnHostMic;
-    if (!btn) return;
-    const micPublished = (_a60 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a60.call(media);
-    const show = micPublished || hostMicAutoplayNeeded;
-    btn.hidden = !show;
-    if (!show) return;
-    const muted = ((_b = media == null ? void 0 : media.isPublishedAudioMuted) == null ? void 0 : _b.call(media)) ?? false;
-    btn.classList.toggle("is-muted", muted || hostMicAutoplayNeeded);
-    btn.setAttribute("aria-pressed", String(muted));
-    btn.title = hostMicAutoplayNeeded ? "Ativar audio" : muted ? "Ativar microfone" : "Silenciar microfone";
-    btn.setAttribute(
-      "aria-label",
-      hostMicAutoplayNeeded ? "Ativar audio" : muted ? "Ativar microfone" : "Silenciar microfone"
-    );
-    syncLocalHostVu();
-  }
-  async function onHostMicClick() {
-    var _a60, _b;
-    if (!els.btnHostMic) return;
-    try {
-      if (hostMicAutoplayNeeded) {
-        await (hostAudioMonitor == null ? void 0 : hostAudioMonitor.resume());
-        hostAudioMonitor == null ? void 0 : hostAudioMonitor.connectOutput(els.previewAudio);
-        await ((_a60 = els.previewAudio) == null ? void 0 : _a60.play());
-        hostMicAutoplayNeeded = false;
-        updateHostMicUi();
-        return;
-      }
-      if (!((_b = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _b.call(media))) return;
-      media.togglePublishedAudioMuted();
-      updateHostMicUi();
-      showToast2(media.isPublishedAudioMuted() ? "Microfone silenciado" : "Microfone ativado", "info");
-    } catch (e) {
-      errors.handle(e, "mic-toggle");
-    }
-  }
-  function toggleClientMute(peerId2) {
-    const muted = !mutedClients.has(peerId2);
-    signaling.send("definirClientMute", { peerId: peerId2, muted });
-  }
-  async function toggleDisplayControl(peerId2, ativo) {
-    if (!canHostCommand()) {
-      showToast2("Aguarde o painel conectar ao servidor", "warn");
-      return;
-    }
-    try {
-      const resultPromise = signaling.onceType("controleExibicaoResultado");
-      signaling.send("definirControleExibicao", { peerId: peerId2, ativo });
-      const res = await resultPromise;
-      if (!res.ok) throw new Error(res.erro || "Falha ao delegar controle");
-      showToast2(
-        ativo ? "Controle de exibicao delegado ao client" : "Controle de exibicao revogado",
-        "success"
-      );
-    } catch (e) {
-      errors.handle(e, "controle-exibicao");
-    }
-  }
-  function updateTransmissionSectionVu(level, active) {
-    const fill = els.transmissionVuFill;
-    const col = els.transmissionVuColumn;
-    if (!fill || !col) return;
-    const pct = Math.min(100, Math.max(0, Math.round(level * 120)));
-    fill.style.height = `${pct}%`;
-    col.classList.toggle("is-active", active);
-  }
-  function syncLocalHostVu() {
-    var _a60;
-    localHostVuStop == null ? void 0 : localHostVuStop();
-    localHostVuStop = null;
-    if (!hostPeerId) return;
-    const list = cardVuElements.get(String(hostPeerId));
-    if (!list || !list.length) return;
-    const track = (_a60 = media == null ? void 0 : media.getLocalAudioTrack) == null ? void 0 : _a60.call(media);
-    if (!track || track.readyState !== "live") return;
-    localHostVuStop = startTrackLevelMeter(track, {
-      onLevel: (level) => {
-        const currentList = cardVuElements.get(String(hostPeerId));
-        if (!currentList) return;
-        const pct = Math.min(100, Math.max(2, Math.round(level * 120)));
-        for (const vu2 of currentList) {
-          vu2.fill.style.height = `${pct}%`;
-          vu2.column.classList.toggle("is-active", level > 0.02);
-        }
-        if (estado.selecionado && String(estado.selecionado.id) === String(hostPeerId)) {
-          updateTransmissionSectionVu(level, level > 0.02);
-        }
-      }
-    });
-  }
-  function updateCardVuMeters(levels) {
-    let selectedLevel = 0;
-    let selectedActive = false;
-    for (const [peerId2, { level, active }] of levels) {
-      if (hostPeerId && String(peerId2) === String(hostPeerId)) continue;
-      const id = String(peerId2);
-      if (estado.selecionado && String(estado.selecionado.id) === id) {
-        selectedLevel = level;
-        selectedActive = active;
-      }
-      const list = cardVuElements.get(id) || cardVuElements.get(peerId2);
-      if (!list) continue;
-      const pct = Math.min(100, Math.max(2, Math.round(level * 120)));
-      const arr = Array.isArray(list) ? list : [list];
-      for (const refs of arr) {
-        refs.fill.style.height = `${pct}%`;
-        refs.column.classList.toggle("is-active", active);
-      }
-    }
-    if (estado.selecionado && String(estado.selecionado.id) !== String(hostPeerId)) {
-      updateTransmissionSectionVu(selectedLevel, selectedActive);
-    }
-  }
-  function onHostRemoteAudioAutoplayBlocked() {
-    hostMicAutoplayNeeded = true;
-    updateHostMicUi();
-  }
-  function ensureHostAudioMonitor() {
-    if (!media) return null;
-    if (!hostAudioMonitor) {
-      hostAudioMonitor = new HostAudioMonitor(media, {
-        excludePeerId: hostPeerId,
-        onAutoplayBlocked: onHostRemoteAudioAutoplayBlocked
-      });
-      hostAudioMonitor.onLevels = updateCardVuMeters;
-    } else if (hostPeerId) {
-      hostAudioMonitor.excludePeerId = String(hostPeerId);
-    }
-    return hostAudioMonitor;
-  }
-  function mergeLastAudioSourcesFromEstado(payload = {}) {
-    var _a60;
-    if ((_a60 = payload.audioSources) == null ? void 0 : _a60.length) {
-      lastAudioSources = payload.audioSources;
-      return;
-    }
-    const merged = buildHostAudioSources();
-    if (!merged.length) return;
-    const nextSig = audioSourcesSignature(merged);
-    const prevSig = audioSourcesSignature(lastAudioSources);
-    if (nextSig !== prevSig) {
-      lastAudioSources = merged;
-    }
-  }
-  function resolveHostAudioSources() {
-    const fromServer = normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: hostPeerId });
-    if (fromServer.length) return fromServer;
-    return buildHostAudioSources();
-  }
-  function countActiveHostAudioChannels(monitor) {
-    var _a60;
-    return ((_a60 = monitor == null ? void 0 : monitor.countLiveChannels) == null ? void 0 : _a60.call(monitor)) ?? 0;
-  }
-  async function repairHostRemoteAudioIfNeeded() {
-    var _a60, _b;
-    if (!hostPeerId || !(media == null ? void 0 : media.device)) return;
-    const monitor = ensureHostAudioMonitor();
-    if (!monitor) return;
-    const list = resolveHostAudioSources();
-    const expected = list.length;
-    if (!expected) return;
-    const active = countActiveHostAudioChannels(monitor);
-    if (active >= expected) {
-      await ((_a60 = monitor.recoverOutputIfSilent) == null ? void 0 : _a60.call(monitor));
-      return;
-    }
-    audioTrace("audio-health", { event: "repair-all", expected, active, role: "host" });
-    const backoffs = [0, 400, 800, 1600];
-    for (const delay of backoffs) {
-      if (delay) await new Promise((r) => setTimeout(r, delay));
-      await monitor.syncFromSources(list);
-      if (countActiveHostAudioChannels(monitor) >= expected) break;
-    }
-    await ((_b = monitor.recoverOutputIfSilent) == null ? void 0 : _b.call(monitor));
-    monitor.connectOutput(els.previewAudio);
-    applyVolumeFromSlider();
-    await monitor.resume();
-  }
-  async function syncHostAudioMonitor(sources = null, { force = false } = {}) {
-    if (!hostPeerId || !(media == null ? void 0 : media.device)) {
-      pendingHostAudioSync = sources ?? "merge";
-      return;
-    }
-    if (syncAudioMonitorPromise) {
-      syncAudioMonitorPending = true;
-      return syncAudioMonitorPromise;
-    }
-    syncAudioMonitorPromise = (async () => {
-      var _a60, _b, _c, _d;
-      do {
-        syncAudioMonitorPending = false;
-        if (!media || !hostPeerId) return;
-        await media.ensureRecvTransport(media._audioRecvTag());
-        const monitor = ensureHostAudioMonitor();
-        if (!monitor) return;
-        monitor.setMasterVolume(Number(((_a60 = els.volumeSlider) == null ? void 0 : _a60.value) || 100) / 100);
-        monitor.setManualMuted(mutedClients);
-        if (sources == null ? void 0 : sources.length) {
-          lastAudioSources = sources;
-        }
-        const audioSources = resolveHostAudioSources();
-        const sig = audioSourcesSignature(audioSources);
-        const expected = audioSources.length;
-        const active = countActiveHostAudioChannels(monitor);
-        if (!force && sig === lastAppliedAudioSig && (expected > 0 && active >= expected || expected === 0 && active === 0)) {
-          return;
-        }
-        await monitor.syncFromSources(audioSources);
-        await syncPublishedAudioFiltersToClients(audioSources);
-        const retryBackoffs = [800, 1600, 3200];
-        let retryCycle = 0;
-        while (audioSources.length && monitor.channelCount === 0 && retryCycle < retryBackoffs.length) {
-          log(
-            `Audio remoto: ${audioSources.length} fonte(s) detectada(s), 0 canal ativo - tentativa ${retryCycle + 1}/${retryBackoffs.length}...`,
-            "warn"
-          );
-          await new Promise((r) => setTimeout(r, retryBackoffs[retryCycle]));
-          retryCycle += 1;
-          await monitor.syncFromSources(resolveHostAudioSources());
-        }
-        await ((_b = monitor.recoverOutputIfSilent) == null ? void 0 : _b.call(monitor));
-        monitor.connectOutput(els.previewAudio);
-        applyVolumeFromSlider();
-        await monitor.resume();
-        if (els.controlesAudio) {
-          els.controlesAudio.hidden = !hasAnyClientAudio() && monitor.channelCount === 0;
-        }
-        if (((_c = monitor.isAutoplayBlocked) == null ? void 0 : _c.call(monitor)) || ((_d = els.previewAudio) == null ? void 0 : _d.paused) && monitor.channelCount > 0) {
-          onHostRemoteAudioAutoplayBlocked();
-        } else if (!monitor.channelCount) {
-          hostMicAutoplayNeeded = false;
-          updateHostMicUi();
-        }
-        syncLocalHostVu();
-        if (monitor.channelCount > 0) {
-          log(`Audio remoto: ${monitor.channelCount} canal(is) ativo(s)`, "info");
-          audioTraceSync("sync-ok", audioSources, { channels: monitor.channelCount, role: "host" });
-        } else if (audioSources.length) {
-          audioTraceSync("sync-falhou", audioSources, { channels: 0, role: "host" });
-        }
-        if (monitor.channelCount >= expected || expected === 0 && monitor.channelCount === 0) {
-          lastAppliedAudioSig = sig;
-        }
-        await repairHostRemoteAudioIfNeeded();
-      } while (syncAudioMonitorPending);
-    })().finally(() => {
-      syncAudioMonitorPromise = null;
-    });
-    return syncAudioMonitorPromise;
-  }
-  async function flushPendingHostAudioSync() {
-    if (!pendingHostAudioSync || !hostPeerId || !(media == null ? void 0 : media.device)) return;
-    const pending = pendingHostAudioSync;
-    pendingHostAudioSync = null;
-    if (pending === "merge" || pending === "estado") {
-      await syncHostAudioMonitor();
-    } else {
-      await syncHostAudioMonitor(pending);
-    }
-  }
-  function applyClientAudioMute() {
-    hostAudioMonitor == null ? void 0 : hostAudioMonitor.setManualMuted(mutedClients);
-    applyVolumeFromSlider();
-  }
-  function queueTransmission(raw) {
-    const gen = ++transmissionGeneration;
-    transmissionWork = transmissionWork.then(() => runTransmission(raw, gen)).catch((e) => errors.handle(e, "applyTransmission"));
-  }
-  function hasAnyClientAudio() {
-    return estado.clients.some(
-      (c) => c.hasAudio && String(c.id) !== String(hostPeerId)
-    );
-  }
-  function buildHostAudioSources() {
-    const map = /* @__PURE__ */ new Map();
-    for (const s of lastAudioSources || []) {
-      const peerId2 = String(s.peerId || s.id);
-      if (!peerId2 || !s.producerId || peerId2 === String(hostPeerId)) continue;
-      const source = s.source || "microphone";
-      map.set(`${peerId2}:${source}`, {
-        peerId: peerId2,
-        producerId: s.producerId,
-        name: s.name || s.displayName || peerId2,
-        source
-      });
-    }
-    for (const c of estado.clients || []) {
-      if (String(c.id) === String(hostPeerId)) continue;
-      const ids = c.producerIds || {};
-      const entries = [
-        ["microphone", ids.microphone],
-        ["system", ids.system],
-        ["mixed", ids.mixed]
-      ];
-      for (const [source, producerId] of entries) {
-        if (!producerId) continue;
-        const peerId2 = String(c.id);
-        const mapKey = `${peerId2}:${source}`;
-        if (map.has(mapKey)) continue;
-        map.set(mapKey, {
-          peerId: c.id,
-          producerId,
-          name: c.displayName,
-          source
-        });
-      }
-      if (!ids.microphone && !ids.system && !ids.mixed && c.hasAudio && ids.audio) {
-        const peerId2 = String(c.id);
-        const mapKey = `${peerId2}:microphone`;
-        if (!map.has(mapKey)) {
-          map.set(mapKey, {
-            peerId: c.id,
-            producerId: ids.audio,
-            name: c.displayName,
-            source: "microphone"
-          });
-        }
-      }
-    }
-    return normalizeRemoteAudioSources([...map.values()], { excludePeerId: hostPeerId });
-  }
-  function renderFsSourceMenu() {
-    if (!els.fsSourceList) return;
-    els.fsSourceList.innerHTML = "";
-    if (!estado.clients.length) {
-      const li = document.createElement("li");
-      li.className = "fs-source-empty";
-      li.textContent = "Nenhuma fonte conectada";
-      els.fsSourceList.appendChild(li);
-      return;
-    }
-    for (const c of sortClientsForDisplay(estado.clients)) {
-      els.fsSourceList.appendChild(
-        buildSourceCard(c, (peerId2) => {
-          closeFsSourceMenu();
-          selecionar(peerId2);
-        })
-      );
-    }
-  }
-  function isPreviewFullscreen() {
-    return document.fullscreenElement === els.previewArea;
-  }
-  function syncFsSourceUi() {
-    const fs = isPreviewFullscreen();
-    if (els.btnFsSources) els.btnFsSources.hidden = !fs;
-    if (!fs) closeFsSourceMenu();
-  }
-  function closeFsSourceMenu() {
-    var _a60;
-    if (!els.fsSourceMenu) return;
-    els.fsSourceMenu.hidden = true;
-    (_a60 = els.btnFsSources) == null ? void 0 : _a60.setAttribute("aria-expanded", "false");
-  }
-  function toggleFsSourceMenu() {
-    var _a60;
-    if (!els.fsSourceMenu || !isPreviewFullscreen()) return;
-    const open = els.fsSourceMenu.hidden;
-    if (open) renderFsSourceMenu();
-    els.fsSourceMenu.hidden = !open;
-    (_a60 = els.btnFsSources) == null ? void 0 : _a60.setAttribute("aria-expanded", String(open));
-  }
-  function updateTransmissionCard() {
-    if (!els.transmissionCardContainer) return;
-    els.transmissionCardContainer.innerHTML = "";
-    const sel = estado.selecionado;
-    if (sel && sel.isProducing) {
-      const card = buildSourceCard(sel, () => {
-      }, true);
-      els.transmissionCardContainer.appendChild(card);
-    } else {
-      const empty = document.createElement("div");
-      empty.className = "transmission-card-empty";
-      empty.textContent = "Nenhuma transmissao ativa";
-      els.transmissionCardContainer.appendChild(empty);
-    }
-  }
-  function renderLista() {
-    var _a60;
-    if (!els.lista) return;
-    els.lista.innerHTML = "";
-    cardVuElements.clear();
-    if (!estado.clients.length) {
-      const li = document.createElement("li");
-      li.className = "hint-text";
-      li.textContent = "Nenhuma fonte conectada";
-      els.lista.appendChild(li);
-      renderFsSourceMenu();
-      updateTransmissionCard();
-      if (!estado.selecionado) {
-        updateTransmissionSectionVu(0, false);
-      }
-      return;
-    }
-    for (const c of sortClientsForDisplay(estado.clients)) {
-      els.lista.appendChild(buildSourceCard(c, (peerId2) => selecionar(peerId2), false));
-    }
-    if (els.selecionado) {
-      els.selecionado.textContent = estado.selecionado ? `Selecionado: ${estado.selecionado.displayName}` : "Nenhuma fonte selecionada";
-    }
-    renderFsSourceMenu();
-    syncLocalHostVu();
-    updateTransmissionCard();
-    if (!estado.selecionado) {
-      updateTransmissionSectionVu(0, false);
-    }
-    ui.set({
-      hasSelection: !!estado.selecionado,
-      isPaused: !!((_a60 = estado.selecionado) == null ? void 0 : _a60.pausado)
-    });
-    updatePreviewOverlays();
-  }
-  async function selecionar(peerId2) {
-    if (!canHostCommand()) {
-      debugHostLog("H", "selecionar blocked", {
-        hostPeerId: !!hostPeerId,
-        hostReady,
-        connected: signaling == null ? void 0 : signaling.connected,
-        authenticated: signaling == null ? void 0 : signaling.authenticated,
-        joinInProgress: joinInProgress2
-      });
-      showToast2("Aguarde o painel conectar ao servidor", "warn");
-      return;
-    }
-    try {
-      setStatus("Selecionando fonte...");
-      const resultPromise = signaling.onceType("selecaoResultado");
-      signaling.send("selecionarClient", { peerId: peerId2 });
-      const res = await resultPromise;
-      if (!res.ok) throw new Error(res.erro || "Falha na selecao");
-      showToast2("Fonte selecionada", "success");
-      setStatus("Carregando video da fonte...");
-    } catch (e) {
-      errors.handle(e, "selecionar");
-      setStatus("Conectado ao painel host");
-    }
-  }
-  async function runTransmission(raw, gen = transmissionGeneration) {
-    var _a60, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
-    if (gen !== transmissionGeneration) return;
-    const tx = normalizeTransmission(raw);
-    lastActiveTransmission = tx;
-    if (tx.selectedPeerId) {
-      const client = estado.clients.find((c) => String(c.id) === String(tx.selectedPeerId));
-      if (client) {
-        estado.selecionado = {
-          ...client,
-          isProducing: hasActiveVideo(tx) || client.isProducing,
-          hasVideo: hasActiveVideo(tx) || client.hasVideo,
-          producerIds: {
-            ...client.producerIds || {},
-            video: ((_a60 = tx.producerIds) == null ? void 0 : _a60.video) || ((_b = client.producerIds) == null ? void 0 : _b.video) || client.producerId || null
-          },
-          producerId: ((_c = tx.producerIds) == null ? void 0 : _c.video) || ((_d = client.producerIds) == null ? void 0 : _d.video) || client.producerId || null,
-          selecionado: true,
-          pausado: tx.paused
-        };
-      } else {
-        estado.selecionado = {
-          id: tx.selectedPeerId,
-          displayName: tx.peerName || "Fonte",
-          isProducing: hasActiveVideo(tx),
-          producerIds: tx.producerIds,
-          selecionado: true,
-          pausado: tx.paused
-        };
-      }
-    } else {
-      estado.selecionado = null;
-    }
-    for (const c of estado.clients || []) {
-      c.selecionado = String(c.id) === String(tx.selectedPeerId);
-    }
-    if (isCoHostInstance) {
-      renderLista();
-      return;
-    }
-    try {
-      if (!tx.producerId) {
-        await (media == null ? void 0 : media.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true }));
-        hideLtOverlay();
-        if (els.controlesAudio) els.controlesAudio.hidden = !hasAnyClientAudio();
-        ui.set({ hasPreview: false, isPaused: tx.paused });
-        updatePreviewOverlays();
-        setStatus("Nenhuma transmissao ativa");
-      } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
-        await (media == null ? void 0 : media.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true }));
-        const localVideoTrack = (_f = (_e = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _e.getVideoTracks) == null ? void 0 : _f.call(_e)[0];
-        if (els.preview && (localVideoTrack == null ? void 0 : localVideoTrack.readyState) === "live") {
-          if (els.preview.srcObject !== media.localScreenStream) {
-            els.preview.srcObject = media.localScreenStream;
-          }
-          (_h = (_g = els.preview).play) == null ? void 0 : _h.call(_g).catch(() => {
-          });
-        }
-        applyLtOverlayForTransmission(tx);
-        ui.set({ hasPreview: true, isSharing: true });
-        updatePreviewOverlays();
-        setStatus("Exibindo sua tela");
-      } else {
-        if (gen !== transmissionGeneration) return;
-        const ownProducerId = ((_j = (_i = media.producers) == null ? void 0 : _i.video) == null ? void 0 : _j.id) || null;
-        const currentProducerId = media.currentActiveVideoProducerId || ((_l = (_k = media.remoteConsumers) == null ? void 0 : _k.video) == null ? void 0 : _l.producerId);
-        const needsConsume = remoteVideoConsumeNeeded(tx, {
-          currentProducerId,
-          isSelfSelected: false,
-          hasVideoElement: !!((_m = els.preview) == null ? void 0 : _m.srcObject),
-          consumerClosed: !((_n = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _n.video) || media.remoteConsumers.video.closed
-        });
-        if (needsConsume) {
-          debugHostLog("H2", "[CLIENT_CONSUME] host consumindo video ativo", {
-            producerVideo: ((_p = (_o = tx.producerIds) == null ? void 0 : _o.video) == null ? void 0 : _p.slice(0, 8)) || null,
-            previousProducer: (currentProducerId == null ? void 0 : currentProducerId.slice(0, 8)) || null
-          });
-          await media.consumeRemoteMedia(tx.producerIds, {
-            videoEl: els.preview,
-            audioEl: null,
-            ownProducerIds: { video: ownProducerId }
-          });
-        }
-        els.previewError.hidden = true;
-        if (els.controlesAudio) {
-          els.controlesAudio.hidden = !hasAnyClientAudio();
-        }
-        updateHostMicUi();
-        ui.set({ hasPreview: true, isPaused: tx.paused });
-        updatePreviewOverlays();
-        applyLtOverlayForTransmission(tx);
-        setStatus(tx.paused ? "Transmissao pausada" : `Exibindo: ${tx.peerName || "fonte"}`);
-        if (!tx.paused) {
-          try {
-            await ((_r = (_q = els.preview) == null ? void 0 : _q.play) == null ? void 0 : _r.call(_q));
-          } catch (_) {
-          }
-        }
-      }
-    } catch (e) {
-      if (((_s = e.message) == null ? void 0 : _s.includes("Autoplay")) || e.name === "NotAllowedError") {
-        hostMicAutoplayNeeded = true;
-        updateHostMicUi();
-      }
-      errors.handle(e, "applyTransmission");
-      els.previewError.hidden = false;
-      if (els.previewErrorMsg) els.previewErrorMsg.textContent = e.message;
-      setStatus(`Erro ao exibir fonte: ${e.message}`);
-    } finally {
-      if (gen === transmissionGeneration) {
-        syncHostAudioMonitor().catch(
-          (e) => errors.handle(e, "audio-monitor")
-        );
-        renderLista();
-      }
-    }
-  }
-  function applyTransmission(raw) {
-    queueTransmission(raw);
-  }
-  function shouldHostApplyActiveVideo(tx) {
-    var _a60, _b, _c, _d;
-    const activeKey = activeVideoTransmissionKey(tx);
-    const currentProducerId = (media == null ? void 0 : media.currentActiveVideoProducerId) || ((_b = (_a60 = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _a60.video) == null ? void 0 : _b.producerId) || null;
-    const isOwn = String(normalizeTransmission(tx).selectedPeerId) === String(hostPeerId);
-    const needsConsume = remoteVideoConsumeNeeded(tx, {
-      currentProducerId,
-      isSelfSelected: isOwn,
-      hasVideoElement: !!((_c = els.preview) == null ? void 0 : _c.srcObject),
-      consumerClosed: !((_d = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _d.video) || media.remoteConsumers.video.closed
-    });
-    const keyChanged = activeKey !== lastAppliedActiveVideoKey;
-    if (!hasActiveVideo(tx)) return keyChanged || !!currentProducerId;
-    if (isOwn) return keyChanged || !!currentProducerId;
-    return keyChanged || needsConsume;
-  }
-  async function applyRoomSnapshot(snapshot, { force = false } = {}) {
-    var _a60, _b, _c, _d, _e, _f, _g;
-    if (!snapshot) return;
-    const parsed = parseRoomSnapshot(snapshot);
-    if (snapshot.meetBridgeLiveMode !== void 0) {
-      applyMeetBridgeLiveModeFromRoom(snapshot.meetBridgeLiveMode);
-    }
-    if (parsed.mutedPeerIds) {
-      mutedClients.clear();
-      for (const id of parsed.mutedPeerIds) {
-        mutedClients.add(String(id));
-      }
-      applyClientAudioMute();
-    }
-    const mediaKey = roomSnapshotMediaKey(snapshot);
-    const activeKey = activeVideoTransmissionKey(parsed.transmission);
-    debugHostLog("H1", "[ROOM_STATE] snapshot recebido", {
-      activeKey,
-      producerVideo: ((_c = (_b = (_a60 = parsed.transmission) == null ? void 0 : _a60.producerIds) == null ? void 0 : _b.video) == null ? void 0 : _c.slice(0, 8)) || null,
-      clients: (snapshot.clients || parsed.peers || []).length
-    });
-    if (!hostReady || joinInProgress2) {
-      trackClientDisplayNameChanges(snapshot.clients || parsed.peers || []);
-      pendingRoomSnapshot = snapshot;
-      if (((_d = snapshot.clients) == null ? void 0 : _d.length) || ((_e = parsed.peers) == null ? void 0 : _e.length)) {
-        estado = enrichRoomSourcesState(
-          {
-            clients: snapshot.clients || parsed.peers || [],
-            selecionado: snapshot.selecionado || null,
-            controleExibicao: snapshot.controleExibicao || []
-          },
-          parsed.transmission
-        );
-        renderLista();
-      }
-      if ((_f = parsed.audioSources) == null ? void 0 : _f.length) {
-        lastAudioSources = parsed.audioSources;
-        pendingHostAudioSync = parsed.audioSources;
-      }
-      return;
-    }
-    trackClientDisplayNameChanges(snapshot.clients || parsed.peers || []);
-    estado = enrichRoomSourcesState(
-      {
-        clients: snapshot.clients || parsed.peers || [],
-        selecionado: snapshot.selecionado ? { ...snapshot.selecionado, selecionado: true } : null,
-        controleExibicao: snapshot.controleExibicao || []
-      },
-      parsed.transmission
-    );
-    const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
-    if (me) isCoHostInstance = !!me.isCoHost;
-    if ((_g = parsed.audioSources) == null ? void 0 : _g.length) {
-      lastAudioSources = parsed.audioSources;
-    }
-    renderLista();
-    const applyVideo = force || shouldHostApplyActiveVideo(parsed.transmission);
-    if (!applyVideo && !force && mediaKey && mediaKey === lastAppliedSnapshotKey) return;
-    lastAppliedSnapshotKey = mediaKey;
-    lastAppliedActiveVideoKey = activeKey;
-    applyTransmission(parsed.transmission);
-    await syncHostAudioMonitor(parsed.audioSources).catch(
-      (e) => errors.handle(e, "audio-monitor")
-    );
-  }
-  async function flushPendingRoomSnapshot() {
-    if (!pendingRoomSnapshot || !hostReady) return;
-    const snap = pendingRoomSnapshot;
-    pendingRoomSnapshot = null;
-    await applyRoomSnapshot(snap, { force: true });
-  }
-  async function iniciarCompartilhamentoHost() {
-    try {
-      assertSecureContext();
-      saveCapturePrefs(getHostCapturePrefs());
-      setStatus("Selecione a tela para compartilhar...");
-      await media.ensureSendTransport();
-      await media.startScreenShare(getHostCapturePrefs());
-      const prefs = getHostCapturePrefs();
-      if (prefs.microphone && !media.hasPublishedMicrophone()) {
-        await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
-        await media.publishMicrophone(prefs);
-      }
-      signaling.send("status", { status: "transmitindo" });
-      ui.set({ isSharing: true });
-      updateHostMicUi();
-      if (prefs.microphone && !media.hasPublishedMicrophone()) {
-        showToast2("Marque Microfone no painel e conceda permissao ao navegador", "warn");
-      }
-      showToast2("Tela compartilhada neste painel", "success");
-    } catch (e) {
-      errors.handle(e, "compartilhar");
-      updateHostMicUi();
-    }
-  }
-  function updateRecordingUi(state) {
-    const labels = {
-      [RecordingState.IDLE]: "Pronto para gravar",
-      [RecordingState.RECORDING]: "Gravando...",
-      [RecordingState.FINALIZING]: "Finalizando...",
-      [RecordingState.UPLOADING]: "Enviando gravacao...",
-      [RecordingState.SAVED]: "Gravacao salva",
-      [RecordingState.ERROR]: "Erro na gravacao"
-    };
-    if (els.recordingStatus) els.recordingStatus.textContent = labels[state] || state;
-    ui.set({
-      isRecording: state === RecordingState.RECORDING,
-      isUploading: state === RecordingState.UPLOADING,
-      isRecordingBusy: state === RecordingState.FINALIZING || state === RecordingState.UPLOADING
-    });
-    if (els.uploadProgressWrap) els.uploadProgressWrap.hidden = state !== RecordingState.UPLOADING;
-    if (state === RecordingState.IDLE) {
-      if (els.recordingTimer) els.recordingTimer.hidden = true;
-    }
-  }
-  async function iniciarGravacao() {
-    if (ui._flags.isRecording || ui._flags.isUploading || ui._flags.isRecordingBusy) return;
-    try {
-      const stream = await getRecordingStream();
-      if (!stream) {
-        if (els.recordingStatus) els.recordingStatus.textContent = "Nenhuma transmissao ativa para gravar";
-        setStatus("Nenhuma transmissao ativa para gravar");
-        showToast2("Nenhuma transmissao ativa para gravar", "warn");
-        return;
-      }
-      const quality = mergeServerQuality(media.videoQuality, loadPresetId());
-      recorder.setHostToken(hostToken);
-      recorder.start(stream, quality);
-      showToast2("Gravacao iniciada", "info");
-    } catch (e) {
-      stopRecordingCapture();
-      errors.handle(e, "gravacao");
-    }
-  }
-  async function pararGravacao() {
-    try {
-      const blob = await recorder.stop();
-      stopRecordingCapture();
-      if (!blob) {
-        showToast2("Gravacao vazia", "warn");
-        recorder.resetIdle();
-        return;
-      }
-      const pattern = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || "";
-      const filename = formatRecordingFilename(/* @__PURE__ */ new Date(), pattern);
-      if (!isValidRecordingFilename(filename)) {
-        showToast2("Nome de arquivo invalido. Revise o padrao nas configuracoes.", "warn");
-        recorder.resetIdle();
-        return;
-      }
-      const customDir = localStorage.getItem(STORAGE_RECORDINGS_DIR) || "";
-      const uploadResult = await recorder.upload(blob, filename, customDir);
-      if (els.recordingFilename) {
-        els.recordingFilename.textContent = uploadResult.filename || filename;
-      }
-      showToast2("Gravacao salva com sucesso", "success");
-      setStatus(`Gravacao salva: ${uploadResult.filename || filename}`);
-      setTimeout(() => recorder.resetIdle(), 4e3);
-    } catch (e) {
-      stopRecordingCapture();
-      errors.handle(e, "upload");
-      recorder.resetIdle();
-    }
-  }
-  function applyVolumeFromSlider() {
-    var _a60;
-    const vol = Number(((_a60 = els.volumeSlider) == null ? void 0 : _a60.value) || 100) / 100;
-    hostAudioMonitor == null ? void 0 : hostAudioMonitor.setMasterVolume(audioMuted ? 0 : vol);
-    if (els.previewAudio) {
-      els.previewAudio.volume = audioMuted ? 0 : vol;
-      els.previewAudio.muted = !!audioMuted;
-    }
-  }
-  function stopRecordingCapture() {
-    var _a60;
-    (_a60 = recordingCapture == null ? void 0 : recordingCapture.stop) == null ? void 0 : _a60.call(recordingCapture);
-    recordingCapture = null;
-  }
-  function getActiveRecordingSelection() {
-    var _a60, _b, _c, _d, _e, _f;
-    if ((_a60 = estado.selecionado) == null ? void 0 : _a60.id) return estado.selecionado;
-    const tx = normalizeTransmission(lastActiveTransmission || {});
-    if (tx.selectedPeerId && hasActiveVideo(tx)) {
-      const client = estado.clients.find((c) => String(c.id) === String(tx.selectedPeerId));
-      return {
-        ...client || {},
-        id: tx.selectedPeerId,
-        displayName: (client == null ? void 0 : client.displayName) || tx.peerName || "Fonte",
-        isProducing: true,
-        hasVideo: true,
-        producerIds: tx.producerIds,
-        producerId: ((_b = tx.producerIds) == null ? void 0 : _b.video) || tx.producerId || null,
-        selecionado: true,
-        pausado: tx.paused
-      };
-    }
-    const previewStream = (_c = els.preview) == null ? void 0 : _c.srcObject;
-    const previewTrack = previewStream instanceof MediaStream ? (_d = previewStream.getVideoTracks) == null ? void 0 : _d.call(previewStream).find((track) => track.readyState === "live") : null;
-    if (!previewTrack || !ui._flags.hasPreview) return null;
-    const localTrack = ((_f = (_e = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _e.getVideoTracks) == null ? void 0 : _f.call(_e)[0]) || null;
-    const isOwnPreview = !!localTrack && localTrack.readyState === "live" && localTrack.id === previewTrack.id;
-    return {
-      id: isOwnPreview && hostPeerId ? hostPeerId : "preview",
-      displayName: isOwnPreview ? hostDisplayName || "Host" : "Fonte",
-      isProducing: true,
-      hasVideo: true,
-      producerIds: { video: null },
-      producerId: null,
-      selecionado: true,
-      pausado: false
-    };
-  }
-  async function getRecordingStream() {
-    var _a60, _b, _c, _d;
-    const selected = getActiveRecordingSelection();
-    const selectedPeerId = selected == null ? void 0 : selected.id;
-    const own = hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
-    if (!selectedPeerId || (selected == null ? void 0 : selected.pausado)) return null;
-    stopRecordingCapture();
-    const compositor = RecordingCompositor.start({
-      videoEl: els.preview,
-      fallbackStream: own ? media == null ? void 0 : media.localScreenStream : null,
-      badgeText: (selected == null ? void 0 : selected.displayName) || "Fonte",
-      visible: !!selected && !(selected == null ? void 0 : selected.pausado)
-    });
-    const videoTrack = (_b = (_a60 = compositor == null ? void 0 : compositor.stream) == null ? void 0 : _a60.getVideoTracks) == null ? void 0 : _b.call(_a60)[0];
-    if ((videoTrack == null ? void 0 : videoTrack.readyState) !== "live") {
-      (_c = compositor == null ? void 0 : compositor.stop) == null ? void 0 : _c.call(compositor);
-      return null;
-    }
-    let mixer = null;
-    try {
-      const recPrefs = getRecordingAudioPrefs();
-      let restrictToPeerId = null;
-      let ownForRec = own;
-      let excludeOwnSystem = recPrefs.excludeOwnSystem;
-      const defaultAudioName = getDefaultRecordingAudioClientName();
-      if (defaultAudioName) {
-        const defaultPeer = resolveRecordingAudioPeer(estado.clients, defaultAudioName);
-        if (defaultPeer == null ? void 0 : defaultPeer.id) {
-          restrictToPeerId = defaultPeer.id;
-          ownForRec = false;
-          excludeOwnSystem = true;
-        } else {
-          showToast2("Client padrao de gravacao indisponivel \u2014 usando mix normal", "warn");
-        }
-      } else if (recPrefs.selectedPeerOnly) {
-        restrictToPeerId = selectedPeerId;
-      }
-      mixer = await RecordingAudioMixer.build({
-        hostAudioMonitor,
-        media,
-        own: ownForRec,
-        mutedClients,
-        excludeOwnSystem,
-        restrictToPeerId
-      });
-    } catch (err) {
-      compositor.stop();
-      throw err;
-    }
-    const tracks = [videoTrack];
-    if (((_d = mixer == null ? void 0 : mixer.track) == null ? void 0 : _d.readyState) === "live") tracks.push(mixer.track);
-    const stream = new MediaStream(tracks);
-    recordingCapture = {
-      stream,
-      stop() {
-        var _a61;
-        compositor.stop();
-        (_a61 = mixer == null ? void 0 : mixer.stop) == null ? void 0 : _a61.call(mixer);
-      }
-    };
-    return stream;
-  }
-  function handleMessage(msg) {
-    var _a60, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
-    if (msg.type === "estadoSala") {
-      applyRoomSnapshot(msg.payload).catch((e) => errors.handle(e, "estado-sala"));
-      return;
-    }
-    if (msg.type === "modoPonteMeetDefinido") {
-      if (((_a60 = msg.payload) == null ? void 0 : _a60.ativo) !== void 0) {
-        applyMeetBridgeLiveModeFromRoom(msg.payload.ativo);
-      }
-      return;
-    }
-    if (msg.type === "clientesSilenciados") {
-      const mutedIds = ((_b = msg.payload) == null ? void 0 : _b.mutedPeerIds) || [];
-      mutedClients.clear();
-      for (const id of mutedIds) {
-        mutedClients.add(String(id));
-      }
-      applyClientAudioMute();
-      renderLista();
-      return;
-    }
-    if (msg.type === "estado") {
-      estado = enrichRoomSourcesState(
-        {
-          clients: msg.payload.clients || [],
-          selecionado: msg.payload.selecionado ? { ...msg.payload.selecionado, selecionado: true } : null,
-          controleExibicao: msg.payload.controleExibicao || []
-        },
-        lastActiveTransmission
-      );
-      const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
-      if (me) {
-        isCoHostInstance = !!me.isCoHost;
-      }
-      const videoProducers = (estado.clients || []).filter((c) => {
-        var _a61;
-        return c.hasVideo || c.isProducing || ((_a61 = c.producerIds) == null ? void 0 : _a61.video);
-      }).map((c) => {
-        var _a61, _b2, _c2, _d2;
-        return {
-          peerId: (_a61 = c.id) == null ? void 0 : _a61.slice(0, 8),
-          producerId: ((_c2 = (_b2 = c.producerIds) == null ? void 0 : _b2.video) == null ? void 0 : _c2.slice(0, 8)) || ((_d2 = c.producerId) == null ? void 0 : _d2.slice(0, 8)) || null,
-          name: c.displayName
-        };
-      });
-      debugHostLog("H3", "[HOST_LIST] estado recebido", {
-        totalClients: estado.clients.length,
-        videoProducers
-      });
-      if (((_c = msg.payload) == null ? void 0 : _c.meetBridgeLiveMode) !== void 0) {
-        applyMeetBridgeLiveModeFromRoom(msg.payload.meetBridgeLiveMode);
-      }
-      mergeLastAudioSourcesFromEstado(msg.payload || {});
-      renderLista();
-      syncHostAudioMonitor(((_e = (_d = msg.payload) == null ? void 0 : _d.audioSources) == null ? void 0 : _e.length) ? msg.payload.audioSources : null).catch(
-        (e) => errors.handle(e, "audio-monitor")
-      );
-    }
-    if (msg.type === "demovidoCoHost") {
-      if (isCoHostInstance) {
-        teardownCoHost();
-        return;
-      }
-      window.location.href = `/client/?nome=${encodeURIComponent(hostDisplayName)}`;
-    }
-    if (msg.type === "fontesAudio") {
-      const sources = ((_f = msg.payload) == null ? void 0 : _f.sources) || [];
-      const forceMicSync = sources.some(
-        (s) => (s.source || "microphone") === "microphone" && String(s.peerId || s.id) !== String(hostPeerId)
-      );
-      lastAudioSources = sources;
-      if (fontesAudioDebounceTimer) clearTimeout(fontesAudioDebounceTimer);
-      fontesAudioDebounceTimer = setTimeout(() => {
-        fontesAudioDebounceTimer = null;
-        syncHostAudioMonitor(sources, { force: forceMicSync }).catch(
-          (e) => errors.handle(e, "audio-monitor")
-        );
-      }, 80);
-      return;
-    }
-    if (msg.type === "consumerFechado") {
-      const consumerId = (_g = msg.payload) == null ? void 0 : _g.consumerId;
-      const wasVideoConsumer = ((_i = (_h = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _h.video) == null ? void 0 : _i.id) === consumerId;
-      if (consumerId) {
-        hostAudioMonitor == null ? void 0 : hostAudioMonitor.removeByConsumerId(consumerId).catch(() => {
-        });
-      }
-      if (wasVideoConsumer) {
-        media.remoteConsumers.video = null;
-        media.currentActiveVideoProducerId = null;
-        if (els.preview) els.preview.srcObject = null;
-        lastAppliedSnapshotKey = "";
-        lastAppliedActiveVideoKey = "";
-        if (lastActiveTransmission && hasActiveVideo(lastActiveTransmission)) {
-          applyTransmission(lastActiveTransmission);
-        } else {
-          hideLtOverlay();
-          ui.set({ hasPreview: false });
-          updatePreviewOverlays();
-          setStatus("Nenhuma transmissao ativa");
-        }
-        lastAppliedAudioSig = "";
-        syncHostAudioMonitor(null, { force: true }).catch(
-          (e) => errors.handle(e, "audio-monitor")
-        );
-      } else {
-        lastAppliedAudioSig = "";
-        syncHostAudioMonitor(null, { force: true }).catch(
-          (e) => errors.handle(e, "audio-monitor")
-        );
-      }
-    }
-    if (msg.type === "transmissaoAtiva") {
-      const tx = normalizeTransmission(msg.payload);
-      debugHostLog("H2", "[ACTIVE_VIDEO] evento de transmissao ativa recebido no host", {
-        selectedPeerId: ((_j = tx.selectedPeerId) == null ? void 0 : _j.slice(0, 8)) || null,
-        producerVideo: ((_l = (_k = tx.producerIds) == null ? void 0 : _k.video) == null ? void 0 : _l.slice(0, 8)) || null,
-        activeKey: activeVideoTransmissionKey(tx),
-        lastAppliedActiveVideoKey
-      });
-      if (!shouldHostApplyActiveVideo(msg.payload)) return;
-      lastAppliedActiveVideoKey = activeVideoTransmissionKey(tx);
-      lastAppliedSnapshotKey = roomSnapshotMediaKey({
-        transmission: msg.payload,
-        audioSources: lastAudioSources
-      });
-      applyTransmission(msg.payload);
-      return;
-    }
-    if (msg.type === "erro") {
-      const mensagem = ((_m = msg.payload) == null ? void 0 : _m.mensagem) || "";
-      if (isTransientServerError(mensagem, { joinInProgress: joinInProgress2 })) {
-        log(mensagem || "Erro transitorio", "warn");
-        return;
-      }
-      errors.handleServerMessage(mensagem, "servidor", { joinInProgress: joinInProgress2 });
-    }
-  }
-  function coHostHandleMessage(msg) {
-    if (msg.type === "transmissaoAtiva") {
-      applyTransmission(msg.payload);
-      return;
-    }
-    handleMessage(msg);
-  }
-  function canHostCommand() {
-    const ok = !!hostPeerId && !!hostReady && (signaling == null ? void 0 : signaling.connected) && (signaling == null ? void 0 : signaling.authenticated) && !joinInProgress2;
-    return ok;
-  }
-  function renderTechErrors() {
-    const box = $("tech-errors");
-    if (!box) return;
-    const history = errors.getHistory().slice(0, 8);
-    if (!history.length) {
-      box.innerHTML = '<p class="hint-text">Nenhum erro recente.</p>';
-      return;
-    }
-    box.innerHTML = "";
-    for (const entry of history) {
-      const details = document.createElement("details");
-      details.className = "tech-error-item";
-      const summary = document.createElement("summary");
-      summary.textContent = entry.friendly;
-      const pre = document.createElement("pre");
-      pre.textContent = `[${entry.code}] ${entry.context}
-${entry.technical}`;
-      details.append(summary, pre);
-      box.appendChild(details);
-    }
-  }
-  async function joinHost({ autoShare = true } = {}) {
-    const gen = ++joinGeneration;
-    joinInProgress2 = true;
-    hostPeerId = null;
-    lastAppliedSnapshotKey = "";
-    lastAppliedActiveVideoKey = "";
-    pendingRoomSnapshot = null;
-    signaling == null ? void 0 : signaling.markAuthenticated(false);
-    updateHostMicUi();
-    debugHostLog("F", "joinHost start", { gen, autoShare });
-    try {
-      await (hostAudioMonitor == null ? void 0 : hostAudioMonitor.dispose());
-      hostAudioMonitor = null;
-      await (media == null ? void 0 : media.dispose());
-      media = null;
-      const payload = {
-        papel: "host",
-        nome: hostDisplayName,
-        pin: roomPin || void 0,
-        hostToken: hostToken || void 0,
-        isCoHost: !!isCoHostInstance
-      };
-      const entrouPromise = signaling.onceType("entrou");
-      signaling.send("entrar", payload, { critical: true });
-      const entrou = await entrouPromise;
-      if (gen !== joinGeneration) return;
-      hostPeerId = entrou.peerId;
-      hostToken = entrou.hostToken || hostToken;
-      signaling.markAuthenticated(true);
-      debugHostLog("F", "joinHost entrou", { gen, hostPeerId });
-      media = new MediaClient(signaling, {
-        splitRecvTransports: true,
-        applyHostMicPublishChain: true,
-        onLog: log,
-        onIceState: (state) => {
-          if (state === "failed") showToast2("Problema na conexao de midia (ICE)", "error");
-        }
-      });
-      const quality = mergeServerQuality(entrou.videoQuality, loadPresetId());
-      await media.loadDevice(entrou.rtpCapabilities);
-      if (gen !== joinGeneration) return;
-      await media.ensureRecvTransport();
-      await media.ensureRecvTransport(media._audioRecvTag());
-      if (gen !== joinGeneration) return;
-      media.setVideoQuality(quality);
-      syncHostMicGainUi(loadHostMicPublishGain(Number(quality.hostMicPublishGain ?? 1.4)));
-      recorder.setHostToken(hostToken);
-      hostReady = true;
-      ui.set({ wsConnected: true, wsWasConnected: true });
-      setBadge("Online", "online");
-      if (gen === joinGeneration) {
-        joinInProgress2 = false;
-        updateHostMicUi();
-      }
-      if (autoShare) {
-        await iniciarCompartilhamentoHost();
-      } else {
-        setStatus("Conectado ao painel host");
-        updateHostMicUi();
-      }
-      if (gen !== joinGeneration) return;
-      const joinPrefs = getHostCapturePrefs();
-      if (joinPrefs.microphone) {
-        try {
-          await media.ensureSendTransport();
-          await applyHostMicPresetFromStorage();
-          await media.publishMicrophone(joinPrefs);
-          syncLocalHostVu();
-        } catch (e) {
-          errors.handle(e, "mic-join");
-        }
-      }
-      signaling.send("solicitarEstado", {});
-      await flushPendingRoomSnapshot();
-      await flushPendingHostAudioSync();
-      syncHostAudioMonitor().catch((e) => errors.handle(e, "audio-monitor"));
-      signaling.send("definirQualidade", { presetId: loadPresetId() });
-      startStatsPolling();
-    } finally {
-      if (gen === joinGeneration) {
-        joinInProgress2 = false;
-        updateHostMicUi();
-      }
-    }
-  }
-  function startStatsPolling() {
-    clearInterval(statsTimer);
-    statsTimer = setInterval(async () => {
-      if (!media) return;
-      const s = await collectWebRtcStats(media);
-      if (els.statBitrate && s.bitrateKbps != null) els.statBitrate.textContent = `${s.bitrateKbps} kbps`;
-      if (els.statLoss) els.statLoss.textContent = s.packetLoss != null ? `${s.packetLoss}%` : "-";
-      if (els.statRtt) els.statRtt.textContent = s.rttMs != null ? `${s.rttMs} ms` : "-";
-      if (els.statFps) els.statFps.textContent = s.fps != null ? String(s.fps) : "-";
-    }, 3e3);
-  }
-  async function bootstrap() {
-    if (!window.isSecureContext) {
-      showToast2("Use HTTPS para captura de tela confiavel", "warn");
-    }
-    hostTabBlocked = !tryAcquireHostLock();
-    if (hostTabBlocked) {
-      debugHostLog("A", "duplicate host tab blocked", { lock: readHostLock() });
-      setBadge("Aba duplicada", "error");
-      setStatus("Ja existe outro painel host aberto neste navegador. Feche a outra aba.");
-      showToast2("Feche a outra aba do painel host antes de continuar", "error");
-      return;
-    }
-    hostLockTimer = setInterval(refreshHostLock, 2e3);
-    window.addEventListener("beforeunload", () => {
-      clearInterval(hostLockTimer);
-      releaseHostLock();
-    });
-    const cohostParam = readQueryParam("cohost") === "true";
-    const tokenParam = readQueryParam("token");
-    const nomeParam = readQueryParam("nome");
-    if (cohostParam && tokenParam) {
-      hostToken = tokenParam;
-      if (nomeParam) {
-        hostDisplayName = nomeParam;
-      } else {
-        hostDisplayName = "Co-host";
-      }
-    } else {
-      try {
-        const info = await fetch("/api/info").then((r) => r.json());
-        await promptHostEntry(!!info.roomPinRequired);
-      } catch (_) {
-        await promptHostEntry(false);
-      }
-    }
-    signaling = new SignalingClient(wsUrl(), {
-      onLog: (m, l) => log(m, l),
-      onStateChange: (state) => {
-        if (state === ConnectionState.RECONNECTING) {
-          els.previewReconnecting.hidden = false;
-          setBadge("Reconectando", "warn");
-          ui.set({ wsConnected: false, wsWasConnected: true });
-        }
-        if (state === ConnectionState.CONNECTED) {
-          els.previewReconnecting.hidden = true;
-          setBadge("Online", "online");
-          ui.set({ wsConnected: true, wsWasConnected: true });
-        }
-        if (state === ConnectionState.FAILED) {
-          setBadge("Falha", "error");
-        }
-      },
-      onOpen: async () => {
-        if (hostTabBlocked) return;
-        try {
-          const isReconnect = hostSessionJoined;
-          debugHostLog("B", "ws onOpen", { isReconnect });
-          await joinHost({ autoShare: !isReconnect });
-          hostSessionJoined = true;
-          if (isReconnect) {
-            setStatus("Reconectado ao painel host");
-            showToast2("Reconectado ao servidor", "info");
-          }
-        } catch (e) {
-          errors.handle(e, "join");
-        }
-      },
-      onClose: (code, reason) => {
-        const wasAuthenticated = signaling == null ? void 0 : signaling.authenticated;
-        const hadPeer = !!hostPeerId;
-        debugHostLog("C", "ws onClose", { code, reason, wasAuthenticated, hadPeer, joinInProgress: joinInProgress2 });
-        if (code === 4e3 && !wasAuthenticated && !hadPeer) {
-          debugHostLog("G", "ignored stale 4000 during join", { code, reason });
-          return;
-        }
-        joinGeneration += 1;
-        joinInProgress2 = false;
-        hostPeerId = null;
-        hostReady = false;
-        signaling == null ? void 0 : signaling.markAuthenticated(false);
-        signaling == null ? void 0 : signaling.clearPending();
-        if (code === 4e3 && (wasAuthenticated || hadPeer)) {
-          signaling.enableReconnect = false;
-          releaseHostLock();
-          setBadge("Substituido", "error");
-          setStatus(
-            "Outro painel host assumiu esta sessao. Feche abas duplicadas ou use apenas uma URL do host."
-          );
-          showToast2("Painel host substituido - reconexao automatica desativada", "error");
-          debugHostLog("A", "host replaced - reconnect disabled", { code, reason });
-          return;
-        }
-        setStatus("Desconectado - reconectando...");
-        ui.set({ wsConnected: false });
-      }
-    });
-    signaling.addListener(handleMessage);
-    signaling.connect();
-  }
-  var _a5;
-  (_a5 = els.btnPausar) == null ? void 0 : _a5.addEventListener("click", async () => {
-    if (!canHostCommand()) return;
-    const resultPromise = signaling.onceType("pausaResultado");
-    signaling.send("pausarTransmissao", {});
-    const r = await resultPromise;
-    if (!r.ok) errors.handle(new Error(r.erro), "pausar");
-    else {
-      ui.set({ isPaused: true, hasPreview: true });
-      updatePreviewOverlays();
-      showToast2("Transmissao pausada", "info");
-    }
-  });
-  var _a6;
-  (_a6 = els.btnRetomar) == null ? void 0 : _a6.addEventListener("click", async () => {
-    if (!canHostCommand()) return;
-    const resultPromise = signaling.onceType("retomadaResultado");
-    signaling.send("retomarTransmissao", {});
-    const r = await resultPromise;
-    if (!r.ok) errors.handle(new Error(r.erro), "retomar");
-    else {
-      ui.set({ isPaused: false });
-      showToast2("Transmissao retomada", "success");
-    }
-  });
-  var _a7;
-  (_a7 = els.btnLimpar) == null ? void 0 : _a7.addEventListener("click", async () => {
-    if (!canHostCommand()) return;
-    const resultPromise = signaling.onceType("limpezaResultado");
-    signaling.send("limparTransmissao", {});
-    await resultPromise;
-    await (media == null ? void 0 : media.detachMedia({ videoEl: els.preview, audioEl: null }));
-    syncHostAudioMonitor().catch(
-      (e) => errors.handle(e, "audio-monitor")
-    );
-    estado.selecionado = null;
-    ui.set({ hasSelection: false, hasPreview: false });
-    renderLista();
-  });
-  var _a8;
-  (_a8 = els.btnGravar) == null ? void 0 : _a8.addEventListener("click", () => iniciarGravacao());
-  var _a9;
-  (_a9 = els.btnPararGravar) == null ? void 0 : _a9.addEventListener("click", () => pararGravacao());
-  var _a10;
-  (_a10 = els.btnPlayPause) == null ? void 0 : _a10.addEventListener("click", () => {
-    var _a60, _b;
-    if (ui._flags.isPaused) {
-      (_a60 = els.btnRetomar) == null ? void 0 : _a60.click();
-    } else {
-      (_b = els.btnPausar) == null ? void 0 : _b.click();
-    }
-  });
-  var _a11;
-  (_a11 = els.btnRecordingToggle) == null ? void 0 : _a11.addEventListener("click", () => {
-    if (ui._flags.isRecording) {
-      pararGravacao();
-    } else {
-      iniciarGravacao();
-    }
-  });
-  var _a12;
-  (_a12 = els.volumeSlider) == null ? void 0 : _a12.addEventListener("input", applyVolumeFromSlider);
-  var _a13;
-  (_a13 = els.btnMute) == null ? void 0 : _a13.addEventListener("click", () => {
-    audioMuted = !audioMuted;
-    applyVolumeFromSlider();
-    updateMuteButtonIcon();
-  });
-  function updateMuteButtonIcon() {
-    if (!els.btnMute) return;
-    els.btnMute.title = audioMuted ? "Ativar audio" : "Silenciar audio";
-    els.btnMute.innerHTML = audioMuted ? `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>` : `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
-  }
-  function toggleSidebarCollapsed() {
-    var _a60, _b, _c, _d, _e, _f;
-    const collapsed = !((_a60 = els.sidebar) == null ? void 0 : _a60.classList.contains("is-collapsed"));
-    (_b = els.sidebar) == null ? void 0 : _b.classList.toggle("is-collapsed", collapsed);
-    (_c = els.appMain) == null ? void 0 : _c.classList.toggle("sidebar-collapsed", collapsed);
-    (_d = els.btnSidebarCollapse) == null ? void 0 : _d.setAttribute("aria-expanded", String(!collapsed));
-    (_e = els.btnSidebarCollapse) == null ? void 0 : _e.setAttribute(
-      "aria-label",
-      collapsed ? "Expandir painel" : "Recolher painel"
-    );
-    (_f = els.btnSidebarCollapse) == null ? void 0 : _f.setAttribute("title", collapsed ? "Expandir painel" : "Recolher painel");
-  }
-  var _a14;
-  (_a14 = els.btnSidebarCollapse) == null ? void 0 : _a14.addEventListener("click", toggleSidebarCollapsed);
-  var _a15;
-  (_a15 = els.btnTech) == null ? void 0 : _a15.addEventListener("click", () => {
-    const open = els.techDrawer.hidden;
-    els.techDrawer.hidden = !open;
-    if (open) renderTechErrors();
-  });
-  var _a16;
-  (_a16 = els.btnCloseTech) == null ? void 0 : _a16.addEventListener("click", () => {
-    els.techDrawer.hidden = true;
-  });
-  async function gerarLinkExterno(guestName) {
-    const nome = String(guestName || "").trim();
-    if (!nome) {
-      showToast2("Informe o nome do convidado", "warn");
-      return;
-    }
-    try {
-      const res = await fetch("/api/link-externo", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...hostToken ? { "X-Host-Token": hostToken } : {}
-        },
-        body: JSON.stringify({ nome })
-      });
-      let data = {};
-      const raw = await res.text();
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch {
-        throw new Error(
-          res.ok ? "Resposta invalida do servidor ao gerar link" : `Servidor indisponivel (${res.status}). Verifique se o ShareScreen foi reiniciado.`
-        );
-      }
-      if (!res.ok) throw new Error(data.erro || `Falha ao gerar link externo (${res.status})`);
-      if (!data.url) throw new Error("Servidor nao retornou o link externo");
-      await navigator.clipboard.writeText(data.url);
-      const hours = Math.round((data.expiresInMs || 0) / 36e5);
-      showToast2(
-        hours ? `Link de ${nome} copiado (valido por ~${hours}h)` : `Link de ${nome} copiado`,
-        "success"
-      );
-    } catch (e) {
-      if (e.name === "NotAllowedError") {
-        showToast2("Permita acesso a area de transferencia para copiar o link", "warn");
-      } else {
-        errors.handle(e, "link-externo");
-      }
-    }
-  }
-  function copyUrl(path) {
-    const url = `${location.origin}${path}`;
-    navigator.clipboard.writeText(url).then(
-      () => showToast2("Link copiado", "success"),
-      () => showToast2(url, "info")
-    );
-  }
-  var _a17;
-  (_a17 = els.btnCopyClient) == null ? void 0 : _a17.addEventListener("click", () => copyUrl("/client"));
-  var _a18;
-  (_a18 = els.btnCopyHost) == null ? void 0 : _a18.addEventListener("click", () => copyUrl("/host"));
-  function openExternalLinkModal() {
-    var _a60;
-    if (!canHostCommand()) {
-      showToast2("Aguarde o painel conectar ao servidor", "warn");
-      return;
-    }
-    if (els.externalGuestName) els.externalGuestName.value = "";
-    if (els.externalLinkModal) els.externalLinkModal.hidden = false;
-    (_a60 = els.externalGuestName) == null ? void 0 : _a60.focus();
-  }
-  function closeExternalLinkModal() {
-    if (els.externalLinkModal) els.externalLinkModal.hidden = true;
-  }
-  async function submitExternalLink() {
-    var _a60, _b;
-    const nome = ((_a60 = els.externalGuestName) == null ? void 0 : _a60.value.trim()) || "";
-    if (!nome) {
-      showToast2("Informe o nome do convidado", "warn");
-      (_b = els.externalGuestName) == null ? void 0 : _b.focus();
-      return;
-    }
-    closeExternalLinkModal();
-    await gerarLinkExterno(nome);
-  }
-  var _a19;
-  (_a19 = els.btnExternalLink) == null ? void 0 : _a19.addEventListener("click", () => openExternalLinkModal());
-  var _a20;
-  (_a20 = els.btnExternalLinkSubmit) == null ? void 0 : _a20.addEventListener("click", () => submitExternalLink());
-  var _a21;
-  (_a21 = els.btnExternalLinkCancel) == null ? void 0 : _a21.addEventListener("click", () => closeExternalLinkModal());
-  var _a22;
-  (_a22 = els.externalGuestName) == null ? void 0 : _a22.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      submitExternalLink();
-    }
-  });
-  var _a23;
-  (_a23 = els.btnFullscreen) == null ? void 0 : _a23.addEventListener("click", () => {
-    var _a60, _b;
-    if (document.fullscreenElement) document.exitFullscreen();
-    else (_b = (_a60 = els.previewArea) == null ? void 0 : _a60.requestFullscreen) == null ? void 0 : _b.call(_a60);
-  });
-  var _a24;
-  (_a24 = els.btnFsSources) == null ? void 0 : _a24.addEventListener("click", (e) => {
-    e.stopPropagation();
-    toggleFsSourceMenu();
-  });
-  document.addEventListener("fullscreenchange", syncFsSourceUi);
-  document.addEventListener("click", (e) => {
-    var _a60, _b, _c;
-    if ((_a60 = els.fsSourceMenu) == null ? void 0 : _a60.hidden) return;
-    if (e.target === els.btnFsSources || ((_b = els.btnFsSources) == null ? void 0 : _b.contains(e.target))) return;
-    if ((_c = els.fsSourceMenu) == null ? void 0 : _c.contains(e.target)) return;
-    closeFsSourceMenu();
-  });
-  var _a25;
-  (_a25 = els.btnHostMic) == null ? void 0 : _a25.addEventListener("click", () => onHostMicClick());
-  window.addEventListener("sharescreen-ended", async () => {
-    var _a60;
-    if (recorder.isRecording()) pararGravacao();
-    try {
-      await (media == null ? void 0 : media.stopVideoShare());
-    } catch (_) {
-    }
-    ui.set({ isSharing: false });
-    updateHostMicUi();
-    signaling == null ? void 0 : signaling.send("status", {
-      status: ((_a60 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a60.call(media)) ? "transmitindo" : "conectado"
-    });
-  });
-  window.addEventListener("beforeunload", () => {
-    clearInterval(hostLockTimer);
-    releaseHostLock();
-    localHostVuStop == null ? void 0 : localHostVuStop();
-    stopRecordingCapture();
-    hostAudioMonitor == null ? void 0 : hostAudioMonitor.dispose();
-    media == null ? void 0 : media.dispose();
-    signaling == null ? void 0 : signaling.close();
-  });
-  var currentPickerPath = "";
-  async function loadDir(pathValue) {
-    const listEl = document.getElementById("dir-picker-list");
-    const pathEl = document.getElementById("dir-picker-current-path");
-    if (!listEl || !pathEl) return;
-    listEl.innerHTML = '<div style="padding: 10px; color: var(--color-text-muted);">Carregando...</div>';
-    pathEl.textContent = pathValue || "Aguarde...";
-    try {
-      const res = await fetch("/api/browse-dir", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...hostToken ? { "X-Host-Token": hostToken } : {}
-        },
-        body: JSON.stringify({ path: pathValue })
-      });
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        listEl.innerHTML = '<div style="padding: 10px; color: var(--color-danger);">Rota /api/browse-dir indispon\xEDvel no proxy. Atualize o NGINX ou acesse o host diretamente.</div>';
-        return;
-      }
-      const data = await res.json();
-      if (!data.ok) {
-        listEl.innerHTML = `<div style="padding: 10px; color: var(--color-danger);">${data.erro || "Erro ao listar"}</div>`;
-        return;
-      }
-      currentPickerPath = data.currentPath;
-      pathEl.textContent = currentPickerPath;
-      listEl.innerHTML = "";
-      const upBtn = document.getElementById("btn-dir-picker-up");
-      if (upBtn) {
-        upBtn.disabled = !data.parent;
-        upBtn.onclick = () => {
-          if (data.parent) loadDir(data.parent);
-        };
-      }
-      if (data.dirs.length === 0) {
-        listEl.innerHTML = '<div style="padding: 10px; color: var(--color-text-muted);">Pasta vazia</div>';
-        return;
-      }
-      data.dirs.forEach((dirName) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "btn btn-ghost";
-        btn.style.width = "100%";
-        btn.style.textAlign = "left";
-        btn.style.padding = "0.4rem 0.6rem";
-        btn.style.fontSize = "0.9rem";
-        btn.style.justifyContent = "flex-start";
-        btn.style.display = "flex";
-        btn.style.alignItems = "center";
-        btn.style.gap = "var(--space-xs)";
-        btn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="flex-shrink: 0;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${dirName}</span>
-      `;
-        btn.addEventListener("click", () => {
-          const separator = currentPickerPath.includes("/") ? "/" : "\\";
-          const newPath = currentPickerPath.endsWith(separator) ? `${currentPickerPath}${dirName}` : `${currentPickerPath}${separator}${dirName}`;
-          loadDir(newPath);
-        });
-        listEl.appendChild(btn);
-      });
-    } catch (e) {
-      listEl.innerHTML = `<div style="padding: 10px; color: var(--color-danger);">${e.message}</div>`;
-    }
-  }
-  function syncMeetBridgeLiveUi() {
-    if (els.chkMeetBridgeLive) {
-      els.chkMeetBridgeLive.checked = meetBridgeLiveMode;
-    }
-    const recPrefs = getRecordingAudioPrefs();
-    if (els.recMeetBridgeHint) {
-      els.recMeetBridgeHint.hidden = !(recPrefs.excludeOwnSystem || recPrefs.selectedPeerOnly || meetBridgeLiveMode);
-    }
-  }
-  function applyMeetBridgeLiveModeFromRoom(ativo) {
-    meetBridgeLiveMode = !!ativo;
-    syncMeetBridgeLiveUi();
-  }
-  function sendMeetBridgeLiveMode(ativo) {
-    meetBridgeLiveMode = !!ativo;
-    syncMeetBridgeLiveUi();
-    if (signaling && hostReady) {
-      signaling.send("definirModoPonteMeet", { ativo: meetBridgeLiveMode });
-    }
-  }
-  function getRecordingAudioPrefs() {
-    return {
-      excludeOwnSystem: localStorage.getItem(STORAGE_REC_EXCLUDE_OWN_SYSTEM) === "1",
-      selectedPeerOnly: localStorage.getItem(STORAGE_REC_SELECTED_PEER_ONLY) === "1"
-    };
-  }
-  function syncRecordingAudioPrefsUi() {
-    const prefs = getRecordingAudioPrefs();
-    if (els.recExcludeOwnSystem) {
-      els.recExcludeOwnSystem.checked = prefs.excludeOwnSystem;
-    }
-    if (els.recSelectedPeerOnly) {
-      els.recSelectedPeerOnly.checked = prefs.selectedPeerOnly;
-    }
-    syncMeetBridgeLiveUi();
-  }
-  function setRecordingAudioPref(key, value) {
-    localStorage.setItem(key, value ? "1" : "0");
-    syncRecordingAudioPrefsUi();
-  }
-  function setupRecordingAudioPrefs() {
-    var _a60, _b, _c, _d, _e;
-    syncRecordingAudioPrefsUi();
-    syncRecordingDefaultAudioClientUi();
-    (_a60 = els.recExcludeOwnSystem) == null ? void 0 : _a60.addEventListener("change", () => {
-      setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, els.recExcludeOwnSystem.checked);
-    });
-    (_b = els.recSelectedPeerOnly) == null ? void 0 : _b.addEventListener("change", () => {
-      setRecordingAudioPref(STORAGE_REC_SELECTED_PEER_ONLY, els.recSelectedPeerOnly.checked);
-    });
-    (_c = els.chkMeetBridgeLive) == null ? void 0 : _c.addEventListener("change", () => {
-      sendMeetBridgeLiveMode(!!els.chkMeetBridgeLive.checked);
-    });
-    (_d = els.btnRecMeetBridgePreset) == null ? void 0 : _d.addEventListener("click", () => {
-      setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, true);
-      setRecordingAudioPref(STORAGE_REC_SELECTED_PEER_ONLY, true);
-      if (els.recExcludeOwnSystem) els.recExcludeOwnSystem.checked = true;
-      if (els.recSelectedPeerOnly) els.recSelectedPeerOnly.checked = true;
-      sendMeetBridgeLiveMode(true);
-    });
-    (_e = els.btnRecClearDefaultAudio) == null ? void 0 : _e.addEventListener("click", () => {
-      setDefaultRecordingAudioClientName("");
-      showToast2("\xC1udio padr\xE3o da grava\xE7\xE3o removido", "info");
-      renderLista();
-    });
-  }
-  var recordingFilenamePatternReady = false;
-  function updateRecordingFilenamePatternStatus(pattern = "") {
-    if (!els.recordingFilenamePatternStatus) return;
-    const trimmed = String(pattern).trim();
-    if (!trimmed) {
-      els.recordingFilenamePatternStatus.textContent = `Padrao salvo: ${formatRecordingFilename(/* @__PURE__ */ new Date())}`;
-    } else {
-      els.recordingFilenamePatternStatus.textContent = `Padrao salvo. Exemplo: ${formatRecordingFilename(/* @__PURE__ */ new Date(), trimmed)}`;
-    }
-    els.recordingFilenamePatternStatus.hidden = false;
-  }
-  function saveRecordingFilenamePattern() {
-    var _a60;
-    const pattern = ((_a60 = els.recordingFilenamePatternInput) == null ? void 0 : _a60.value.trim()) || "";
-    if (pattern) {
-      localStorage.setItem(STORAGE_RECORDING_FILENAME_PATTERN, pattern);
-    } else {
-      localStorage.removeItem(STORAGE_RECORDING_FILENAME_PATTERN);
-    }
-    updateRecordingFilenamePatternStatus(pattern);
-    showToast2(pattern ? "Padrao de nome salvo" : "Padrao de nome restaurado ao padrao do sistema", "success");
-  }
-  function setupRecordingFilenamePattern() {
-    var _a60;
-    if (!els.recordingFilenamePatternInput || recordingFilenamePatternReady) return;
-    recordingFilenamePatternReady = true;
-    const saved = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || "";
-    els.recordingFilenamePatternInput.value = saved;
-    if (saved) updateRecordingFilenamePatternStatus(saved);
-    (_a60 = els.btnSaveFilenamePattern) == null ? void 0 : _a60.addEventListener("click", (e) => {
-      e.stopPropagation();
-      saveRecordingFilenamePattern();
-    });
-    els.recordingFilenamePatternInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        saveRecordingFilenamePattern();
-      }
-    });
-  }
-  function setupRecordingsDirInput() {
-    var _a60, _b;
-    if (!els.recordingsDirInput) return;
-    els.recordingsDirInput.value = localStorage.getItem(STORAGE_RECORDINGS_DIR) || "";
-    els.recordingsDirInput.addEventListener("input", () => {
-      localStorage.setItem(STORAGE_RECORDINGS_DIR, els.recordingsDirInput.value.trim());
-    });
-    const btnBrowse = document.getElementById("btn-browse-dir");
-    const pickerModal = document.getElementById("dir-picker-modal");
-    btnBrowse == null ? void 0 : btnBrowse.addEventListener("click", () => {
-      if (pickerModal) pickerModal.hidden = false;
-      loadDir(els.recordingsDirInput.value.trim());
-    });
-    (_a60 = document.getElementById("btn-dir-picker-cancel")) == null ? void 0 : _a60.addEventListener("click", () => {
-      if (pickerModal) pickerModal.hidden = true;
-    });
-    (_b = document.getElementById("btn-dir-picker-select")) == null ? void 0 : _b.addEventListener("click", () => {
-      if (els.recordingsDirInput && currentPickerPath) {
-        els.recordingsDirInput.value = currentPickerPath;
-        localStorage.setItem(STORAGE_RECORDINGS_DIR, currentPickerPath);
-      }
-      if (pickerModal) pickerModal.hidden = true;
-    });
-  }
-  function setupSettingsInteraction() {
-    const subdetails = document.querySelectorAll(".settings-subdetails");
-    subdetails.forEach((details) => {
-      details.addEventListener("toggle", () => {
-        if (details.open) {
-          subdetails.forEach((other) => {
-            if (other !== details && other.open) {
-              other.removeAttribute("open");
-            }
-          });
-        }
-      });
-    });
-    const settingsSection = document.getElementById("settings-details");
-    document.addEventListener("click", (e) => {
-      if (settingsSection && settingsSection.open && !settingsSection.contains(e.target)) {
-        settingsSection.removeAttribute("open");
-      }
-    });
-  }
-  var isHost = window.location.pathname.includes("/host") || !!document.getElementById("host-entry-modal");
-  var _a26;
-  if (isHost) {
-    if (els.sidebar) els.sidebar.hidden = false;
-    (_a26 = els.appMain) == null ? void 0 : _a26.classList.add("sidebar-open");
-    updateRecordingUi(RecordingState.IDLE);
-    updateMuteButtonIcon();
-    setupRecordingsDirInput();
-    setupRecordingFilenamePattern();
-    setupRecordingAudioPrefs();
-    setupSettingsInteraction();
-    installAudioUnlock(() => {
-      var _a60, _b, _c;
-      hostAudioMonitor == null ? void 0 : hostAudioMonitor.resume();
-      (_b = (_a60 = els.previewAudio) == null ? void 0 : _a60.play) == null ? void 0 : _b.call(_a60).catch(() => {
-      });
-      if (hostAudioMonitor && !((_c = hostAudioMonitor.isAutoplayBlocked) == null ? void 0 : _c.call(hostAudioMonitor))) {
-        hostMicAutoplayNeeded = false;
-        updateHostMicUi();
-      }
-    });
-  }
-  var activeContextClient = null;
-  var activeAudioFiltersClient = null;
-  bindLtOverlayResize(els.previewArea);
-  function applyLtOverlayForTransmission(_tx) {
-    hideLtOverlay();
-  }
-  function openContextMenu(e, client) {
-    activeContextClient = client;
-    const menu = $("custom-context-menu");
-    if (!menu) return;
-    const isHostCard = !!client.ehHost;
-    const isCoHost = !!client.isCoHost;
-    const isTrocaTelas = (estado.controleExibicao || []).includes(client.id);
-    const cohostBtn = $("ctx-cohost");
-    const trocaTelasBtn = $("ctx-troca-telas");
-    if (cohostBtn) {
-      cohostBtn.hidden = isHostCard;
-      if (!isHostCard) cohostBtn.classList.toggle("is-active", isCoHost);
-    }
-    if (trocaTelasBtn) {
-      trocaTelasBtn.hidden = isHostCard;
-      if (!isHostCard) trocaTelasBtn.classList.toggle("is-active", isTrocaTelas);
-    }
-    const audioBtn = $("ctx-audio");
-    if (audioBtn) audioBtn.hidden = isHostCard;
-    const recAudioBtn = $("ctx-rec-audio");
-    if (recAudioBtn) {
-      recAudioBtn.hidden = isHostCard || !client.hasAudio;
-      const isDefault = !!(client.displayName && getDefaultRecordingAudioClientName().toLowerCase() === String(client.displayName).toLowerCase());
-      recAudioBtn.classList.toggle("is-active", isDefault);
-      const textEl = recAudioBtn.querySelector(".ctx-text");
-      if (textEl) {
-        textEl.textContent = isDefault ? "Remover \xE1udio padr\xE3o da grava\xE7\xE3o" : "Definir como \xE1udio padr\xE3o da grava\xE7\xE3o";
-      }
-    }
-    menu.style.left = `${e.clientX}px`;
-    menu.style.top = `${e.clientY}px`;
-    menu.hidden = false;
-  }
-  function closeContextMenu() {
-    const menu = $("custom-context-menu");
-    if (menu) menu.hidden = true;
-    activeContextClient = null;
-  }
-  var _a27;
-  (_a27 = $("ctx-cohost")) == null ? void 0 : _a27.addEventListener("click", () => {
-    if (!activeContextClient) return;
-    const targetState = !activeContextClient.isCoHost;
-    signaling.send("definirCoHost", { peerId: activeContextClient.id, ativo: targetState });
-    closeContextMenu();
-  });
-  var _a28;
-  (_a28 = $("ctx-troca-telas")) == null ? void 0 : _a28.addEventListener("click", () => {
-    if (!activeContextClient) return;
-    const isTrocaTelas = (estado.controleExibicao || []).includes(activeContextClient.id);
-    toggleDisplayControl(activeContextClient.id, !isTrocaTelas);
-    closeContextMenu();
-  });
-  var originalAudioFilterPrefs = null;
-  var saveTimeout = null;
-  var sentAudioFilterKeys = /* @__PURE__ */ new Map();
-  function saveAudioFiltersPresetDebounced(name, prefs, kind = "client") {
-    if (saveTimeout) clearTimeout(saveTimeout);
-    const normalized = normalizeMicrophoneFilterPrefs(prefs);
-    saveTimeout = setTimeout(() => {
-      savePresetToLocalStorage(name, normalized);
-      saveAudioFilterPresetApi(kind, name, normalized).catch(() => {
-      });
-    }, 1e3);
-  }
-  function normalizeAudioFilterPrefsForClient(prefs = {}) {
-    return {
-      gain: Number(prefs.gain !== void 0 ? prefs.gain : 1),
-      bass: Number(prefs.bass || 0),
-      treble: Number(prefs.treble || 0),
-      highpass: !!prefs.highpass,
-      highpassFreq: Number(prefs.highpassFreq || 80),
-      peaking: !!prefs.peaking,
-      peakingFreq: Number(prefs.peakingFreq || 3e3),
-      peakingGain: Number(prefs.peakingGain !== void 0 ? prefs.peakingGain : 3),
-      compressor: !!prefs.compressor,
-      noiseGate: !!prefs.noiseGate,
-      noiseGateThreshold: Number(prefs.noiseGateThreshold !== void 0 ? prefs.noiseGateThreshold : -45),
-      micSensitivity: !!prefs.micSensitivity,
-      micCaptureDistance: Number(prefs.micCaptureDistance || 6)
-    };
-  }
-  function sendAudioFiltersToClient(client, prefs, { force = false } = {}) {
-    if (!(client == null ? void 0 : client.id) || !signaling || !hostReady) return;
-    if (String(client.id) === String(hostPeerId)) return;
-    const normalized = normalizeAudioFilterPrefsForClient(prefs);
-    const key = JSON.stringify(normalized);
-    const id = String(client.id);
-    if (!force && sentAudioFilterKeys.get(id) === key) return;
-    sentAudioFilterKeys.set(id, key);
-    signaling.send("definirFiltroAudioClient", { peerId: client.id, prefs: normalized });
-  }
-  function syncPublishedAudioFiltersToClients(audioSources = []) {
-    return syncPublishedAudioFiltersToClientsAsync(audioSources);
-  }
-  async function syncPublishedAudioFiltersToClientsAsync(audioSources = []) {
-    var _a60, _b;
-    const monitor = hostAudioMonitor;
-    if (!monitor) return;
-    const sent = /* @__PURE__ */ new Set();
-    for (const source of audioSources || []) {
-      if (!(source == null ? void 0 : source.peerId) || source.source !== "microphone") continue;
-      const id = String(source.peerId);
-      if (sent.has(id)) continue;
-      sent.add(id);
-      const client = estado.clients.find((c) => String(c.id) === id);
-      const displayName2 = (client == null ? void 0 : client.displayName) || source.name || ((_b = (_a60 = monitor.peerNames) == null ? void 0 : _a60.get) == null ? void 0 : _b.call(_a60, id)) || "";
-      let stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
-      if (displayName2) {
-        const apiPreset = await fetchAudioFilterPresetApi("client", displayName2);
-        if (apiPreset == null ? void 0 : apiPreset.prefs) {
-          stored = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
-          monitor.setFilterPrefs(id, stored);
-        } else if (hasActiveMicrophoneFilter(stored)) {
-          saveAudioFilterPresetApi("client", displayName2, stored).catch(() => {
-          });
-        }
-      }
-      const prefs = hasActiveMicrophoneFilter(stored) ? stored : normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
-      if (!hasActiveMicrophoneFilter(stored)) {
-        monitor.setFilterPrefs(id, prefs);
-      }
-      sendAudioFiltersToClient({ id }, prefs);
-    }
-  }
-  function getAppliedClientAudioFilterPrefs(peerId2) {
-    const id = String(peerId2);
-    const sentKey = sentAudioFilterKeys.get(id);
-    if (sentKey) {
-      try {
-        return normalizeMicrophoneFilterPrefs(JSON.parse(sentKey));
-      } catch {
-      }
-    }
-    const monitor = hostAudioMonitor;
-    if (monitor) {
-      return normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
-    }
-    return normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
-  }
-  function populateAudioFiltersUi(prefs) {
-    const gainInput = $("audio-gain");
-    if (gainInput) {
-      gainInput.value = prefs.gain !== void 0 ? prefs.gain : 1;
-      const gainVal = $("audio-gain-val");
-      if (gainVal) gainVal.textContent = `${Number(gainInput.value).toFixed(1)}x`;
-    }
-    const bassInput = $("audio-bass");
-    if (bassInput) {
-      bassInput.value = prefs.bass !== void 0 ? prefs.bass : 0;
-      const bassVal = $("audio-bass-val");
-      if (bassVal) bassVal.textContent = `${bassInput.value} dB`;
-    }
-    const trebleInput = $("audio-treble");
-    if (trebleInput) {
-      trebleInput.value = prefs.treble !== void 0 ? prefs.treble : 0;
-      const trebleVal = $("audio-treble-val");
-      if (trebleVal) trebleVal.textContent = `${trebleInput.value} dB`;
-    }
-    const hpEnabled = $("audio-hp-enabled");
-    if (hpEnabled) hpEnabled.checked = !!prefs.highpass;
-    const peakEnabled = $("audio-peak-enabled");
-    if (peakEnabled) peakEnabled.checked = !!prefs.peaking;
-    const compEnabled = $("audio-comp-enabled");
-    if (compEnabled) compEnabled.checked = !!prefs.compressor;
-    const gateEnabled = $("audio-gate-enabled");
-    if (gateEnabled) gateEnabled.checked = !!prefs.noiseGate;
-    const sensitivityEnabled = $("audio-sensitivity-enabled");
-    if (sensitivityEnabled) sensitivityEnabled.checked = !!prefs.micSensitivity;
-    const hpFreq = $("audio-hp-frequency");
-    if (hpFreq) {
-      hpFreq.value = prefs.highpassFreq || 80;
-      const hpFreqVal = $("audio-hp-freq-val");
-      if (hpFreqVal) hpFreqVal.textContent = `${hpFreq.value} Hz`;
-    }
-    const peakFreq = $("audio-peak-frequency");
-    if (peakFreq) {
-      peakFreq.value = prefs.peakingFreq || 3e3;
-      const peakFreqVal = $("audio-peak-freq-val");
-      if (peakFreqVal) peakFreqVal.textContent = `${peakFreq.value} Hz`;
-    }
-    const peakGain = $("audio-peak-gain");
-    if (peakGain) {
-      peakGain.value = prefs.peakingGain !== void 0 ? prefs.peakingGain : 3;
-      const peakGainVal = $("audio-peak-gain-val");
-      if (peakGainVal) peakGainVal.textContent = `${peakGain.value} dB`;
-    }
-    const gateThresh = $("audio-gate-threshold");
-    if (gateThresh) {
-      gateThresh.value = prefs.noiseGateThreshold !== void 0 ? prefs.noiseGateThreshold : -45;
-      const gateThreshVal = $("audio-gate-thresh-val");
-      if (gateThreshVal) gateThreshVal.textContent = `${gateThresh.value} dB`;
-    }
-    const captureDistance = $("audio-capture-distance");
-    if (captureDistance) {
-      captureDistance.value = prefs.micCaptureDistance !== void 0 ? prefs.micCaptureDistance : 6;
-      const captureDistanceVal = $("audio-capture-distance-val");
-      if (captureDistanceVal) captureDistanceVal.textContent = `${captureDistance.value}/10`;
-    }
-  }
-  function readAudioFilterPrefsFromUi() {
-    var _a60, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
-    return {
-      gain: Number(((_a60 = $("audio-gain")) == null ? void 0 : _a60.value) !== void 0 ? (_b = $("audio-gain")) == null ? void 0 : _b.value : 1),
-      bass: Number(((_c = $("audio-bass")) == null ? void 0 : _c.value) || 0),
-      treble: Number(((_d = $("audio-treble")) == null ? void 0 : _d.value) || 0),
-      highpass: !!((_e = $("audio-hp-enabled")) == null ? void 0 : _e.checked),
-      highpassFreq: Number(((_f = $("audio-hp-frequency")) == null ? void 0 : _f.value) || 80),
-      peaking: !!((_g = $("audio-peak-enabled")) == null ? void 0 : _g.checked),
-      peakingFreq: Number(((_h = $("audio-peak-frequency")) == null ? void 0 : _h.value) || 3e3),
-      peakingGain: Number(((_i = $("audio-peak-gain")) == null ? void 0 : _i.value) || 3),
-      compressor: !!((_j = $("audio-comp-enabled")) == null ? void 0 : _j.checked),
-      noiseGate: !!((_k = $("audio-gate-enabled")) == null ? void 0 : _k.checked),
-      noiseGateThreshold: Number(((_l = $("audio-gate-threshold")) == null ? void 0 : _l.value) || -45),
-      micSensitivity: !!((_m = $("audio-sensitivity-enabled")) == null ? void 0 : _m.checked),
-      micCaptureDistance: Number(((_n = $("audio-capture-distance")) == null ? void 0 : _n.value) || 6)
-    };
-  }
-  function previewAudioFiltersFromUi() {
-    const client = activeAudioFiltersClient;
-    const monitor = hostAudioMonitor;
-    if (!client || !monitor) return;
-    const prefs = readAudioFilterPrefsFromUi();
-    monitor.setFilterPrefs(client.id, prefs);
-    sendAudioFiltersToClient(client, prefs, { force: true });
-  }
-  function openAudioFiltersModal(client) {
-    if (!client) return;
-    activeAudioFiltersClient = client;
-    const monitor = hostAudioMonitor;
-    if (!monitor) {
-      showToast2("Monitor de audio nao inicializado", "warn");
-      return;
-    }
-    const prefs = getAppliedClientAudioFilterPrefs(client.id);
-    originalAudioFilterPrefs = { ...prefs };
-    const nameEl = $("audio-filters-client-name");
-    if (nameEl) nameEl.textContent = client.displayName || "-";
-    populateAudioFiltersUi(prefs);
-    const modal = $("audio-filters-modal");
-    if (modal) modal.hidden = false;
-  }
-  function saveAudioFiltersModal() {
-    const client = activeAudioFiltersClient;
-    if (!client) return;
-    const prefs = normalizeMicrophoneFilterPrefs(readAudioFilterPrefsFromUi());
-    previewAudioFiltersFromUi();
-    savePresetToLocalStorage(client.displayName, prefs);
-    saveAudioFilterPresetApi("client", client.displayName, prefs).catch(() => {
-    });
-    showToast2(`Filtros de audio atualizados para ${client.displayName}`, "success");
-    closeAudioFiltersModal(false);
-  }
-  function closeAudioFiltersModal(revert = false) {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-      saveTimeout = null;
-    }
-    const modal = $("audio-filters-modal");
-    if (modal) modal.hidden = true;
-    const client = activeAudioFiltersClient;
-    const monitor = hostAudioMonitor;
-    if (revert && client && monitor && originalAudioFilterPrefs) {
-      monitor.setFilterPrefs(client.id, originalAudioFilterPrefs);
-      sendAudioFiltersToClient(client, originalAudioFilterPrefs, { force: true });
-    }
-    activeAudioFiltersClient = null;
-    originalAudioFilterPrefs = null;
-  }
-  var _a29;
-  (_a29 = $("audio-gain")) == null ? void 0 : _a29.addEventListener("input", (e) => {
-    const el = $("audio-gain-val");
-    if (el) el.textContent = `${Number(e.target.value).toFixed(1)}x`;
-    previewAudioFiltersFromUi();
-  });
-  var _a30;
-  (_a30 = $("audio-bass")) == null ? void 0 : _a30.addEventListener("input", (e) => {
-    const el = $("audio-bass-val");
-    if (el) el.textContent = `${e.target.value} dB`;
-    previewAudioFiltersFromUi();
-  });
-  var _a31;
-  (_a31 = $("audio-treble")) == null ? void 0 : _a31.addEventListener("input", (e) => {
-    const el = $("audio-treble-val");
-    if (el) el.textContent = `${e.target.value} dB`;
-    previewAudioFiltersFromUi();
-  });
-  var _a32;
-  (_a32 = $("audio-hp-enabled")) == null ? void 0 : _a32.addEventListener("change", previewAudioFiltersFromUi);
-  var _a33;
-  (_a33 = $("audio-hp-frequency")) == null ? void 0 : _a33.addEventListener("input", (e) => {
-    const el = $("audio-hp-freq-val");
-    if (el) el.textContent = `${e.target.value} Hz`;
-    previewAudioFiltersFromUi();
-  });
-  var _a34;
-  (_a34 = $("audio-peak-enabled")) == null ? void 0 : _a34.addEventListener("change", previewAudioFiltersFromUi);
-  var _a35;
-  (_a35 = $("audio-peak-frequency")) == null ? void 0 : _a35.addEventListener("input", (e) => {
-    const el = $("audio-peak-freq-val");
-    if (el) el.textContent = `${e.target.value} Hz`;
-    previewAudioFiltersFromUi();
-  });
-  var _a36;
-  (_a36 = $("audio-peak-gain")) == null ? void 0 : _a36.addEventListener("input", (e) => {
-    const el = $("audio-peak-gain-val");
-    if (el) el.textContent = `${e.target.value} dB`;
-    previewAudioFiltersFromUi();
-  });
-  var _a37;
-  (_a37 = $("audio-comp-enabled")) == null ? void 0 : _a37.addEventListener("change", previewAudioFiltersFromUi);
-  var _a38;
-  (_a38 = $("audio-sensitivity-enabled")) == null ? void 0 : _a38.addEventListener("change", previewAudioFiltersFromUi);
-  var _a39;
-  (_a39 = $("audio-gate-enabled")) == null ? void 0 : _a39.addEventListener("change", previewAudioFiltersFromUi);
-  var _a40;
-  (_a40 = $("audio-gate-threshold")) == null ? void 0 : _a40.addEventListener("input", (e) => {
-    const el = $("audio-gate-thresh-val");
-    if (el) el.textContent = `${e.target.value} dB`;
-    previewAudioFiltersFromUi();
-  });
-  var _a41;
-  (_a41 = $("audio-capture-distance")) == null ? void 0 : _a41.addEventListener("input", (e) => {
-    const el = $("audio-capture-distance-val");
-    if (el) el.textContent = `${e.target.value}/10`;
-    previewAudioFiltersFromUi();
-  });
-  var _a42;
-  (_a42 = $("btn-audio-filters-reset")) == null ? void 0 : _a42.addEventListener("click", () => {
-    const client = activeAudioFiltersClient;
-    if (!client) return;
-    const gain = $("audio-gain");
-    if (gain) gain.value = 1;
-    const gainVal = $("audio-gain-val");
-    if (gainVal) gainVal.textContent = "1.0x";
-    const bass = $("audio-bass");
-    if (bass) bass.value = 0;
-    const bassVal = $("audio-bass-val");
-    if (bassVal) bassVal.textContent = "0 dB";
-    const treble = $("audio-treble");
-    if (treble) treble.value = 0;
-    const trebleVal = $("audio-treble-val");
-    if (trebleVal) trebleVal.textContent = "0 dB";
-    const hp = $("audio-hp-enabled");
-    if (hp) hp.checked = false;
-    const hpFreq = $("audio-hp-frequency");
-    if (hpFreq) hpFreq.value = 80;
-    const hpFreqVal = $("audio-hp-freq-val");
-    if (hpFreqVal) hpFreqVal.textContent = "80 Hz";
-    const peak = $("audio-peak-enabled");
-    if (peak) peak.checked = false;
-    const peakFreq = $("audio-peak-frequency");
-    if (peakFreq) peakFreq.value = 3e3;
-    const peakFreqVal = $("audio-peak-freq-val");
-    if (peakFreqVal) peakFreqVal.textContent = "3000 Hz";
-    const peakGain = $("audio-peak-gain");
-    if (peakGain) peakGain.value = 3;
-    const peakGainVal = $("audio-peak-gain-val");
-    if (peakGainVal) peakGainVal.textContent = "3 dB";
-    const comp = $("audio-comp-enabled");
-    if (comp) comp.checked = false;
-    const sensitivity = $("audio-sensitivity-enabled");
-    if (sensitivity) sensitivity.checked = false;
-    const gate = $("audio-gate-enabled");
-    if (gate) gate.checked = false;
-    const gateThresh = $("audio-gate-threshold");
-    if (gateThresh) gateThresh.value = -45;
-    const gateThreshVal = $("audio-gate-thresh-val");
-    if (gateThreshVal) gateThreshVal.textContent = "-45 dB";
-    const captureDistance = $("audio-capture-distance");
-    if (captureDistance) captureDistance.value = 6;
-    const captureDistanceVal = $("audio-capture-distance-val");
-    if (captureDistanceVal) captureDistanceVal.textContent = "6/10";
-    previewAudioFiltersFromUi();
-  });
-  var _a43;
-  (_a43 = $("ctx-audio")) == null ? void 0 : _a43.addEventListener("click", () => {
-    const client = activeContextClient;
-    closeContextMenu();
-    if (client) openAudioFiltersModal(client);
-  });
-  var _a44;
-  (_a44 = $("ctx-rec-audio")) == null ? void 0 : _a44.addEventListener("click", () => {
-    const client = activeContextClient;
-    closeContextMenu();
-    if (client) toggleDefaultRecordingAudioClient(client);
-  });
-  var _a45;
-  (_a45 = $("btn-audio-filters-cancel")) == null ? void 0 : _a45.addEventListener("click", () => closeAudioFiltersModal(true));
-  var _a46;
-  (_a46 = $("btn-audio-filters-save")) == null ? void 0 : _a46.addEventListener("click", saveAudioFiltersModal);
-  document.addEventListener("click", (e) => {
-    const menu = $("custom-context-menu");
-    if (menu && !menu.hidden) {
-      const isMenuClick = menu.contains(e.target) || e.target.closest(".ctx-item");
-      if (!isMenuClick) {
-        closeContextMenu();
-      }
-    }
-  });
-  function teardownCoHost() {
-    var _a60, _b, _c;
-    if (!isCoHostInstance) return;
-    isCoHostInstance = false;
-    hostReady = false;
-    if (signaling) signaling.removeListener(coHostHandleMessage);
-    if (els.sidebar) els.sidebar.hidden = true;
-    (_a60 = els.appMain) == null ? void 0 : _a60.classList.remove("sidebar-open");
-    (_b = els.appMain) == null ? void 0 : _b.classList.remove("sidebar-collapsed");
-    (_c = els.sidebar) == null ? void 0 : _c.classList.remove("is-collapsed");
-    if (els.btnSidebarCollapse) {
-      els.btnSidebarCollapse.setAttribute("aria-expanded", "false");
-    }
-  }
-  function initCoHost(clientSignaling, clientMedia, clientPeerId) {
-    var _a60;
-    signaling = clientSignaling;
-    media = clientMedia;
-    hostPeerId = clientPeerId;
-    isCoHostInstance = true;
-    hostReady = true;
-    if (els.sidebar) els.sidebar.hidden = false;
-    (_a60 = els.appMain) == null ? void 0 : _a60.classList.add("sidebar-open");
-    updateRecordingUi(RecordingState.IDLE);
-    updateMuteButtonIcon();
-    setupRecordingsDirInput();
-    setupRecordingFilenamePattern();
-    setupRecordingAudioPrefs();
-    setupSettingsInteraction();
-    installAudioUnlock(() => {
-      var _a61, _b, _c;
-      hostAudioMonitor == null ? void 0 : hostAudioMonitor.resume();
-      (_b = (_a61 = els.previewAudio) == null ? void 0 : _a61.play) == null ? void 0 : _b.call(_a61).catch(() => {
-      });
-      if (hostAudioMonitor && !((_c = hostAudioMonitor.isAutoplayBlocked) == null ? void 0 : _c.call(hostAudioMonitor))) {
-        hostMicAutoplayNeeded = false;
-        updateHostMicUi();
-      }
-    });
-    signaling.addListener(coHostHandleMessage);
-    signaling.send("solicitarEstado", {});
-  }
-  var isHostPage = window.location.pathname.includes("/host");
-  if (isHostPage) {
-    bootstrap();
-  }
-
-  // src/client/app.js
-  var STORAGE_NAME = "sharescreen_client_name";
-  var STORAGE_MACHINE = "sharescreen_agent_hostname";
-  function readQueryParam2(key) {
-    var _a60;
-    try {
-      return ((_a60 = new URLSearchParams(location.search).get(key)) == null ? void 0 : _a60.trim()) || "";
-    } catch {
-      return "";
-    }
-  }
-  var $2 = (id) => document.getElementById(id);
-  var els2 = {
-    overlay: $2("overlay"),
-    nomeInput: $2("nome-input"),
-    pinWrap: $2("pin-wrap"),
-    clientPinInput: $2("client-pin-input"),
-    chkSystemAudio: $2("chk-system-audio"),
-    chkMicrophone: $2("chk-microphone"),
-    chkViewerOnly: $2("chk-viewer-only"),
-    micWrap: $2("mic-picker-wrap"),
-    micSelect: $2("mic-select"),
-    btnRefreshMics: $2("btn-refresh-mics"),
-    vuFill: $2("vu-fill"),
-    btnSalvarNome: $2("btn-salvar-nome"),
-    btnViewerEnter: $2("btn-viewer-enter"),
-    btnEditarNome: $2("btn-editar-nome"),
-    video: $2("video-remoto"),
-    audio: $2("audio-remoto"),
-    statusBar: $2("status-bar"),
-    statusBadge: $2("client-status-badge"),
-    stateSharing: $2("state-sharing"),
-    stateSelected: $2("state-selected"),
-    stateWatching: $2("state-watching"),
-    stateWaiting: $2("state-waiting"),
-    statePaused: $2("state-paused"),
-    stateInterrupted: $2("state-interrupted"),
-    interruptedMessage: $2("interrupted-message"),
-    stateFinalized: $2("state-finalized"),
-    finalizedMessage: $2("finalized-message"),
-    watchingLabel: $2("watching-label"),
-    erro: $2("erro-box"),
-    btnClientMic: $2("btn-client-mic"),
-    btnSettings: $2("btn-settings"),
-    settingsModal: $2("settings-modal"),
-    settingsNomeInput: $2("settings-nome-input"),
-    settingsChkSystem: $2("settings-chk-system-audio"),
-    settingsChkMic: $2("settings-chk-microphone"),
-    settingsMicWrap: $2("settings-mic-picker-wrap"),
-    settingsMicSelect: $2("settings-mic-select"),
-    settingsBtnRefreshMics: $2("settings-btn-refresh-mics"),
-    btnSettingsSave: $2("btn-settings-save"),
-    btnSettingsClose: $2("btn-settings-close"),
-    btnFullscreen: $2("btn-fullscreen"),
-    btnFsSources: $2("btn-fs-sources"),
-    fsSourceMenu: $2("fs-source-menu"),
-    fsSourceList: $2("fs-source-list"),
-    clientMain: document.querySelector(".client-main"),
-    previewArea: $2("preview-area"),
-    streamSourceBadge: $2("stream-source-badge"),
-    insecureWarning: $2("insecure-warning"),
-    onboardIntro: $2("onboard-intro"),
-    onboardStepIdentify: $2("onboard-step-identify"),
-    onboardStepAudio: $2("onboard-step-audio"),
-    onboardStepsIdentify: $2("onboard-steps-identify"),
-    onboardStepsAudio: $2("onboard-steps-audio")
-  };
-  var signaling2 = null;
-  var media2 = null;
   var peerId = null;
-  var displayName = readQueryParam2("nome") || localStorage.getItem(STORAGE_NAME) || "";
-  var agentHostname = readQueryParam2("maquina") || localStorage.getItem(STORAGE_MACHINE) || "";
+  var displayName = readQueryParam("nome") || localStorage.getItem(STORAGE_NAME) || "";
+  var agentHostname = readQueryParam("maquina") || localStorage.getItem(STORAGE_MACHINE) || "";
   var pendingTransmission = null;
   var pendingAudioSources = null;
-  var pendingRoomSnapshot2 = null;
+  var pendingRoomSnapshot = null;
   var pendingMicrophoneFilterPrefs = null;
   var sessionStarted = false;
   var sessionReady = false;
@@ -19811,13 +16611,14 @@ ${entry.technical}`;
   var clientMicAutoplayNeeded = false;
   var syncClientAudioPromise = null;
   var syncClientAudioPending = false;
-  var lastAudioSources2 = [];
-  var lastAppliedAudioSig2 = "";
-  var fontesAudioDebounceTimer2 = null;
-  var hostPeerId2 = null;
-  var meetBridgeLiveMode2 = false;
+  var lastAudioSources = [];
+  var lastAppliedAudioSig = "";
+  var fontesAudioDebounceTimer = null;
+  var hostPeerId = null;
+  var meetBridgeLiveMode = false;
   var audioHealthTimer = null;
   var deferScreenShareOnJoin = false;
+  var skipJoinPublishOnJoin = false;
   var pendingPostPublishRemoteWork = null;
   var clientDisplayStream = null;
   var clientMicTrack = null;
@@ -19826,130 +16627,163 @@ ${entry.technical}`;
   var joinInFlight = false;
   var bootstrapPromise = null;
   var clientJoinPromise = null;
-  var roomPin2 = readQueryParam2("pin") || "";
+  var roomPin = readQueryParam("pin") || "";
   var displayControlActive = false;
   var displaySources = [];
-  var viewerAccessToken = readQueryParam2("token") || "";
+  var clientSession = new ClientSession();
+  var mediaPublisher = null;
+  var suppressShareEndedHandler = false;
+  var publisherSessionPromise = null;
+  var publisherFlowPromise = null;
+  var captureScreenInFlight = false;
+  var publisherFlowGeneration = 0;
+  var publisherConnection = new PublisherConnection();
+  function ensureAgentHostname() {
+    var _a14, _b;
+    if (agentHostname) return agentHostname;
+    let id = localStorage.getItem(STORAGE_MACHINE_ID);
+    if (!id) {
+      id = ((_b = (_a14 = globalThis.crypto) == null ? void 0 : _a14.randomUUID) == null ? void 0 : _b.call(_a14)) || `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(STORAGE_MACHINE_ID, id);
+    }
+    agentHostname = id;
+    localStorage.setItem(STORAGE_MACHINE, id);
+    return agentHostname;
+  }
+  function beginPublisherFlow() {
+    publisherFlowGeneration += 1;
+    publisherConnection.reset();
+    return publisherFlowGeneration;
+  }
+  function isPublisherFlowCurrent(gen) {
+    return gen === publisherFlowGeneration;
+  }
+  function shouldIgnorePublisherFailure(gen) {
+    var _a14;
+    return !isPublisherFlowCurrent(gen) || !!((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media));
+  }
+  var viewerAccessToken = readQueryParam("token") || "";
   var hasExternalAccessToken = !!viewerAccessToken;
-  var autoViewerEntry = !hasExternalAccessToken && (readQueryParam2("espectador") === "1" || readQueryParam2("viewer") === "1");
+  var autoViewerEntry = !hasExternalAccessToken && (readQueryParam("espectador") === "1" || readQueryParam("viewer") === "1");
   var vu = new VuMeter();
-  var mutedClients2 = /* @__PURE__ */ new Set();
-  function applyClientAudioMute2() {
-    roomAudioMonitor == null ? void 0 : roomAudioMonitor.setManualMuted(mutedClients2);
+  var mutedClients = /* @__PURE__ */ new Set();
+  function applyClientAudioMute() {
+    roomAudioMonitor == null ? void 0 : roomAudioMonitor.setManualMuted(mutedClients);
   }
   function syncOwnMicMuteFromRoom() {
-    var _a60;
-    if (!peerId || !((_a60 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a60.call(media2))) return;
-    const selfMuted = mutedClients2.has(String(peerId));
-    if (media2.isPublishedAudioMuted() !== selfMuted) {
-      media2.setPublishedAudioMuted(selfMuted);
+    var _a14;
+    if (!peerId || !((_a14 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a14.call(media))) return;
+    const selfMuted = mutedClients.has(String(peerId));
+    if (media.isPublishedAudioMuted() !== selfMuted) {
+      media.setPublishedAudioMuted(selfMuted);
     }
     updateClientMicUi();
   }
-  var errors2 = new ErrorManager({
+  var errors = new ErrorManager({
     onToast: (m, t) => showToast(m, t),
     onTechnicalLog: (m) => console.error(m)
   });
-  if (readQueryParam2("nome") && !readQueryParam2("token")) {
-    localStorage.setItem(STORAGE_NAME, readQueryParam2("nome"));
+  if (readQueryParam("nome") && !readQueryParam("token")) {
+    localStorage.setItem(STORAGE_NAME, readQueryParam("nome"));
   }
-  if (readQueryParam2("maquina")) localStorage.setItem(STORAGE_MACHINE, readQueryParam2("maquina"));
-  bindLtOverlayResize(els2.previewArea);
+  if (readQueryParam("maquina")) localStorage.setItem(STORAGE_MACHINE, readQueryParam("maquina"));
+  ensureAgentHostname();
+  bindLtOverlayResize(els.previewArea);
   function updateClientStates(mode, _tx, opts = {}) {
     const hideAllOverlays = mode === "idle";
-    els2.stateSharing.hidden = hideAllOverlays || mode !== "sharing";
-    els2.stateSelected.hidden = hideAllOverlays || mode !== "selected";
-    els2.stateWatching.hidden = hideAllOverlays || mode !== "watching" || !!opts.hideWatchingBanner;
-    els2.stateWaiting.hidden = hideAllOverlays || mode !== "waiting";
-    els2.statePaused.hidden = hideAllOverlays || mode !== "paused";
-    if (els2.stateInterrupted) els2.stateInterrupted.hidden = hideAllOverlays || mode !== "interrupted";
-    if (els2.stateFinalized) els2.stateFinalized.hidden = hideAllOverlays || mode !== "finalized";
+    els.stateSharing.hidden = hideAllOverlays || mode !== "sharing";
+    els.stateSelected.hidden = hideAllOverlays || mode !== "selected";
+    els.stateWatching.hidden = hideAllOverlays || mode !== "watching" || !!opts.hideWatchingBanner;
+    els.stateWaiting.hidden = hideAllOverlays || mode !== "waiting";
+    els.statePaused.hidden = hideAllOverlays || mode !== "paused";
+    if (els.stateInterrupted) els.stateInterrupted.hidden = hideAllOverlays || mode !== "interrupted";
+    if (els.stateFinalized) els.stateFinalized.hidden = hideAllOverlays || mode !== "finalized";
   }
   var txSync = new TransmissionSync({
-    getMedia: () => media2,
-    getVideoEl: () => els2.video,
+    getMedia: () => media,
+    getVideoEl: () => els.video,
     getPeerId: () => peerId,
     isViewerOnly: () => viewerOnly,
     onStateChange: (mode, _tx, opts) => updateClientStates(mode, _tx, opts),
-    onStatus: (text) => setStatus2(text),
-    onLtOverlay: (tx) => applyLtOverlayForTransmission2(tx),
+    onStatus: (text) => setStatus(text),
+    onLtOverlay: (tx) => applyLtOverlayForTransmission(tx),
     onAutoplayBlocked: () => onRemoteAudioAutoplayBlocked(),
     onError: (e) => {
-      const entry = errors2.handle(e, "consume");
+      const entry = errors.handle(e, "consume");
       showErro(entry.friendly, entry.technical);
     },
-    getInterruptedMessageEl: () => els2.interruptedMessage,
-    getFinalizedMessageEl: () => els2.finalizedMessage,
-    getWatchingLabelEl: () => els2.watchingLabel
+    getInterruptedMessageEl: () => els.interruptedMessage,
+    getFinalizedMessageEl: () => els.finalizedMessage,
+    getWatchingLabelEl: () => els.watchingLabel
   });
   function updateClientStreamBadge(tx) {
     const raw = tx ?? txSync.lastActiveTransmission;
     if (!raw) {
-      updateStreamSourceBadge(els2.streamSourceBadge, "", false);
+      updateStreamSourceBadge(els.streamSourceBadge, "", false);
       return;
     }
     const normalized = normalizeTransmission(raw);
     const active = hasActiveVideo(normalized) && !normalized.paused;
     if (!active) {
-      updateStreamSourceBadge(els2.streamSourceBadge, "", false);
+      updateStreamSourceBadge(els.streamSourceBadge, "", false);
       return;
     }
     if (String(normalized.selectedPeerId) === String(peerId)) {
-      updateStreamSourceBadge(els2.streamSourceBadge, displayName || getNome(), true);
+      updateStreamSourceBadge(els.streamSourceBadge, displayName || getNome(), true);
       return;
     }
-    updateStreamSourceBadge(els2.streamSourceBadge, normalized.peerName, true);
+    updateStreamSourceBadge(els.streamSourceBadge, normalized.peerName, true);
   }
-  function applyLtOverlayForTransmission2(tx) {
+  function applyLtOverlayForTransmission(tx) {
     updateClientStreamBadge(tx);
     hideLtOverlay();
   }
   var capturePrefs = loadCapturePrefs();
-  if (els2.chkSystemAudio) els2.chkSystemAudio.checked = capturePrefs.systemAudio !== false;
-  if (els2.chkMicrophone) els2.chkMicrophone.checked = !!capturePrefs.microphone;
+  if (els.chkSystemAudio) els.chkSystemAudio.checked = capturePrefs.systemAudio !== false;
+  if (els.chkMicrophone) els.chkMicrophone.checked = !!capturePrefs.microphone;
   setupMicrophonePicker({
-    checkbox: els2.chkMicrophone,
-    wrap: els2.micWrap,
-    select: els2.micSelect,
-    refreshBtn: els2.btnRefreshMics,
+    checkbox: els.chkMicrophone,
+    wrap: els.micWrap,
+    select: els.micSelect,
+    refreshBtn: els.btnRefreshMics,
     savedDeviceId: capturePrefs.microphoneDeviceId || "",
-    onLog: setStatus2,
+    onLog: setStatus,
     onError: (m) => showErro(m)
   });
-  var _a47;
-  (_a47 = els2.micSelect) == null ? void 0 : _a47.addEventListener("change", () => {
+  var _a;
+  (_a = els.micSelect) == null ? void 0 : _a.addEventListener("change", () => {
     saveCapturePrefs(getCapturePrefsFromUi());
     releaseClientMicTrack();
     attachVuMeterIfNeeded();
   });
-  var _a48;
-  (_a48 = els2.chkMicrophone) == null ? void 0 : _a48.addEventListener("change", () => {
-    var _a60;
+  var _a2;
+  (_a2 = els.chkMicrophone) == null ? void 0 : _a2.addEventListener("change", () => {
+    var _a14;
     saveCapturePrefs(getCapturePrefsFromUi());
-    if (!((_a60 = els2.chkMicrophone) == null ? void 0 : _a60.checked)) releaseClientMicTrack();
+    if (!((_a14 = els.chkMicrophone) == null ? void 0 : _a14.checked)) releaseClientMicTrack();
     updateClientMicUi();
     attachVuMeterIfNeeded();
   });
-  var _a49;
-  (_a49 = els2.chkSystemAudio) == null ? void 0 : _a49.addEventListener("change", () => saveCapturePrefs(getCapturePrefsFromUi()));
+  var _a3;
+  (_a3 = els.chkSystemAudio) == null ? void 0 : _a3.addEventListener("change", () => saveCapturePrefs(getCapturePrefsFromUi()));
   setupMicrophonePicker({
-    checkbox: els2.settingsChkMic,
-    wrap: els2.settingsMicWrap,
-    select: els2.settingsMicSelect,
-    refreshBtn: els2.settingsBtnRefreshMics,
+    checkbox: els.settingsChkMic,
+    wrap: els.settingsMicWrap,
+    select: els.settingsMicSelect,
+    refreshBtn: els.settingsBtnRefreshMics,
     savedDeviceId: capturePrefs.microphoneDeviceId || "",
-    onLog: setStatus2,
+    onLog: setStatus,
     onError: (m) => showErro(m)
   });
   function updateClientMicUi() {
-    var _a60, _b;
-    const btn = els2.btnClientMic;
+    var _a14, _b;
+    const btn = els.btnClientMic;
     if (!btn) return;
-    const micPublished = (_a60 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a60.call(media2);
+    const micPublished = (_a14 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a14.call(media);
     const show = micPublished || clientMicAutoplayNeeded;
     btn.hidden = !show;
     if (!show) return;
-    const muted = (_b = media2 == null ? void 0 : media2.isPublishedAudioMuted) == null ? void 0 : _b.call(media2);
+    const muted = (_b = media == null ? void 0 : media.isPublishedAudioMuted) == null ? void 0 : _b.call(media);
     btn.classList.toggle("is-muted", !!muted || clientMicAutoplayNeeded);
     btn.title = clientMicAutoplayNeeded ? "Ativar audio" : muted ? "Ativar microfone" : "Silenciar microfone";
     const svgOn = btn.querySelector(".mic-icon-on");
@@ -19963,79 +16797,79 @@ ${entry.technical}`;
     }
   }
   async function onClientMicClick() {
-    var _a60, _b;
-    if (!els2.btnClientMic) return;
+    var _a14, _b;
+    if (!els.btnClientMic) return;
     try {
       if (clientMicAutoplayNeeded) {
         await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.resume());
-        roomAudioMonitor == null ? void 0 : roomAudioMonitor.connectOutput(els2.audio);
-        await ((_a60 = els2.audio) == null ? void 0 : _a60.play());
+        roomAudioMonitor == null ? void 0 : roomAudioMonitor.connectOutput(els.audio);
+        await ((_a14 = els.audio) == null ? void 0 : _a14.play());
         clientMicAutoplayNeeded = false;
         updateClientMicUi();
         showToast("Audio ativado", "success");
         return;
       }
-      if (!((_b = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _b.call(media2)) || !peerId) return;
-      const muted = !media2.isPublishedAudioMuted();
-      media2.setPublishedAudioMuted(muted);
-      signaling2.send("definirClientMute", { peerId, muted });
+      if (!((_b = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _b.call(media)) || !peerId) return;
+      const muted = !media.isPublishedAudioMuted();
+      media.setPublishedAudioMuted(muted);
+      signaling.send("definirClientMute", { peerId, muted });
       updateClientMicUi();
       showToast(muted ? "Microfone silenciado" : "Microfone ativado", "info");
     } catch (e) {
-      errors2.handle(e, "mic-toggle");
+      errors.handle(e, "mic-toggle");
     }
   }
   function applyCapturePrefsToUi(prefs) {
-    if (els2.chkSystemAudio) els2.chkSystemAudio.checked = prefs.systemAudio !== false;
-    if (els2.chkMicrophone) els2.chkMicrophone.checked = !!prefs.microphone;
-    if (els2.micWrap) els2.micWrap.hidden = !prefs.microphone;
-    if (els2.micSelect && prefs.microphoneDeviceId) {
-      els2.micSelect.value = prefs.microphoneDeviceId;
+    if (els.chkSystemAudio) els.chkSystemAudio.checked = prefs.systemAudio !== false;
+    if (els.chkMicrophone) els.chkMicrophone.checked = !!prefs.microphone;
+    if (els.micWrap) els.micWrap.hidden = !prefs.microphone;
+    if (els.micSelect && prefs.microphoneDeviceId) {
+      els.micSelect.value = prefs.microphoneDeviceId;
     }
-    if (els2.settingsChkSystem) els2.settingsChkSystem.checked = prefs.systemAudio !== false;
-    if (els2.settingsChkMic) els2.settingsChkMic.checked = !!prefs.microphone;
-    if (els2.settingsMicWrap) els2.settingsMicWrap.hidden = !prefs.microphone;
-    if (els2.settingsMicSelect && prefs.microphoneDeviceId) {
-      els2.settingsMicSelect.value = prefs.microphoneDeviceId;
+    if (els.settingsChkSystem) els.settingsChkSystem.checked = prefs.systemAudio !== false;
+    if (els.settingsChkMic) els.settingsChkMic.checked = !!prefs.microphone;
+    if (els.settingsMicWrap) els.settingsMicWrap.hidden = !prefs.microphone;
+    if (els.settingsMicSelect && prefs.microphoneDeviceId) {
+      els.settingsMicSelect.value = prefs.microphoneDeviceId;
     }
   }
   function getSettingsPrefsFromModal() {
     return {
-      systemAudio: els2.settingsChkSystem ? els2.settingsChkSystem.checked : false,
-      microphone: els2.settingsChkMic ? els2.settingsChkMic.checked : false,
-      microphoneDeviceId: els2.settingsMicSelect ? els2.settingsMicSelect.value : ""
+      systemAudio: els.settingsChkSystem ? els.settingsChkSystem.checked : false,
+      microphone: els.settingsChkMic ? els.settingsChkMic.checked : false,
+      microphoneDeviceId: els.settingsMicSelect ? els.settingsMicSelect.value : ""
     };
   }
   async function openSettingsModal() {
     const prefs = loadCapturePrefs();
     applyCapturePrefsToUi(prefs);
-    if (els2.settingsNomeInput) els2.settingsNomeInput.value = displayName || getNome();
+    if (els.settingsNomeInput) els.settingsNomeInput.value = displayName || getNome();
     try {
-      await populateMicrophoneSelect(els2.settingsMicSelect, {
+      await populateMicrophoneSelect(els.settingsMicSelect, {
         deviceId: prefs.microphoneDeviceId || "",
-        onLog: setStatus2
+        onLog: setStatus
       });
       if (prefs.microphoneDeviceId) {
-        els2.settingsMicSelect.value = prefs.microphoneDeviceId;
+        els.settingsMicSelect.value = prefs.microphoneDeviceId;
       }
     } catch (e) {
       showToast("Nao foi possivel listar microfones", "warn");
     }
-    if (els2.settingsModal) els2.settingsModal.hidden = false;
+    if (els.settingsModal) els.settingsModal.hidden = false;
   }
   function closeSettingsModal() {
-    if (els2.settingsModal) els2.settingsModal.hidden = true;
+    if (els.settingsModal) els.settingsModal.hidden = true;
   }
   async function saveSettingsModal() {
-    var _a60, _b;
+    var _a14, _b;
     const prefs = getSettingsPrefsFromModal();
-    const newName = (_b = (_a60 = els2.settingsNomeInput) == null ? void 0 : _a60.value) == null ? void 0 : _b.trim();
+    const newName = (_b = (_a14 = els.settingsNomeInput) == null ? void 0 : _a14.value) == null ? void 0 : _b.trim();
     if (newName) {
       displayName = newName;
       localStorage.setItem(STORAGE_NAME, newName);
-      if (els2.nomeInput) els2.nomeInput.value = newName;
-      if (signaling2 == null ? void 0 : signaling2.authenticated) {
-        signaling2.send("atualizarNome", { nome: newName });
+      if (els.nomeInput) els.nomeInput.value = newName;
+      if (signaling == null ? void 0 : signaling.authenticated) {
+        signaling.send("atualizarNome", { nome: newName });
       }
       try {
         await fetch("/api/registro-cliente", {
@@ -20050,11 +16884,11 @@ ${entry.technical}`;
     applyCapturePrefsToUi(prefs);
     saveCapturePrefs(prefs);
     closeSettingsModal();
-    if (sessionReady && media2 && !viewerOnly) {
-      media2.syncPublishedAudio(prefs).then(() => {
+    if (sessionReady && media && !viewerOnly) {
+      media.syncPublishedAudio(prefs).then(() => {
         attachVuMeterIfNeeded();
         updateClientMicUi();
-      }).catch((e) => errors2.handle(e, "audio-prefs"));
+      }).catch((e) => errors.handle(e, "audio-prefs"));
     }
   }
   function onRemoteAudioAutoplayBlocked() {
@@ -20064,54 +16898,54 @@ ${entry.technical}`;
   function clientAudioNormalizeOptions() {
     return {
       excludePeerId: peerId,
-      excludeSourceTypes: meetBridgeLiveMode2 ? ["system"] : []
+      excludeSourceTypes: meetBridgeLiveMode ? ["system"] : []
     };
   }
   function expectedAudioSourceCount() {
-    return normalizeRemoteAudioSources(lastAudioSources2, clientAudioNormalizeOptions()).length;
+    return normalizeRemoteAudioSources(lastAudioSources, clientAudioNormalizeOptions()).length;
   }
   async function applyMeetBridgeLiveMode(ativo, { forceSync = true } = {}) {
     const next = !!ativo;
-    if (next === meetBridgeLiveMode2 && !forceSync) return;
-    meetBridgeLiveMode2 = next;
-    lastAppliedAudioSig2 = "";
+    if (next === meetBridgeLiveMode && !forceSync) return;
+    meetBridgeLiveMode = next;
+    lastAppliedAudioSig = "";
     if (sessionReady && forceSync) {
-      await syncClientAudioMonitor(lastAudioSources2, { force: true }).catch(
-        (e) => errors2.handle(e, "audio-sync")
+      await syncClientAudioMonitor(lastAudioSources, { force: true }).catch(
+        (e) => errors.handle(e, "audio-sync")
       );
     }
   }
   function countActiveAudioChannels(monitor) {
-    var _a60;
-    return ((_a60 = monitor == null ? void 0 : monitor.countLiveChannels) == null ? void 0 : _a60.call(monitor)) ?? 0;
+    var _a14;
+    return ((_a14 = monitor == null ? void 0 : monitor.countLiveChannels) == null ? void 0 : _a14.call(monitor)) ?? 0;
   }
   function applyHostPeerFromSnapshot(parsed = {}) {
-    var _a60, _b;
-    const nextHostId = ((_a60 = parsed.host) == null ? void 0 : _a60.id) || null;
+    var _a14, _b;
+    const nextHostId = ((_a14 = parsed.host) == null ? void 0 : _a14.id) || null;
     if (nextHostId) {
-      hostPeerId2 = String(nextHostId);
-      (_b = roomAudioMonitor == null ? void 0 : roomAudioMonitor.setPinnedPeerIds) == null ? void 0 : _b.call(roomAudioMonitor, [hostPeerId2]);
+      hostPeerId = String(nextHostId);
+      (_b = roomAudioMonitor == null ? void 0 : roomAudioMonitor.setPinnedPeerIds) == null ? void 0 : _b.call(roomAudioMonitor, [hostPeerId]);
     }
   }
   async function repairAllAudioIfNeeded() {
-    var _a60, _b, _c;
-    if (!media2 || !sessionReady) return;
+    var _a14, _b, _c;
+    if (!media || !sessionReady) return;
     const monitor = ensureClientAudioMonitor();
     if (!monitor) return;
     const expected = expectedAudioSourceCount();
     if (!expected) return;
     const active = countActiveAudioChannels(monitor);
     if (active >= expected) {
-      await ((_a60 = monitor.recoverOutputIfSilent) == null ? void 0 : _a60.call(monitor));
+      await ((_a14 = monitor.recoverOutputIfSilent) == null ? void 0 : _a14.call(monitor));
       return;
     }
-    if (hostPeerId2) monitor.setPinnedPeerIds([hostPeerId2]);
+    if (hostPeerId) monitor.setPinnedPeerIds([hostPeerId]);
     audioTrace("audio-health", {
       event: "repair-all",
       expected,
       active
     });
-    const list = normalizeRemoteAudioSources(lastAudioSources2, clientAudioNormalizeOptions());
+    const list = normalizeRemoteAudioSources(lastAudioSources, clientAudioNormalizeOptions());
     const backoffs = [0, 400, 800, 1600];
     for (const delay of backoffs) {
       if (delay) await new Promise((r) => setTimeout(r, delay));
@@ -20119,10 +16953,10 @@ ${entry.technical}`;
       if (countActiveAudioChannels(monitor) >= expected) break;
     }
     await ((_b = monitor.recoverOutputIfSilent) == null ? void 0 : _b.call(monitor));
-    monitor.connectOutput(els2.audio);
+    monitor.connectOutput(els.audio);
     await monitor.resume();
     try {
-      await ((_c = els2.audio) == null ? void 0 : _c.play());
+      await ((_c = els.audio) == null ? void 0 : _c.play());
     } catch (_) {
       onRemoteAudioAutoplayBlocked();
     }
@@ -20146,44 +16980,44 @@ ${entry.technical}`;
     audioHealthTimer = null;
   }
   function ensureClientAudioMonitor() {
-    if (!media2) return null;
+    if (!media) return null;
     if (!roomAudioMonitor) {
-      roomAudioMonitor = new HostAudioMonitor(media2, {
+      roomAudioMonitor = new HostAudioMonitor(media, {
         excludePeerId: peerId,
-        pinnedPeerIds: hostPeerId2 ? [hostPeerId2] : [],
+        pinnedPeerIds: hostPeerId ? [hostPeerId] : [],
         onAutoplayBlocked: onRemoteAudioAutoplayBlocked
       });
-      roomAudioMonitor.connectOutput(els2.audio);
-      roomAudioMonitor.setManualMuted(mutedClients2);
+      roomAudioMonitor.connectOutput(els.audio);
+      roomAudioMonitor.setManualMuted(mutedClients);
     } else if (peerId) {
       roomAudioMonitor.excludePeerId = String(peerId);
-      if (hostPeerId2) roomAudioMonitor.setPinnedPeerIds([hostPeerId2]);
+      if (hostPeerId) roomAudioMonitor.setPinnedPeerIds([hostPeerId]);
     }
     return roomAudioMonitor;
   }
   async function syncClientAudioMonitor(sources, { force = false } = {}) {
-    if (!peerId || !media2) return;
+    if (!peerId || !media) return;
     if (syncClientAudioPromise) {
       syncClientAudioPending = true;
       return syncClientAudioPromise;
     }
     syncClientAudioPromise = (async () => {
-      var _a60, _b, _c;
+      var _a14, _b, _c;
       do {
         syncClientAudioPending = false;
-        if (!media2 || !peerId) return;
-        await media2.ensureRecvTransport(media2._audioRecvTag());
+        if (!media || !peerId) return;
+        await media.ensureRecvTransport(media._audioRecvTag());
         const monitor = ensureClientAudioMonitor();
         if (!monitor) return;
         const list = normalizeRemoteAudioSources(
-          (sources == null ? void 0 : sources.length) ? sources : lastAudioSources2,
+          (sources == null ? void 0 : sources.length) ? sources : lastAudioSources,
           clientAudioNormalizeOptions()
         );
-        if (sources == null ? void 0 : sources.length) lastAudioSources2 = sources;
+        if (sources == null ? void 0 : sources.length) lastAudioSources = sources;
         const sig = audioSourcesSignature(list);
         const expected = list.length;
         const active = countActiveAudioChannels(monitor);
-        if (!force && sig === lastAppliedAudioSig2 && (expected > 0 && active >= expected || expected === 0 && active === 0)) {
+        if (!force && sig === lastAppliedAudioSig && (expected > 0 && active >= expected || expected === 0 && active === 0)) {
           return;
         }
         await monitor.syncFromSources(list);
@@ -20193,26 +17027,26 @@ ${entry.technical}`;
           await new Promise((r) => setTimeout(r, retryBackoffs[retryCycle]));
           retryCycle += 1;
           await monitor.syncFromSources(
-            normalizeRemoteAudioSources(lastAudioSources2, clientAudioNormalizeOptions())
+            normalizeRemoteAudioSources(lastAudioSources, clientAudioNormalizeOptions())
           );
         }
-        await ((_a60 = monitor.recoverOutputIfSilent) == null ? void 0 : _a60.call(monitor));
-        monitor.connectOutput(els2.audio);
+        await ((_a14 = monitor.recoverOutputIfSilent) == null ? void 0 : _a14.call(monitor));
+        monitor.connectOutput(els.audio);
         await monitor.resume();
-        if (((_b = monitor.isAutoplayBlocked) == null ? void 0 : _b.call(monitor)) || monitor.channelCount > 0 && ((_c = els2.audio) == null ? void 0 : _c.paused)) {
+        if (((_b = monitor.isAutoplayBlocked) == null ? void 0 : _b.call(monitor)) || monitor.channelCount > 0 && ((_c = els.audio) == null ? void 0 : _c.paused)) {
           onRemoteAudioAutoplayBlocked();
         } else if (!monitor.channelCount) {
           clientMicAutoplayNeeded = false;
           updateClientMicUi();
         }
-        setStatus2(`Audio remoto: ${monitor.channelCount} fonte(s)`);
+        setStatus(`Audio remoto: ${monitor.channelCount} fonte(s)`);
         if (monitor.channelCount > 0) {
           audioTraceSync("sync-ok", list, { channels: monitor.channelCount, role: "client" });
         } else if (list.length) {
           audioTraceSync("sync-falhou", list, { channels: 0, role: "client" });
         }
         if (monitor.channelCount >= expected || expected === 0 && monitor.channelCount === 0) {
-          lastAppliedAudioSig2 = sig;
+          lastAppliedAudioSig = sig;
         }
         await repairAllAudioIfNeeded();
       } while (syncClientAudioPending);
@@ -20227,7 +17061,7 @@ ${entry.technical}`;
     viewerOnly = false;
     pendingTransmission = null;
     pendingAudioSources = null;
-    pendingRoomSnapshot2 = null;
+    pendingRoomSnapshot = null;
     deferScreenShareOnJoin = false;
     pendingPostPublishRemoteWork = null;
     txSync.reset();
@@ -20243,35 +17077,43 @@ ${entry.technical}`;
     clientMicTrack = null;
   }
   async function ensureClientMicTrack(deviceId = "") {
-    var _a60;
+    var _a14;
     if ((clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live") {
-      const activeId = ((_a60 = clientMicTrack.getSettings) == null ? void 0 : _a60.call(clientMicTrack).deviceId) || "";
+      const activeId = ((_a14 = clientMicTrack.getSettings) == null ? void 0 : _a14.call(clientMicTrack).deviceId) || "";
       if (!deviceId || !activeId || activeId === deviceId) {
         return clientMicTrack;
       }
       releaseClientMicTrack();
     }
-    clientMicTrack = await acquireMicrophoneTrack(deviceId, setStatus2);
+    clientMicTrack = await acquireMicrophoneTrack(deviceId, setStatus);
     return clientMicTrack;
   }
   async function teardownClientSession({ keepDisplayStream = false, keepMicTrack = false } = {}) {
-    var _a60;
+    var _a14;
     stopAudioHealthWatchdog();
-    if (fontesAudioDebounceTimer2) {
-      clearTimeout(fontesAudioDebounceTimer2);
-      fontesAudioDebounceTimer2 = null;
+    if (fontesAudioDebounceTimer) {
+      clearTimeout(fontesAudioDebounceTimer);
+      fontesAudioDebounceTimer = null;
     }
-    lastAppliedAudioSig2 = "";
+    lastAppliedAudioSig = "";
     await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.dispose());
     roomAudioMonitor = null;
-    await (media2 == null ? void 0 : media2.dispose({
-      keepLocalScreenStream: keepDisplayStream,
-      keepMicTrack
-    }));
-    media2 = null;
-    if (signaling2) {
-      signaling2.close();
-      signaling2 = null;
+    suppressShareEndedHandler = true;
+    try {
+      await (media == null ? void 0 : media.dispose({
+        keepLocalScreenStream: keepDisplayStream,
+        keepMicTrack
+      }));
+    } finally {
+      suppressShareEndedHandler = false;
+    }
+    media = null;
+    mediaPublisher = null;
+    clientSession.reset();
+    publisherConnection.reset();
+    if (signaling) {
+      signaling.close();
+      signaling = null;
     }
     peerId = null;
     sessionStarted = false;
@@ -20279,7 +17121,7 @@ ${entry.technical}`;
     joinInFlight = false;
     txSync.reset();
     if (!keepDisplayStream) {
-      (_a60 = clientDisplayStream == null ? void 0 : clientDisplayStream.getTracks) == null ? void 0 : _a60.call(clientDisplayStream).forEach((t) => t.stop());
+      (_a14 = clientDisplayStream == null ? void 0 : clientDisplayStream.getTracks) == null ? void 0 : _a14.call(clientDisplayStream).forEach((t) => t.stop());
       clientDisplayStream = null;
       onboardStep = "identify";
     }
@@ -20287,47 +17129,191 @@ ${entry.technical}`;
       releaseClientMicTrack();
     }
   }
+  function getLiveDisplayVideoTrack() {
+    var _a14;
+    return ((_a14 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a14.call(clientDisplayStream).find((t) => t.readyState === "live")) || null;
+  }
   function hasPendingDisplayStream() {
-    var _a60;
-    return (_a60 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a60.call(clientDisplayStream).some((t) => t.readyState === "live");
+    return !!getLiveDisplayVideoTrack();
+  }
+  function logCaptureTrackState(label, extra = {}) {
+    var _a14, _b;
+    const track = getLiveDisplayVideoTrack();
+    const firstTrack = (_a14 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a14.call(clientDisplayStream)[0];
+    debugClientSessionLog("H9", "client:capture-track", label, {
+      hasStream: !!clientDisplayStream,
+      trackState: (track == null ? void 0 : track.readyState) || (firstTrack == null ? void 0 : firstTrack.readyState) || null,
+      firstTrackState: (firstTrack == null ? void 0 : firstTrack.readyState) || null,
+      hasProducer: !!((_b = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _b.call(media)),
+      wsConnected: !!(signaling == null ? void 0 : signaling.connected),
+      ...extra
+    });
+  }
+  function createClientSignalingClient() {
+    const client = new SignalingClient(wsUrl(), {
+      enableReconnect: false,
+      onLog: (m, l) => setStatus(m),
+      onStateChange: (state) => {
+        if (state === ConnectionState.RECONNECTING) setBadge("Reconectando", "warn");
+        if (state === ConnectionState.CONNECTED) setBadge("Online", "online");
+        if (state === ConnectionState.FAILED) setBadge("Falha", "error");
+      },
+      onClose: () => {
+        if (sessionReady && !clientJoinInProgress && !bootstrapping) {
+          setStatus("Reconectando...");
+        }
+      }
+    });
+    client.addListener(handleServerMessage);
+    return client;
+  }
+  function enableSessionReconnect() {
+    if (!signaling) return;
+    signaling.onOpen = () => handleSignalingReconnect();
+    signaling.enableReconnect = true;
+  }
+  async function ensurePublisherSession(flowGen = publisherFlowGeneration) {
+    if (publisherSessionPromise) return publisherSessionPromise;
+    publisherSessionPromise = (async () => {
+      var _a14;
+      if (!isPublisherFlowCurrent(flowGen)) return;
+      if ((signaling == null ? void 0 : signaling.connected) && media && peerId && ((_a14 = media.hasVideoProducer) == null ? void 0 : _a14.call(media))) {
+        logCaptureTrackState("ensure-skip-already-publishing");
+        return;
+      }
+      viewerOnly = false;
+      clientSession.setPublishIntent("publisher");
+      deferScreenShareOnJoin = true;
+      skipJoinPublishOnJoin = false;
+      logCaptureTrackState("ensure-start");
+      const stale = () => !isPublisherFlowCurrent(flowGen);
+      if ((signaling == null ? void 0 : signaling.connected) && signaling.authenticated && media && peerId) {
+        bootstrapping = true;
+        try {
+          await media.ensureSendTransport();
+        } finally {
+          bootstrapping = false;
+        }
+        logCaptureTrackState("ensure-reuse-session");
+        return;
+      }
+      if (media && (!(signaling == null ? void 0 : signaling.connected) || !peerId)) {
+        const pendingStream = hasPendingDisplayStream() ? clientDisplayStream : null;
+        suppressShareEndedHandler = true;
+        try {
+          await media.dispose({
+            keepLocalScreenStream: !!pendingStream,
+            keepMicTrack: (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live"
+          });
+        } finally {
+          suppressShareEndedHandler = false;
+        }
+        media = null;
+        mediaPublisher = null;
+        peerId = null;
+        sessionStarted = false;
+        sessionReady = false;
+        joinInFlight = false;
+        clientJoinPromise = null;
+        clientDisplayStream = pendingStream;
+        logCaptureTrackState("ensure-after-dispose");
+      }
+      if (signaling && !signaling.connected) {
+        try {
+          signaling.close();
+        } catch (_) {
+        }
+        signaling = null;
+      }
+      bootstrapping = true;
+      try {
+        signaling = await publisherConnection.ensureWebSocket({
+          signaling,
+          createSignaling: () => createClientSignalingClient(),
+          isStale: stale
+        });
+        if (stale()) return;
+        if (signaling.connected && media && peerId && signaling.authenticated) {
+          await media.ensureSendTransport();
+          logCaptureTrackState("ensure-reuse-session");
+          return;
+        }
+        await publisherConnection.ensureJoined({
+          isStale: stale,
+          joinFn: async () => {
+            await runClientJoin();
+          }
+        });
+        logCaptureTrackState("ensure-connected");
+      } finally {
+        bootstrapping = false;
+      }
+    })().finally(() => {
+      publisherSessionPromise = null;
+    });
+    return publisherSessionPromise;
+  }
+  async function ensureLiveCaptureStream(capturePrefs2) {
+    var _a14, _b;
+    const liveTrack = getLiveDisplayVideoTrack();
+    if (liveTrack) {
+      logCaptureTrackState("ensure-live-ok", { trackId: (_a14 = liveTrack.id) == null ? void 0 : _a14.slice(0, 8) });
+      return clientDisplayStream;
+    }
+    if (clientDisplayStream) {
+      (_b = clientDisplayStream.getTracks) == null ? void 0 : _b.call(clientDisplayStream).forEach((t) => {
+        try {
+          t.stop();
+        } catch (_) {
+        }
+      });
+      clientDisplayStream = null;
+    }
+    logCaptureTrackState("ensure-live-recapture", {
+      previousState: "ended"
+    });
+    setStatus("Selecione a tela no dialogo do navegador...");
+    clientDisplayStream = await promptDisplayCapture({
+      systemAudio: capturePrefs2.systemAudio !== false,
+      microphone: false
+    });
+    mediaPublisher = null;
+    return clientDisplayStream;
   }
   function showIdentifyStep() {
     onboardStep = "identify";
-    if (els2.overlay) els2.overlay.hidden = false;
-    if (els2.onboardStepIdentify) els2.onboardStepIdentify.hidden = false;
-    if (els2.onboardStepAudio) els2.onboardStepAudio.hidden = true;
-    if (els2.onboardStepsIdentify) els2.onboardStepsIdentify.hidden = false;
-    if (els2.onboardStepsAudio) els2.onboardStepsAudio.hidden = true;
-    if (els2.btnSalvarNome) els2.btnSalvarNome.textContent = "Selecionar tela para compartilhar";
-    if (els2.onboardIntro) {
-      els2.onboardIntro.textContent = "Informe o nome deste computador e selecione a tela quando o navegador solicitar.";
+    if (els.overlay) els.overlay.hidden = false;
+    if (els.onboardStepIdentify) els.onboardStepIdentify.hidden = false;
+    if (els.onboardStepAudio) els.onboardStepAudio.hidden = true;
+    if (els.onboardStepsIdentify) els.onboardStepsIdentify.hidden = false;
+    if (els.onboardStepsAudio) els.onboardStepsAudio.hidden = true;
+    if (els.btnSalvarNome) els.btnSalvarNome.textContent = "Selecionar tela para compartilhar";
+    if (els.onboardIntro) {
+      els.onboardIntro.textContent = "Informe o nome deste computador e selecione a tela quando o navegador solicitar.";
     }
   }
   function showAudioStep() {
+    var _a14;
     onboardStep = "audio";
-    if (els2.overlay) els2.overlay.hidden = false;
-    if (els2.onboardStepIdentify) els2.onboardStepIdentify.hidden = true;
-    if (els2.onboardStepAudio) els2.onboardStepAudio.hidden = false;
-    if (els2.onboardStepsIdentify) els2.onboardStepsIdentify.hidden = true;
-    if (els2.onboardStepsAudio) els2.onboardStepsAudio.hidden = false;
-    if (els2.btnSalvarNome) els2.btnSalvarNome.textContent = "Iniciar transmissao";
-    if (els2.onboardIntro) {
-      els2.onboardIntro.textContent = "Tela selecionada. Confirme as opcoes de audio antes de transmitir.";
+    if (els.overlay) els.overlay.hidden = false;
+    if (els.onboardStepIdentify) els.onboardStepIdentify.hidden = true;
+    if (els.onboardStepAudio) els.onboardStepAudio.hidden = false;
+    if (els.onboardStepsIdentify) els.onboardStepsIdentify.hidden = true;
+    if (els.onboardStepsAudio) els.onboardStepsAudio.hidden = false;
+    if (els.btnSalvarNome) els.btnSalvarNome.textContent = "Iniciar transmissao";
+    if (els.onboardIntro) {
+      els.onboardIntro.textContent = "Tela selecionada. Confirme as opcoes de audio antes de transmitir.";
     }
-    if (els2.chkMicrophone && !els2.chkMicrophone.checked) {
-      els2.chkMicrophone.checked = true;
-      saveCapturePrefs(getCapturePrefsFromUi());
-    }
-    if (els2.micWrap) els2.micWrap.hidden = false;
-    populateMicrophoneSelect(els2.micSelect, {
+    if (els.micWrap) els.micWrap.hidden = !((_a14 = els.chkMicrophone) == null ? void 0 : _a14.checked);
+    populateMicrophoneSelect(els.micSelect, {
       deviceId: loadCapturePrefs().microphoneDeviceId || "",
-      onLog: setStatus2
+      onLog: setStatus
     }).catch(() => {
     });
   }
   function hideOverlay() {
-    if (els2.overlay) {
-      els2.overlay.hidden = true;
+    if (els.overlay) {
+      els.overlay.hidden = true;
     }
   }
   function showOverlay() {
@@ -20339,51 +17325,231 @@ ${entry.technical}`;
   }
   async function promptDisplayCapture(capturePrefs2) {
     assertSecureContext();
-    const quality = mergeServerQuality((media2 == null ? void 0 : media2.videoQuality) || {}, loadPresetId());
+    const quality = mergeServerQuality((media == null ? void 0 : media.videoQuality) || {}, loadPresetId());
     const constraints = buildDisplayConstraintsWithAudio(quality, capturePrefs2.systemAudio !== false);
-    setStatus2("Selecione a tela no dialogo do navegador...");
+    setStatus("Selecione a tela no dialogo do navegador...");
     return navigator.mediaDevices.getDisplayMedia(constraints);
   }
   async function captureScreenFirst({ autoTransmitAfterCapture = false } = {}) {
-    var _a60;
-    if (!((_a60 = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _a60.call(media2))) {
-      await teardownClientSession({ keepDisplayStream: false });
+    var _a14;
+    if (captureScreenInFlight || publisherFlowPromise) {
+      debugClientSessionLog("H10", "client:captureScreenFirst", "dedupe", {
+        captureScreenInFlight,
+        hasPublisherFlow: !!publisherFlowPromise
+      });
+      return;
+    }
+    captureScreenInFlight = true;
+    const flowGen = beginPublisherFlow();
+    const t0 = performance.now();
+    debugClientSessionLog("H8", "client:captureScreenFirst", "start", {
+      autoTransmitAfterCapture,
+      elapsedMs: 0,
+      flowGen
+    });
+    if (!((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media))) {
+      mediaPublisher = null;
     }
     clientJoinInProgress = true;
+    setStatus("Selecione a tela no dialogo do navegador...");
     hideOverlay();
     try {
+      debugClientSessionLog("H8", "client:captureScreenFirst", "before-getDisplayMedia", {
+        elapsedMs: Math.round(performance.now() - t0)
+      });
       const stream = await promptDisplayCapture({
         systemAudio: true,
         microphone: false
       });
+      if (!isPublisherFlowCurrent(flowGen)) return;
       clientDisplayStream = stream;
+      debugClientSessionLog("H8", "client:captureScreenFirst", "capture-ok", {
+        elapsedMs: Math.round(performance.now() - t0)
+      });
       if (autoTransmitAfterCapture && hasPendingDisplayStream()) {
-        clientJoinInProgress = false;
-        await confirmAudioAndTransmit();
+        await startPublisherFlow(flowGen);
         return;
       }
       showAudioStep();
       await attachVuMeterIfNeeded();
-      setStatus2("Tela capturada - configure o audio e confirme");
+      setStatus("Tela capturada - configure o audio e confirme");
     } catch (e) {
+      if (shouldIgnorePublisherFailure(flowGen)) return;
       clientDisplayStream = null;
       onboardStep = "identify";
       showIdentifyStep();
       const cancelled = (e == null ? void 0 : e.name) === "NotAllowedError" || (e == null ? void 0 : e.name) === "AbortError" || /cancel|abort|denied/i.test(String((e == null ? void 0 : e.message) || ""));
       if (cancelled) {
-        setStatus2("Selecao de tela cancelada");
+        setStatus("Selecao de tela cancelada");
         showToast("Selecao de tela cancelada", "info");
       } else {
-        errors2.handle(e, "captura");
+        errors.handle(e, "captura");
         showErro(e.message);
       }
     } finally {
-      clientJoinInProgress = false;
+      captureScreenInFlight = false;
+      if (isPublisherFlowCurrent(flowGen)) {
+        clientJoinInProgress = false;
+      }
     }
   }
+  async function runPublisherFlowBody(t0, flowGen) {
+    var _a14, _b, _c, _d, _e, _f, _g, _h, _i;
+    if (!isPublisherFlowCurrent(flowGen)) {
+      return;
+    }
+    const prefs = getCapturePrefsFromUi();
+    saveCapturePrefs(prefs);
+    viewerOnly = false;
+    clientSession.setPublishIntent("publisher");
+    if (els.chkViewerOnly) els.chkViewerOnly.checked = false;
+    if ((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media)) {
+      debugClientSessionLog("H10", "client:startPublisherFlow", "already-publishing", {
+        producerId: ((_d = (_c = (_b = media.producers) == null ? void 0 : _b.video) == null ? void 0 : _c.id) == null ? void 0 : _d.slice(0, 8)) || null
+      });
+      enableSessionReconnect();
+      hideOverlay();
+      setStatus("Transmitindo - aguardando selecao do host");
+      updateClientStateAfterPublish();
+      return;
+    }
+    const nome = getNome();
+    if (!nome) {
+      throw new Error("Informe um nome para este computador");
+    }
+    clientJoinInProgress = true;
+    setStatus("Preparando transmissao...");
+    debugClientSessionLog("H1", "client:startPublisherFlow", "start", {
+      hasStreamBeforeJoin: hasPendingDisplayStream(),
+      elapsedMs: 0,
+      flowGen
+    });
+    if (!hasPendingDisplayStream()) {
+      setStatus("Selecione a tela no dialogo do navegador...");
+      hideOverlay();
+      debugClientSessionLog("H8", "client:startPublisherFlow", "before-getDisplayMedia", {
+        elapsedMs: Math.round(performance.now() - t0)
+      });
+      clientDisplayStream = await promptDisplayCapture({
+        systemAudio: prefs.systemAudio !== false,
+        microphone: false
+      });
+    }
+    if (!isPublisherFlowCurrent(flowGen)) {
+      throw new Error("Fluxo de publicacao interrompido");
+    }
+    setStatus("Conectando...");
+    hideOverlay();
+    debugClientSessionLog("H8", "client:startPublisherFlow", "before-connect", {
+      elapsedMs: Math.round(performance.now() - t0),
+      hasStream: hasPendingDisplayStream()
+    });
+    await ensurePublisherSession(flowGen);
+    if (!isPublisherFlowCurrent(flowGen)) {
+      throw new Error("Fluxo de publicacao interrompido");
+    }
+    if (!media) {
+      throw new Error("Sessao de midia nao iniciada");
+    }
+    if (!((_e = media.hasVideoProducer) == null ? void 0 : _e.call(media))) {
+      await ensureLiveCaptureStream(prefs);
+      if (!isPublisherFlowCurrent(flowGen)) {
+        throw new Error("Fluxo de publicacao interrompido");
+      }
+      logCaptureTrackState("before-publish", { elapsedMs: Math.round(performance.now() - t0) });
+      let publishPrefs = { ...prefs };
+      if (prefs.microphone) {
+        const track = await ensureClientMicTrack(prefs.microphoneDeviceId || "");
+        if (!track || track.readyState !== "live") {
+          throw new Error("Nao foi possivel capturar o microfone - verifique permissoes");
+        }
+        publishPrefs = { ...prefs, prefetchedMicTrack: track };
+      }
+      await publishClientMedia(publishPrefs);
+      if (prefs.microphone && !media.hasPublishedMicrophone()) {
+        throw new Error("Microfone nao publicado - verifique permissoes do navegador");
+      }
+      await flushPostPublishRemoteWork();
+      await finalizeAfterPublish();
+      updateClientMicUi();
+      await attachVuMeterIfNeeded();
+    } else {
+      await finalizeAfterPublish();
+      updateClientStateAfterPublish();
+    }
+    if (!((_f = media.hasVideoProducer) == null ? void 0 : _f.call(media))) {
+      throw new Error("Falha ao publicar video - tente novamente");
+    }
+    onboardStep = "identify";
+    setStatus("Transmitindo - aguardando selecao do host");
+    debugClientSessionLog("H1", "client:startPublisherFlow", "done", {
+      hasVideoProducer: media.hasVideoProducer(),
+      producerId: ((_i = (_h = (_g = media.producers) == null ? void 0 : _g.video) == null ? void 0 : _h.id) == null ? void 0 : _i.slice(0, 8)) || null
+    });
+    enableSessionReconnect();
+    hideOverlay();
+  }
+  async function startPublisherFlow(existingFlowGen = null) {
+    if (publisherFlowPromise) {
+      debugClientSessionLog("H10", "client:startPublisherFlow", "dedupe", {});
+      return publisherFlowPromise;
+    }
+    const flowGen = existingFlowGen ?? beginPublisherFlow();
+    const t0 = performance.now();
+    publisherFlowPromise = (async () => {
+      var _a14, _b, _c;
+      try {
+        await runPublisherFlowBody(t0, flowGen);
+      } catch (e) {
+        debugClientSessionLog("H7", "client:startPublisherFlow", "failed", {
+          message: String((e == null ? void 0 : e.message) || e),
+          hasMedia: !!media,
+          wsConnected: !!(signaling == null ? void 0 : signaling.connected),
+          hasStream: hasPendingDisplayStream(),
+          hasProducer: !!((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media)),
+          flowGen,
+          currentFlowGen: publisherFlowGeneration
+        });
+        if (shouldIgnorePublisherFailure(flowGen)) {
+          debugClientSessionLog("H10", "client:startPublisherFlow", "ignored-stale-flow", {
+            flowGen,
+            currentFlowGen: publisherFlowGeneration
+          });
+          if ((_b = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _b.call(media)) {
+            enableSessionReconnect();
+            hideOverlay();
+            setStatus("Transmitindo - aguardando selecao do host");
+          }
+          return;
+        }
+        if (/cancelad/i.test(String((e == null ? void 0 : e.message) || ""))) {
+          return;
+        }
+        errors.handle(e, "publisher-flow");
+        showErro(e.message);
+        if (/pista de v[ií]deo indispon|captura de tela|timeout ao conectar/i.test(String((e == null ? void 0 : e.message) || ""))) {
+          if (!((_c = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _c.call(media))) {
+            clientDisplayStream = null;
+            mediaPublisher = null;
+          }
+        }
+        showOverlay();
+        showIdentifyStep();
+      } finally {
+        if (isPublisherFlowCurrent(flowGen)) {
+          clientJoinInProgress = false;
+        }
+      }
+    })().finally(() => {
+      publisherFlowPromise = null;
+    });
+    return publisherFlowPromise;
+  }
   async function confirmAudioAndTransmit() {
-    var _a60, _b;
-    if (clientJoinInProgress || bootstrapping) return;
+    if (clientJoinInProgress || bootstrapping || publisherFlowPromise) {
+      if (publisherFlowPromise) return publisherFlowPromise;
+      return;
+    }
     const prefs = getCapturePrefsFromUi();
     saveCapturePrefs(prefs);
     if (!hasPendingDisplayStream()) {
@@ -20393,83 +17559,25 @@ ${entry.technical}`;
       showToast("Selecione a tela novamente", "warn");
       return;
     }
-    clientJoinInProgress = true;
-    hideOverlay();
-    setStatus2("Conectando...");
-    const capturedStream = clientDisplayStream;
-    try {
-      let prefetchedMicTrack = null;
-      if (prefs.microphone) {
-        prefetchedMicTrack = await ensureClientMicTrack(prefs.microphoneDeviceId || "");
-        if (!prefetchedMicTrack || prefetchedMicTrack.readyState !== "live") {
-          throw new Error("Nao foi possivel capturar o microfone - verifique permissoes");
-        }
-      }
-      const publishPrefs = prefetchedMicTrack ? { ...prefs, prefetchedMicTrack } : prefs;
-      await teardownClientSession({ keepDisplayStream: true, keepMicTrack: !!prefetchedMicTrack });
-      clientDisplayStream = capturedStream;
-      await bootstrap2(false, { deferScreenShare: true });
-      if (!media2) throw new Error("Sessao de midia nao iniciada");
-      if (!media2.hasVideoProducer()) {
-        if (!hasPendingDisplayStream()) {
-          throw new Error("Captura de tela expirada - selecione a tela novamente");
-        }
-        await media2.publishDisplayStream(clientDisplayStream, publishPrefs);
-      }
-      if (!media2.hasVideoProducer()) {
-        throw new Error("Falha ao publicar video - tente novamente");
-      }
-      if (prefs.microphone && !media2.hasPublishedMicrophone()) {
-        throw new Error("Microfone nao publicado - verifique permissoes do navegador");
-      }
-      signaling2.send("status", { status: "transmitindo" });
-      await flushPostPublishRemoteWork();
-      await syncRoomPresenceAfterPublish();
-      updateClientMicUi();
-      await attachVuMeterIfNeeded();
-      onboardStep = "identify";
-      const activeTx = txSync.lastActiveTransmission;
-      const watchingRemote = activeTx && hasActiveVideo(activeTx) && String(activeTx.selectedPeerId) !== String(peerId);
-      if (!watchingRemote && !((_a60 = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _a60.call(media2))) {
-        setStatus2(
-          prefs.microphone ? "Transmitindo com microfone - aguardando selecao do host" : "Transmitindo - aguardando selecao do host"
-        );
-      }
-      if (prefs.microphone) {
-        showToast("Microfone publicado com sucesso", "success");
-      }
-    } catch (e) {
-      showAudioStep();
-      errors2.handle(e, "compartilhar");
-      showErro(e.message);
-      if ((signaling2 == null ? void 0 : signaling2.connected) && !((_b = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _b.call(media2))) {
-        await teardownClientSession({ keepDisplayStream: true, keepMicTrack: true });
-        clientDisplayStream = capturedStream;
-        sessionStarted = false;
-        sessionReady = false;
-        updateClientStates("idle");
-      }
-    } finally {
-      clientJoinInProgress = false;
-    }
+    return startPublisherFlow();
   }
-  function setStatus2(text) {
-    if (els2.statusBar) els2.statusBar.textContent = text;
+  function setStatus(text) {
+    if (els.statusBar) els.statusBar.textContent = text;
   }
-  function setBadge2(text, type = "muted") {
-    if (!els2.statusBadge) return;
-    els2.statusBadge.textContent = text;
-    els2.statusBadge.className = `badge badge-${type}`;
+  function setBadge(text, type = "muted") {
+    if (!els.statusBadge) return;
+    els.statusBadge.textContent = text;
+    els.statusBadge.className = `badge badge-${type}`;
   }
   function showErro(msg, technical = "") {
-    if (!els2.erro) return;
-    els2.erro.textContent = technical ? `${msg}
+    if (!els.erro) return;
+    els.erro.textContent = technical ? `${msg}
 
 Detalhe: ${technical}` : msg;
-    els2.erro.hidden = false;
+    els.erro.hidden = false;
   }
   function hideErro() {
-    if (els2.erro) els2.erro.hidden = true;
+    if (els.erro) els.erro.hidden = true;
   }
   async function resolveClientNameFromServer() {
     const cached = (localStorage.getItem(STORAGE_NAME) || displayName || "").trim();
@@ -20496,20 +17604,20 @@ Detalhe: ${technical}` : msg;
     return serverNome || null;
   }
   function getNome() {
-    var _a60;
-    return (((_a60 = els2.nomeInput) == null ? void 0 : _a60.value) || displayName || "").trim();
+    var _a14;
+    return (((_a14 = els.nomeInput) == null ? void 0 : _a14.value) || displayName || "").trim();
   }
   function getCapturePrefsFromUi() {
     return {
-      systemAudio: els2.chkSystemAudio ? els2.chkSystemAudio.checked : false,
-      microphone: els2.chkMicrophone ? els2.chkMicrophone.checked : false,
-      microphoneDeviceId: els2.micSelect ? els2.micSelect.value : ""
+      systemAudio: els.chkSystemAudio ? els.chkSystemAudio.checked : false,
+      microphone: els.chkMicrophone ? els.chkMicrophone.checked : false,
+      microphoneDeviceId: els.micSelect ? els.micSelect.value : ""
     };
   }
   function configureExternalViewerUi() {
-    if (els2.btnSalvarNome) els2.btnSalvarNome.hidden = true;
-    if (els2.btnViewerEnter) els2.btnViewerEnter.textContent = "Assistir transmissao";
-    if (els2.chkViewerOnly) els2.chkViewerOnly.checked = true;
+    if (els.btnSalvarNome) els.btnSalvarNome.hidden = true;
+    if (els.btnViewerEnter) els.btnViewerEnter.textContent = "Assistir transmissao";
+    if (els.chkViewerOnly) els.chkViewerOnly.checked = true;
     document.querySelectorAll("#overlay .steps, #overlay .check-row").forEach((el) => {
       el.hidden = true;
     });
@@ -20517,53 +17625,53 @@ Detalhe: ${technical}` : msg;
     if (title) title.textContent = "Assistir transmissao ao vivo";
     const intro = document.querySelector("#overlay .modal-panel > p");
     if (intro) intro.textContent = "Clique abaixo para entrar como espectador.";
-    if (els2.btnEditarNome) els2.btnEditarNome.hidden = true;
+    if (els.btnEditarNome) els.btnEditarNome.hidden = true;
   }
   async function initOnboarding() {
-    var _a60, _b;
+    var _a14, _b;
     resetClientPageState();
     await teardownClientSession({ keepDisplayStream: false });
-    if (!window.isSecureContext && els2.insecureWarning) {
-      els2.insecureWarning.hidden = false;
+    if (!window.isSecureContext && els.insecureWarning) {
+      els.insecureWarning.hidden = false;
     }
     try {
       const info = await fetch("/api/info").then((r) => r.json());
-      if (info.roomPinRequired && els2.pinWrap && !viewerAccessToken) {
-        els2.pinWrap.hidden = false;
+      if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
+        els.pinWrap.hidden = false;
       }
     } catch (_) {
     }
     if (hasExternalAccessToken) {
-      const nomeUrl = readQueryParam2("nome");
+      const nomeUrl = readQueryParam("nome");
       displayName = nomeUrl || displayName || "";
-      if (displayName && els2.nomeInput) {
-        els2.nomeInput.value = displayName;
+      if (displayName && els.nomeInput) {
+        els.nomeInput.value = displayName;
       }
       if (displayName) {
-        hideOverlay();
-        await salvarEIniciar(false, { autoTransmitAfterCapture: true });
+        showIdentifyStep();
+        setStatus("Clique abaixo para compartilhar a tela");
         return;
       }
       showIdentifyStep();
-      (_a60 = els2.nomeInput) == null ? void 0 : _a60.focus();
+      (_a14 = els.nomeInput) == null ? void 0 : _a14.focus();
       return;
     }
     if (autoViewerEntry) {
       configureExternalViewerUi();
       viewerOnly = true;
-      if (els2.chkViewerOnly) els2.chkViewerOnly.checked = true;
-      const nomeUrl = readQueryParam2("nome");
+      if (els.chkViewerOnly) els.chkViewerOnly.checked = true;
+      const nomeUrl = readQueryParam("nome");
       if (nomeUrl) {
         displayName = nomeUrl;
-        if (els2.nomeInput) els2.nomeInput.value = nomeUrl;
+        if (els.nomeInput) els.nomeInput.value = nomeUrl;
       } else if (!displayName) {
         displayName = "Visitante";
-        if (els2.nomeInput) els2.nomeInput.value = displayName;
+        if (els.nomeInput) els.nomeInput.value = displayName;
       }
       try {
-        await bootstrap2(true);
+        await bootstrap(true);
         hideOverlay();
-        setStatus2("Assistindo transmissao pela internet");
+        setStatus("Assistindo transmissao pela internet");
         return;
       } catch (e) {
         showOverlay();
@@ -20571,30 +17679,30 @@ Detalhe: ${technical}` : msg;
         return;
       }
     }
-    if (displayName && els2.nomeInput) {
-      els2.nomeInput.value = displayName;
+    if (displayName && els.nomeInput) {
+      els.nomeInput.value = displayName;
     }
     if (!hasExternalAccessToken && !autoViewerEntry) {
       const resolved = await resolveClientNameFromServer();
       if (resolved) {
         displayName = resolved;
         localStorage.setItem(STORAGE_NAME, resolved);
-        if (els2.nomeInput) els2.nomeInput.value = resolved;
-        hideOverlay();
-        await salvarEIniciar(false, { autoTransmitAfterCapture: true });
+        if (els.nomeInput) els.nomeInput.value = resolved;
+        showIdentifyStep();
+        setStatus("Nome identificado \u2014 clique abaixo para compartilhar a tela");
         return;
       }
     }
     showIdentifyStep();
-    if (!displayName) (_b = els2.nomeInput) == null ? void 0 : _b.focus();
+    if (!displayName) (_b = els.nomeInput) == null ? void 0 : _b.focus();
   }
   async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = false } = {}) {
-    var _a60, _b, _c, _d, _e;
-    if (clientJoinInProgress) return;
+    var _a14, _b, _c, _d, _e;
+    if (clientJoinInProgress || captureScreenInFlight || publisherFlowPromise) return;
     const nome = getNome();
     if (!nome) {
       showToast("Informe um nome para este computador", "error");
-      (_a60 = els2.nomeInput) == null ? void 0 : _a60.focus();
+      (_a14 = els.nomeInput) == null ? void 0 : _a14.focus();
       return;
     }
     displayName = nome;
@@ -20603,21 +17711,22 @@ Detalhe: ${technical}` : msg;
       await fetch("/api/registro-cliente", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome })
+        body: JSON.stringify({ nome, computerName: ensureAgentHostname() })
       });
     } catch (_) {
     }
-    roomPin2 = ((_c = (_b = els2.clientPinInput) == null ? void 0 : _b.value) == null ? void 0 : _c.trim()) || roomPin2;
-    if (asViewer || ((_d = els2.chkViewerOnly) == null ? void 0 : _d.checked)) {
+    roomPin = ((_c = (_b = els.clientPinInput) == null ? void 0 : _b.value) == null ? void 0 : _c.trim()) || roomPin;
+    if (asViewer || ((_d = els.chkViewerOnly) == null ? void 0 : _d.checked)) {
       viewerOnly = true;
+      clientSession.setPublishIntent("viewer");
       clientJoinInProgress = true;
-      setStatus2("Conectando...");
+      setStatus("Conectando...");
       try {
-        await bootstrap2(true);
+        await bootstrap(true);
         hideOverlay();
       } catch (e) {
         showOverlay();
-        errors2.handle(e, "bootstrap");
+        errors.handle(e, "bootstrap");
         showErro(e.message);
       } finally {
         clientJoinInProgress = false;
@@ -20625,11 +17734,12 @@ Detalhe: ${technical}` : msg;
       return;
     }
     viewerOnly = false;
-    if (els2.chkViewerOnly) els2.chkViewerOnly.checked = false;
-    if (sessionStarted && (signaling2 == null ? void 0 : signaling2.connected) && ((_e = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _e.call(media2))) {
+    clientSession.setPublishIntent("publisher");
+    if (els.chkViewerOnly) els.chkViewerOnly.checked = false;
+    if (sessionStarted && (signaling == null ? void 0 : signaling.connected) && ((_e = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _e.call(media))) {
       hideOverlay();
-      signaling2.send("atualizarNome", { nome });
-      media2.syncPublishedAudio(getCapturePrefsFromUi()).catch((e) => errors2.handle(e, "audio-prefs"));
+      signaling.send("atualizarNome", { nome });
+      media.syncPublishedAudio(getCapturePrefsFromUi()).catch((e) => errors.handle(e, "audio-prefs"));
       return;
     }
     if (onboardStep === "audio" && hasPendingDisplayStream()) {
@@ -20637,35 +17747,43 @@ Detalhe: ${technical}` : msg;
       await confirmAudioAndTransmit();
       return;
     }
-    await captureScreenFirst({ autoTransmitAfterCapture });
+    if (autoTransmitAfterCapture) {
+      await captureScreenFirst({ autoTransmitAfterCapture: true });
+      return;
+    }
+    await captureScreenFirst({ autoTransmitAfterCapture: false });
   }
-  var _a50;
-  (_a50 = els2.btnSalvarNome) == null ? void 0 : _a50.addEventListener("click", () => salvarEIniciar(false));
-  var _a51;
-  (_a51 = els2.btnViewerEnter) == null ? void 0 : _a51.addEventListener("click", () => salvarEIniciar(true));
-  var _a52;
-  (_a52 = els2.nomeInput) == null ? void 0 : _a52.addEventListener("keydown", (e) => {
-    var _a60;
+  var _a4;
+  (_a4 = els.btnSalvarNome) == null ? void 0 : _a4.addEventListener("click", () => {
+    var _a14;
+    const asViewer = !!((_a14 = els.chkViewerOnly) == null ? void 0 : _a14.checked);
+    salvarEIniciar(asViewer, { autoTransmitAfterCapture: !asViewer });
+  });
+  var _a5;
+  (_a5 = els.btnViewerEnter) == null ? void 0 : _a5.addEventListener("click", () => salvarEIniciar(true));
+  var _a6;
+  (_a6 = els.nomeInput) == null ? void 0 : _a6.addEventListener("keydown", (e) => {
+    var _a14;
     if (e.key === "Enter") {
       e.preventDefault();
-      salvarEIniciar(!!((_a60 = els2.chkViewerOnly) == null ? void 0 : _a60.checked));
+      salvarEIniciar(!!((_a14 = els.chkViewerOnly) == null ? void 0 : _a14.checked));
     }
   });
-  var _a53;
-  (_a53 = els2.btnEditarNome) == null ? void 0 : _a53.addEventListener("click", () => {
-    if (els2.nomeInput) els2.nomeInput.value = displayName;
+  var _a7;
+  (_a7 = els.btnEditarNome) == null ? void 0 : _a7.addEventListener("click", () => {
+    if (els.nomeInput) els.nomeInput.value = displayName;
     showOverlay();
   });
   async function attachVuMeterIfNeeded() {
-    var _a60, _b, _c;
+    var _a14, _b, _c;
     vu.detach();
-    if (!((_a60 = els2.chkMicrophone) == null ? void 0 : _a60.checked)) return;
+    if (!((_a14 = els.chkMicrophone) == null ? void 0 : _a14.checked)) return;
     try {
-      const track = ((_b = media2 == null ? void 0 : media2.getLocalAudioTrack) == null ? void 0 : _b.call(media2)) || await ensureClientMicTrack(((_c = els2.micSelect) == null ? void 0 : _c.value) || "");
+      const track = ((_b = media == null ? void 0 : media.getLocalAudioTrack) == null ? void 0 : _b.call(media)) || await ensureClientMicTrack(((_c = els.micSelect) == null ? void 0 : _c.value) || "");
       if (!track || track.readyState !== "live") return;
       const bind = () => {
         vu.attach(track, (level) => {
-          if (els2.vuFill) els2.vuFill.style.width = `${level}%`;
+          if (els.vuFill) els.vuFill.style.width = `${level}%`;
         });
       };
       if (track.muted || track.readyState !== "live") {
@@ -20680,21 +17798,31 @@ Detalhe: ${technical}` : msg;
     }
   }
   async function handleSignalingReconnect() {
+    var _a14;
     if (joinInFlight || clientJoinInProgress || bootstrapping) return;
+    if (publisherFlowPromise || publisherSessionPromise || captureScreenInFlight) {
+      return;
+    }
+    if (((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media)) && hasPendingDisplayStream()) {
+      logCaptureTrackState("reconnect-skip-rejoin");
+      await requestRoomStateWithRetry(signaling).catch(() => {
+      });
+      return;
+    }
     try {
       await rejoinSession();
     } catch (e) {
-      errors2.handle(e, "ws-reconnect");
-      setStatus2(`Reconexao falhou: ${e.message}`);
+      errors.handle(e, "ws-reconnect");
+      setStatus(`Reconexao falhou: ${e.message}`);
     }
   }
   function debugClientLog(hypothesisId, message, data = {}, runId = "pre-fix") {
     reportClientTrace(message, { hypothesisId, runId, ...data });
   }
   function reportClientTrace(message, data = {}) {
-    if (!(signaling2 == null ? void 0 : signaling2.connected) || !(signaling2 == null ? void 0 : signaling2.authenticated)) return;
+    if (!(signaling == null ? void 0 : signaling.connected) || !(signaling == null ? void 0 : signaling.authenticated)) return;
     try {
-      signaling2.send("clientTrace", {
+      signaling.send("clientTrace", {
         message,
         data: {
           ...data,
@@ -20710,72 +17838,85 @@ Detalhe: ${technical}` : msg;
     const tx = txSync.lastActiveTransmission || (pendingTransmission ? normalizeTransmission(pendingTransmission) : null);
     if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) === String(peerId)) {
       updateClientStates("selected");
-      setStatus2("Voce esta selecionado - transmitindo para todos");
+      setStatus("Voce esta selecionado - transmitindo para todos");
       return;
     }
     if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) !== String(peerId)) {
       updateClientStates("watching", tx, { hideWatchingBanner: true });
-      setStatus2(
+      setStatus(
         tx.paused ? "Transmissao pausada pelo host" : `Assistindo: ${tx.peerName || "fonte"}`
       );
       return;
     }
     if (viewerOnly) {
       updateClientStates("waiting");
-      setStatus2("Modo espectador - aguardando transmissao");
+      setStatus("Modo espectador - aguardando transmissao");
       return;
     }
     updateClientStates("sharing");
   }
-  async function requestFreshRoomState() {
-    if (!(signaling2 == null ? void 0 : signaling2.connected) || !(signaling2 == null ? void 0 : signaling2.authenticated)) return;
-    try {
-      const estadoPromise = signaling2.onceType("estadoSala");
-      signaling2.send("solicitarEstado", {});
-      const msg = await Promise.race([
-        estadoPromise,
-        new Promise((resolve) => setTimeout(() => resolve(null), 5e3))
-      ]);
-      if (msg == null ? void 0 : msg.payload) {
-        await applyRoomSnapshot2(msg.payload, { force: true });
-      }
-    } catch (e) {
-      errors2.handle(e, "estado-sala");
+  async function publishClientMedia(publishPrefs) {
+    var _a14, _b, _c, _d, _e, _f, _g;
+    if ((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media)) {
+      debugClientSessionLog("H10", "client:publishClientMedia", "skip-already-published", {
+        producerId: ((_d = (_c = (_b = media.producers) == null ? void 0 : _b.video) == null ? void 0 : _c.id) == null ? void 0 : _d.slice(0, 8)) || null
+      });
+      return;
     }
+    debugClientSessionLog("H1", "client:publishClientMedia", "start", {
+      hasMedia: !!media,
+      hasStream: hasPendingDisplayStream(),
+      peerId: peerId == null ? void 0 : peerId.slice(0, 8),
+      mic: !!(publishPrefs == null ? void 0 : publishPrefs.microphone),
+      system: !!(publishPrefs == null ? void 0 : publishPrefs.systemAudio)
+    });
+    if (!media || !hasPendingDisplayStream()) {
+      debugClientSessionLog("H1", "client:publishClientMedia", "early-return-no-stream", {
+        hasMedia: !!media,
+        hasStream: hasPendingDisplayStream()
+      });
+      throw new Error("Captura de tela indisponivel \u2014 selecione a tela novamente");
+    }
+    mediaPublisher = mediaPublisher || new MediaPublisher(media, signaling);
+    clientSession.setPhase(SessionPhase.PUBLISHING);
+    if (media.localScreenStream && media.localScreenStream !== clientDisplayStream) {
+      media.localScreenStream = null;
+    }
+    await mediaPublisher.publishVideo(clientDisplayStream, publishPrefs);
+    logCaptureTrackState("after-publish-video");
+    if (!media.hasVideoProducer()) {
+      throw new Error("Falha ao publicar video - tente novamente");
+    }
+    if (publishPrefs.microphone) {
+      await mediaPublisher.publishMicrophone(publishPrefs);
+    }
+    if (publishPrefs.systemAudio) {
+      await mediaPublisher.publishSystemAudio(clientDisplayStream, publishPrefs);
+    }
+    const readyAck = await mediaPublisher.confirmMediaReady();
+    debugClientSessionLog("H3", "client:publishClientMedia", "midiaPronta-result", {
+      readyAck,
+      hasVideoProducer: media.hasVideoProducer(),
+      producerId: ((_g = (_f = (_e = media.producers) == null ? void 0 : _e.video) == null ? void 0 : _f.id) == null ? void 0 : _g.slice(0, 8)) || null
+    });
+    if (!(readyAck == null ? void 0 : readyAck.ok)) {
+      throw new Error((readyAck == null ? void 0 : readyAck.erro) || "Servidor nao confirmou midia pronta");
+    }
+    if (!media.hasVideoProducer()) {
+      throw new Error("Video nao publicado apos midiaPronta");
+    }
+    signaling.send("status", { status: "transmitindo" });
+    clientSession.setPhase(SessionPhase.ACTIVE);
   }
-  async function syncRoomPresenceAfterPublish() {
-    var _a60;
-    if (!(signaling2 == null ? void 0 : signaling2.connected) || !(signaling2 == null ? void 0 : signaling2.authenticated)) return;
-    try {
-      if ((_a60 = media2 == null ? void 0 : media2.hasVideoProducer) == null ? void 0 : _a60.call(media2)) {
-        signaling2.send("sincronizarPresenca", {});
-      }
-      await requestFreshRoomState();
-    } catch (e) {
-      errors2.handle(e, "presenca");
+  async function finalizeAfterPublish() {
+    const snapshot = await requestRoomStateWithRetry(signaling);
+    if (snapshot) {
+      await applyRoomSnapshot(snapshot, { force: true });
     }
     updateClientStateAfterPublish();
   }
-  async function ensureClientVideoPublished() {
-    var _a60;
-    if (viewerOnly || !media2 || ((_a60 = media2.hasVideoProducer) == null ? void 0 : _a60.call(media2))) return;
-    if (!hasPendingDisplayStream()) return;
-    const joinPrefs = getCapturePrefsFromUi();
-    const publishPrefs = (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live" ? { ...joinPrefs, prefetchedMicTrack: clientMicTrack } : joinPrefs;
-    await media2.ensureSendTransport();
-    await media2.publishDisplayStream(clientDisplayStream, publishPrefs);
-    if (!media2.hasVideoProducer()) {
-      throw new Error("Falha ao publicar video - tente novamente");
-    }
-    signaling2.send("status", { status: "transmitindo" });
-  }
-  async function notifyRoomAfterMicPublish() {
-    var _a60;
-    if (!((_a60 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a60.call(media2))) return;
-    await requestFreshRoomState();
-  }
-  async function applyRoomSnapshot2(snapshot, { force = false } = {}) {
-    var _a60, _b, _c, _d, _e, _f;
+  async function applyRoomSnapshot(snapshot, { force = false } = {}) {
+    var _a14, _b, _c, _d, _e, _f;
     if (!snapshot) return;
     const parsed = parseRoomSnapshot(snapshot);
     applyHostPeerFromSnapshot(parsed);
@@ -20783,39 +17924,39 @@ Detalhe: ${technical}` : msg;
       await applyMeetBridgeLiveMode(snapshot.meetBridgeLiveMode, { forceSync: sessionReady });
     }
     if (parsed.mutedPeerIds) {
-      mutedClients2.clear();
+      mutedClients.clear();
       for (const id of parsed.mutedPeerIds) {
-        mutedClients2.add(String(id));
+        mutedClients.add(String(id));
       }
       syncOwnMicMuteFromRoom();
-      applyClientAudioMute2();
+      applyClientAudioMute();
     }
     if (parsed.displayControl) {
       applyDisplayControlUpdate(parsed.displayControl);
     }
-    if ((_a60 = parsed.audioSources) == null ? void 0 : _a60.length) {
-      lastAudioSources2 = parsed.audioSources;
+    if ((_a14 = parsed.audioSources) == null ? void 0 : _a14.length) {
+      lastAudioSources = parsed.audioSources;
     }
     debugClientLog("H1", "[ROOM_STATE] snapshot recebido", {
       producerVideo: ((_d = (_c = (_b = parsed.transmission) == null ? void 0 : _b.producerIds) == null ? void 0 : _c.video) == null ? void 0 : _d.slice(0, 8)) || null,
       selectedPeerId: ((_f = (_e = parsed.transmission) == null ? void 0 : _e.selectedPeerId) == null ? void 0 : _f.slice(0, 8)) || null
     });
     if (!sessionReady) {
-      pendingRoomSnapshot2 = snapshot;
+      pendingRoomSnapshot = snapshot;
       pendingTransmission = parsed.transmission;
       pendingAudioSources = parsed.audioSources;
       return;
     }
     await txSync.apply(parsed.transmission, { force });
     await syncClientAudioMonitor(parsed.audioSources).catch(
-      (e) => errors2.handle(e, "audio-sync")
+      (e) => errors.handle(e, "audio-sync")
     );
   }
   async function reconcileRemoteMediaState() {
     txSync.clearAppliedState();
-    if (pendingRoomSnapshot2) {
-      const snap = pendingRoomSnapshot2;
-      pendingRoomSnapshot2 = null;
+    if (pendingRoomSnapshot) {
+      const snap = pendingRoomSnapshot;
+      pendingRoomSnapshot = null;
       if (pendingTransmission) {
         snap.transmission = pendingTransmission;
         pendingTransmission = null;
@@ -20824,16 +17965,16 @@ Detalhe: ${technical}` : msg;
         snap.audioSources = pendingAudioSources;
         pendingAudioSources = null;
       }
-      await applyRoomSnapshot2(snap, { force: true });
+      await applyRoomSnapshot(snap, { force: true });
       return;
     }
     const tx = pendingTransmission || txSync.lastActiveTransmission;
     if (tx) {
       await txSync.apply(tx, { force: true });
     }
-    const audio = (pendingAudioSources == null ? void 0 : pendingAudioSources.length) ? pendingAudioSources : lastAudioSources2;
+    const audio = (pendingAudioSources == null ? void 0 : pendingAudioSources.length) ? pendingAudioSources : lastAudioSources;
     if (audio == null ? void 0 : audio.length) {
-      await syncClientAudioMonitor(audio).catch((e) => errors2.handle(e, "audio-sync"));
+      await syncClientAudioMonitor(audio).catch((e) => errors.handle(e, "audio-sync"));
     }
     pendingTransmission = null;
     pendingAudioSources = null;
@@ -20850,23 +17991,26 @@ Detalhe: ${technical}` : msg;
     debugClientLog("H3", "flushPostPublishRemoteWork done", { peerId });
   }
   async function schedulePostJoinWork() {
+    var _a14;
     debugClientLog("H2", "schedulePostJoinWork", {
       hasTx: !!(pendingTransmission || txSync.lastActiveTransmission),
-      hasAudio: !!((pendingAudioSources == null ? void 0 : pendingAudioSources.length) || (lastAudioSources2 == null ? void 0 : lastAudioSources2.length)),
+      hasAudio: !!((pendingAudioSources == null ? void 0 : pendingAudioSources.length) || (lastAudioSources == null ? void 0 : lastAudioSources.length)),
       viewerOnly,
       peerId
     });
     await reconcileRemoteMediaState();
-    if (!viewerOnly) {
-      await ensureClientVideoPublished().catch((e) => errors2.handle(e, "publish-retry"));
+    if (!viewerOnly && ((_a14 = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _a14.call(media))) {
+      await finalizeAfterPublish();
+    } else if (viewerOnly) {
+      await finalizeAfterPublish();
     }
-    await syncRoomPresenceAfterPublish();
   }
-  async function bootstrap2(isViewer, { deferScreenShare = false } = {}) {
+  async function bootstrap(isViewer, { deferScreenShare = false, skipJoinPublish = false } = {}) {
     if (bootstrapPromise) return bootstrapPromise;
     bootstrapPromise = (async () => {
       viewerOnly = isViewer;
       deferScreenShareOnJoin = deferScreenShare;
+      skipJoinPublishOnJoin = skipJoinPublish;
       const preserveCapture = hasPendingDisplayStream();
       const preserveMic = (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live";
       const pendingStream = preserveCapture ? clientDisplayStream : null;
@@ -20878,19 +18022,19 @@ Detalhe: ${technical}` : msg;
       joinInFlight = false;
       clientJoinPromise = null;
       bootstrapping = true;
-      signaling2 = new SignalingClient(wsUrl(), {
+      signaling = new SignalingClient(wsUrl(), {
         enableReconnect: false,
-        onLog: (m, l) => setStatus2(m),
+        onLog: (m, l) => setStatus(m),
         onStateChange: (state) => {
-          if (state === ConnectionState.RECONNECTING) setBadge2("Reconectando", "warn");
-          if (state === ConnectionState.CONNECTED) setBadge2("Online", "online");
-          if (state === ConnectionState.FAILED) setBadge2("Falha", "error");
+          if (state === ConnectionState.RECONNECTING) setBadge("Reconectando", "warn");
+          if (state === ConnectionState.CONNECTED) setBadge("Online", "online");
+          if (state === ConnectionState.FAILED) setBadge("Falha", "error");
         },
         onClose: () => {
-          if (sessionReady) setStatus2("Reconectando...");
+          if (sessionReady) setStatus("Reconectando...");
         }
       });
-      signaling2.addListener(handleServerMessage);
+      signaling.addListener(handleServerMessage);
       try {
         await new Promise((resolve, reject) => {
           let settled = false;
@@ -20904,13 +18048,15 @@ Detalhe: ${technical}` : msg;
             () => finish(reject, new Error("Timeout ao conectar")),
             45e3
           );
-          signaling2.onOpen = () => {
+          signaling.onOpen = () => {
             runClientJoin().then(() => finish(resolve)).catch((e) => finish(reject, e));
           };
-          signaling2.connect();
+          signaling.connect();
         });
-        signaling2.onOpen = () => handleSignalingReconnect();
-        signaling2.enableReconnect = true;
+        signaling.onOpen = () => handleSignalingReconnect();
+        if (isViewer) {
+          signaling.enableReconnect = true;
+        }
         await schedulePostJoinWork();
       } finally {
         bootstrapping = false;
@@ -20928,35 +18074,46 @@ Detalhe: ${technical}` : msg;
     return clientJoinPromise;
   }
   async function executeJoinAndStart() {
-    if (joinInFlight) return;
     joinInFlight = true;
     try {
       sessionReady = false;
       stopAudioHealthWatchdog();
       hideErro();
-      const entrouPromise = signaling2.onceType("entrou");
-      signaling2.send(
+      const nome = getNome();
+      if (!nome) {
+        throw new Error("Informe um nome para este computador");
+      }
+      if (!(signaling == null ? void 0 : signaling.connected)) {
+        throw new Error("WebSocket nao conectado");
+      }
+      setStatus("Entrando na sala...");
+      const entrouPromise = signaling.onceType("entrou", () => true, 45e3);
+      signaling.send(
         "entrar",
         {
           papel: "client",
-          nome: getNome(),
-          maquina: agentHostname,
-          pin: roomPin2 || void 0,
-          viewerToken: viewerAccessToken || void 0
-        },
-        { critical: true }
+          nome,
+          maquina: ensureAgentHostname(),
+          pin: roomPin || void 0,
+          viewerToken: viewerAccessToken || void 0,
+          ...joinPayloadExtras(clientSession, {
+            viewerOnly,
+            viewerToken: viewerAccessToken
+          })
+        }
       );
       const payload = await entrouPromise;
       peerId = payload.peerId;
-      signaling2.markAuthenticated(true);
-      media2 = new MediaClient(signaling2, {
+      signaling.markAuthenticated(true);
+      setStatus("Preparando midia...");
+      media = new MediaClient(signaling, {
         splitRecvTransports: true,
-        onLog: (m, l) => setStatus2(m)
+        onLog: (m, l) => setStatus(m)
       });
-      await media2.loadDevice(payload.rtpCapabilities);
-      media2.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
-      await media2.ensureRecvTransport();
-      await media2.ensureRecvTransport(media2._audioRecvTag());
+      await media.loadDevice(payload.rtpCapabilities);
+      media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
+      await media.ensureRecvTransport();
+      await media.ensureRecvTransport(media._audioRecvTag());
       await applyPendingMicrophoneFilters();
       const deferShare = !viewerOnly && deferScreenShareOnJoin;
       deferScreenShareOnJoin = false;
@@ -20964,50 +18121,52 @@ Detalhe: ${technical}` : msg;
       const publishPrefs = (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live" ? { ...joinPrefs, prefetchedMicTrack: clientMicTrack } : joinPrefs;
       if (!viewerOnly) {
         assertSecureContext();
-        await media2.ensureSendTransport();
+        await media.ensureSendTransport();
       }
       sessionStarted = true;
       sessionReady = true;
       startAudioHealthWatchdog();
-      setBadge2("Online", "online");
-      if (pendingRoomSnapshot2 || pendingTransmission || (pendingAudioSources == null ? void 0 : pendingAudioSources.length)) {
-        await reconcileRemoteMediaState();
-      }
-      if (!viewerOnly) {
+      setBadge("Online", "online");
+      if (!viewerOnly && !skipJoinPublishOnJoin) {
         if (deferShare) {
           if (hasPendingDisplayStream()) {
-            setStatus2("Publicando tela...");
-            await media2.publishDisplayStream(clientDisplayStream, publishPrefs);
-            if (!media2.hasVideoProducer()) {
-              throw new Error("Falha ao publicar video - tente novamente");
-            }
+            setStatus("Publicando tela...");
+            await publishClientMedia(publishPrefs);
           } else {
             throw new Error("Captura de tela expirada - selecione a tela novamente");
           }
         } else {
-          setStatus2("Selecione a tela para compartilhar...");
-          await media2.startScreenShare(joinPrefs);
-          clientDisplayStream = media2.localScreenStream;
+          setStatus("Selecione a tela para compartilhar...");
+          await media.startScreenShare({ ...joinPrefs, microphone: false, systemAudio: false });
+          clientDisplayStream = media.localScreenStream;
           joinPrefs = getCapturePrefsFromUi();
-          if (joinPrefs.microphone && !media2.hasPublishedMicrophone()) {
-            await media2.publishMicrophone(joinPrefs);
-            await notifyRoomAfterMicPublish();
-          }
+          await publishClientMedia({
+            ...joinPrefs,
+            prefetchedMicTrack: (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live" ? clientMicTrack : joinPrefs.prefetchedMicTrack
+          });
         }
-        signaling2.send("status", { status: "transmitindo" });
-        await syncRoomPresenceAfterPublish();
+        await finalizeAfterPublish();
         updateClientMicUi();
         await attachVuMeterIfNeeded();
+      } else if (viewerOnly) {
+        if (pendingRoomSnapshot || pendingTransmission || (pendingAudioSources == null ? void 0 : pendingAudioSources.length)) {
+          await reconcileRemoteMediaState();
+        }
+        clientSession.setPhase(SessionPhase.VIEWER_ACTIVE);
+        setStatus("Modo espectador - aguardando transmissao");
+        await finalizeAfterPublish();
       } else {
-        setStatus2("Modo espectador - aguardando transmissao");
-        await syncRoomPresenceAfterPublish();
+        clientSession.setPhase(SessionPhase.JOINING);
+        setStatus("Conectado - publicando tela...");
       }
+      skipJoinPublishOnJoin = false;
+      deferScreenShareOnJoin = false;
     } finally {
       joinInFlight = false;
     }
   }
   async function rejoinSession() {
-    var _a60, _b, _c;
+    var _a14, _b, _c;
     if (joinInFlight || clientJoinInProgress || bootstrapping) return;
     joinInFlight = true;
     sessionReady = false;
@@ -21016,59 +18175,64 @@ Detalhe: ${technical}` : msg;
     try {
       const prefs = getCapturePrefsFromUi();
       const publishPrefs = prefs.microphone && (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live" ? { ...prefs, prefetchedMicTrack: clientMicTrack } : prefs;
-      const stream = ((_a60 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a60.call(clientDisplayStream).some((t) => t.readyState === "live")) ? clientDisplayStream : ((_c = (_b = media2 == null ? void 0 : media2.localScreenStream) == null ? void 0 : _b.getVideoTracks) == null ? void 0 : _c.call(_b).some((t) => t.readyState === "live")) ? media2.localScreenStream : null;
+      const stream = ((_a14 = clientDisplayStream == null ? void 0 : clientDisplayStream.getVideoTracks) == null ? void 0 : _a14.call(clientDisplayStream).some((t) => t.readyState === "live")) ? clientDisplayStream : ((_c = (_b = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _b.getVideoTracks) == null ? void 0 : _c.call(_b).some((t) => t.readyState === "live")) ? media.localScreenStream : null;
       await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.dispose());
       roomAudioMonitor = null;
-      await (media2 == null ? void 0 : media2.dispose({
-        keepLocalScreenStream: !!stream,
-        keepMicTrack: (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live"
-      }));
-      media2 = null;
+      suppressShareEndedHandler = true;
+      try {
+        await (media == null ? void 0 : media.dispose({
+          keepLocalScreenStream: !!stream,
+          keepMicTrack: (clientMicTrack == null ? void 0 : clientMicTrack.readyState) === "live"
+        }));
+      } finally {
+        suppressShareEndedHandler = false;
+      }
+      media = null;
       peerId = null;
-      const entrouPromise = signaling2.onceType("entrou");
-      signaling2.send(
+      const entrouPromise = signaling.onceType("entrou", () => true, 45e3);
+      if (!(signaling == null ? void 0 : signaling.connected)) {
+        throw new Error("WebSocket nao conectado");
+      }
+      signaling.send(
         "entrar",
         {
           papel: "client",
           nome: getNome(),
-          maquina: agentHostname,
-          pin: roomPin2 || void 0,
-          viewerToken: viewerAccessToken || void 0
-        },
-        { critical: true }
+          maquina: ensureAgentHostname(),
+          pin: roomPin || void 0,
+          viewerToken: viewerAccessToken || void 0,
+          ...joinPayloadExtras(clientSession, {
+            viewerOnly,
+            viewerToken: viewerAccessToken
+          })
+        }
       );
       const payload = await entrouPromise;
       peerId = payload.peerId;
-      signaling2.markAuthenticated(true);
-      media2 = new MediaClient(signaling2, {
+      signaling.markAuthenticated(true);
+      media = new MediaClient(signaling, {
         splitRecvTransports: true,
-        onLog: (m, l) => setStatus2(m)
+        onLog: (m, l) => setStatus(m)
       });
-      await media2.loadDevice(payload.rtpCapabilities);
-      media2.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
-      await media2.ensureRecvTransport();
-      await media2.ensureRecvTransport(media2._audioRecvTag());
+      await media.loadDevice(payload.rtpCapabilities);
+      media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
+      await media.ensureRecvTransport();
+      await media.ensureRecvTransport(media._audioRecvTag());
       await applyPendingMicrophoneFilters();
       if (!viewerOnly) {
-        await media2.ensureSendTransport();
+        await media.ensureSendTransport();
       }
       sessionStarted = true;
       sessionReady = true;
-      setBadge2("Online", "online");
+      setBadge("Online", "online");
       if (!viewerOnly) {
         if (stream) {
           clientDisplayStream = stream;
-          await media2.publishDisplayStream(stream, publishPrefs);
-          if (prefs.microphone && !media2.hasPublishedMicrophone()) {
-            await media2.publishMicrophone(publishPrefs);
-          }
-          if (!media2.hasVideoProducer()) {
-            throw new Error("Falha ao republicar video apos reconexao");
-          }
-          signaling2.send("status", { status: "transmitindo" });
-          setStatus2("Transmitindo - reconectado");
+          mediaPublisher = new MediaPublisher(media, signaling);
+          await publishClientMedia(publishPrefs);
+          setStatus("Transmitindo - reconectado");
         } else {
-          setStatus2("Reconectado - selecione a tela novamente");
+          setStatus("Reconectado - selecione a tela novamente");
           onboardStep = "identify";
           showIdentifyStep();
         }
@@ -21076,11 +18240,7 @@ Detalhe: ${technical}` : msg;
         updateClientMicUi();
       }
       await schedulePostJoinWork();
-      if (!viewerOnly && stream) {
-        await syncRoomPresenceAfterPublish();
-      } else if (viewerOnly) {
-        await syncRoomPresenceAfterPublish();
-      }
+      await finalizeAfterPublish();
     } finally {
       joinInFlight = false;
     }
@@ -21089,31 +18249,31 @@ Detalhe: ${technical}` : msg;
     const { ativo, fontes } = payload || {};
     displayControlActive = !!ativo;
     displaySources = enrichDisplaySources(fontes || [], txSync.lastActiveTransmission);
-    if (!displayControlActive) closeFsSourceMenu2();
-    syncFsSourceUi2();
+    if (!displayControlActive) closeFsSourceMenu();
+    syncFsSourceUi();
   }
-  function syncFsSourceUi2() {
+  function syncFsSourceUi() {
     const show = displayControlActive;
-    if (els2.btnFsSources) els2.btnFsSources.hidden = !show;
-    if (!show) closeFsSourceMenu2();
+    if (els.btnFsSources) els.btnFsSources.hidden = !show;
+    if (!show) closeFsSourceMenu();
   }
-  function closeFsSourceMenu2() {
-    var _a60;
-    if (!els2.fsSourceMenu) return;
-    els2.fsSourceMenu.hidden = true;
-    (_a60 = els2.btnFsSources) == null ? void 0 : _a60.setAttribute("aria-expanded", "false");
+  function closeFsSourceMenu() {
+    var _a14;
+    if (!els.fsSourceMenu) return;
+    els.fsSourceMenu.hidden = true;
+    (_a14 = els.btnFsSources) == null ? void 0 : _a14.setAttribute("aria-expanded", "false");
   }
-  function toggleFsSourceMenu2() {
-    var _a60;
-    if (!els2.fsSourceMenu || !displayControlActive) return;
-    const open = els2.fsSourceMenu.hidden;
-    if (open) renderFsSourceMenu2();
-    els2.fsSourceMenu.hidden = !open;
-    (_a60 = els2.btnFsSources) == null ? void 0 : _a60.setAttribute("aria-expanded", String(open));
+  function toggleFsSourceMenu() {
+    var _a14;
+    if (!els.fsSourceMenu || !displayControlActive) return;
+    const open = els.fsSourceMenu.hidden;
+    if (open) renderFsSourceMenu();
+    els.fsSourceMenu.hidden = !open;
+    (_a14 = els.btnFsSources) == null ? void 0 : _a14.setAttribute("aria-expanded", String(open));
   }
-  function renderFsSourceMenu2() {
-    if (!els2.fsSourceList) return;
-    els2.fsSourceList.innerHTML = "";
+  function renderFsSourceMenu() {
+    if (!els.fsSourceList) return;
+    els.fsSourceList.innerHTML = "";
     const sources = sortDisplaySources(
       enrichDisplaySources(displaySources, txSync.lastActiveTransmission)
     );
@@ -21121,76 +18281,80 @@ Detalhe: ${technical}` : msg;
       const li = document.createElement("li");
       li.className = "fs-source-empty";
       li.textContent = "Nenhuma fonte disponivel";
-      els2.fsSourceList.appendChild(li);
+      els.fsSourceList.appendChild(li);
       return;
     }
     for (const s of sources) {
-      els2.fsSourceList.appendChild(
+      els.fsSourceList.appendChild(
         buildDisplaySourceCard(s, (peerId2) => {
-          closeFsSourceMenu2();
+          closeFsSourceMenu();
           selecionarFonte(peerId2);
         })
       );
     }
   }
   async function selecionarFonte(targetPeerId) {
-    if (!displayControlActive || !(signaling2 == null ? void 0 : signaling2.authenticated)) return;
+    if (!displayControlActive || !(signaling == null ? void 0 : signaling.authenticated)) return;
     const source = displaySources.find((s) => String(s.id) === String(targetPeerId));
     if (!source || !isSelectableSource(source)) return;
     try {
-      const resultPromise = signaling2.onceType("selecaoResultado");
-      signaling2.send("selecionarFonte", { peerId: targetPeerId });
+      const resultPromise = signaling.onceType("selecaoResultado");
+      signaling.send("selecionarFonte", { peerId: targetPeerId });
       const res = await resultPromise;
       if (!res.ok) throw new Error(res.erro || "Falha na selecao");
       showToast("Fonte alternada", "success");
     } catch (e) {
-      errors2.handle(e, "selecionar-fonte");
+      errors.handle(e, "selecionar-fonte");
     }
   }
   async function applyPendingMicrophoneFilters() {
-    if (!media2 || !pendingMicrophoneFilterPrefs) return;
-    await media2.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs);
+    if (!media || !pendingMicrophoneFilterPrefs) return;
+    await media.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs);
   }
   async function handleServerMessage(msg) {
-    var _a60, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    var _a14, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    if (msg.type === "roomState") {
+      await applyRoomSnapshot(msg.payload, { force: true });
+      return;
+    }
     if (msg.type === "estadoSala") {
-      await applyRoomSnapshot2(msg.payload);
+      await applyRoomSnapshot(msg.payload);
       return;
     }
     if (msg.type === "modoPonteMeetAtualizado") {
-      await applyMeetBridgeLiveMode(!!((_a60 = msg.payload) == null ? void 0 : _a60.ativo));
+      await applyMeetBridgeLiveMode(!!((_a14 = msg.payload) == null ? void 0 : _a14.ativo));
       return;
     }
     if (msg.type === "filtroAudioAtualizado") {
       pendingMicrophoneFilterPrefs = ((_b = msg.payload) == null ? void 0 : _b.prefs) || {};
-      if (media2) {
-        await media2.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs).catch(
-          (e) => errors2.handle(e, "audio-filters")
+      if (media) {
+        await media.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs).catch(
+          (e) => errors.handle(e, "audio-filters")
         );
       }
       return;
     }
     if (msg.type === "clientesSilenciados") {
       const mutedIds = ((_c = msg.payload) == null ? void 0 : _c.mutedPeerIds) || [];
-      mutedClients2.clear();
+      mutedClients.clear();
       for (const id of mutedIds) {
-        mutedClients2.add(String(id));
+        mutedClients.add(String(id));
       }
       syncOwnMicMuteFromRoom();
-      applyClientAudioMute2();
+      applyClientAudioMute();
       return;
     }
     if (msg.type === "fontesAudio") {
       const sources = ((_d = msg.payload) == null ? void 0 : _d.sources) || [];
-      lastAudioSources2 = sources;
+      lastAudioSources = sources;
       if (!sessionReady) {
         pendingAudioSources = sources;
         return;
       }
-      if (fontesAudioDebounceTimer2) clearTimeout(fontesAudioDebounceTimer2);
-      fontesAudioDebounceTimer2 = setTimeout(() => {
-        fontesAudioDebounceTimer2 = null;
-        syncClientAudioMonitor(sources).catch((e) => errors2.handle(e, "audio-sync"));
+      if (fontesAudioDebounceTimer) clearTimeout(fontesAudioDebounceTimer);
+      fontesAudioDebounceTimer = setTimeout(() => {
+        fontesAudioDebounceTimer = null;
+        syncClientAudioMonitor(sources).catch((e) => errors.handle(e, "audio-sync"));
       }, 80);
       return;
     }
@@ -21205,8 +18369,8 @@ Detalhe: ${technical}` : msg;
         return;
       }
       await txSync.apply(msg.payload);
-      await syncClientAudioMonitor(lastAudioSources2).catch(
-        (e) => errors2.handle(e, "audio-sync")
+      await syncClientAudioMonitor(lastAudioSources).catch(
+        (e) => errors.handle(e, "audio-sync")
       );
       return;
     }
@@ -21216,12 +18380,12 @@ Detalhe: ${technical}` : msg;
       if (!sessionReady && formatServerError(mensagem).code === ErrorCodes.NOT_AUTHENTICATED) {
         return;
       }
-      const entry = errors2.handle(new Error(mensagem), "servidor");
+      const entry = errors.handle(new Error(mensagem), "servidor");
       showErro(entry.friendly, entry.technical);
     }
     if (msg.type === "consumerFechado") {
       const consumerId = (_i = msg.payload) == null ? void 0 : _i.consumerId;
-      const wasVideoConsumer = ((_k = (_j = media2 == null ? void 0 : media2.remoteConsumers) == null ? void 0 : _j.video) == null ? void 0 : _k.id) === consumerId;
+      const wasVideoConsumer = ((_k = (_j = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _j.video) == null ? void 0 : _k.id) === consumerId;
       if (consumerId) {
         await (roomAudioMonitor == null ? void 0 : roomAudioMonitor.removeByConsumerId(consumerId));
       }
@@ -21229,13 +18393,13 @@ Detalhe: ${technical}` : msg;
         debugClientLog("H3", "[CLIENT_CONSUME] consumer de video fechado", {
           consumerId: (consumerId == null ? void 0 : consumerId.slice(0, 8)) || null
         });
-        setStatus2("Stream remota encerrada");
+        setStatus("Stream remota encerrada");
         await txSync.onConsumerClosed(consumerId);
-        await syncClientAudioMonitor(lastAudioSources2).catch(
-          (e) => errors2.handle(e, "audio-sync")
+        await syncClientAudioMonitor(lastAudioSources).catch(
+          (e) => errors.handle(e, "audio-sync")
         );
       } else {
-        lastAppliedAudioSig2 = "";
+        lastAppliedAudioSig = "";
         await repairAllAudioIfNeeded();
       }
       return;
@@ -21244,8 +18408,8 @@ Detalhe: ${technical}` : msg;
       const presetId = (_l = msg.payload) == null ? void 0 : _l.presetId;
       if (!presetId) return;
       savePresetId(presetId);
-      if (media2) {
-        media2.setVideoQuality(mergeServerQuality(media2.videoQuality, presetId));
+      if (media) {
+        media.setVideoQuality(mergeServerQuality(media.videoQuality, presetId));
       }
       showToast(
         "Qualidade atualizada pelo host - recompartilhe a tela para aplicar",
@@ -21256,56 +18420,58 @@ Detalhe: ${technical}` : msg;
       applyDisplayControlUpdate(msg.payload);
     }
     if (msg.type === "promovidoCoHost") {
-      initCoHost(signaling2, media2, peerId);
-      syncRoomPresenceAfterPublish();
+      showToast("Funcoes de co-host estao disponiveis apenas no painel host", "info");
     }
     if (msg.type === "demovidoCoHost") {
-      teardownCoHost();
-      syncRoomPresenceAfterPublish();
+      showToast("Voce nao e mais co-host desta sala", "info");
     }
   }
-  var _a54;
-  (_a54 = els2.btnSettings) == null ? void 0 : _a54.addEventListener("click", () => openSettingsModal());
-  var _a55;
-  (_a55 = els2.btnSettingsSave) == null ? void 0 : _a55.addEventListener("click", () => saveSettingsModal());
-  var _a56;
-  (_a56 = els2.btnSettingsClose) == null ? void 0 : _a56.addEventListener("click", () => closeSettingsModal());
-  var _a57;
-  (_a57 = els2.btnClientMic) == null ? void 0 : _a57.addEventListener("click", () => onClientMicClick());
-  var _a58;
-  (_a58 = els2.btnFullscreen) == null ? void 0 : _a58.addEventListener("click", () => {
-    var _a60;
-    const el = els2.clientMain || document.querySelector(".client-main");
+  var _a8;
+  (_a8 = els.btnSettings) == null ? void 0 : _a8.addEventListener("click", () => openSettingsModal());
+  var _a9;
+  (_a9 = els.btnSettingsSave) == null ? void 0 : _a9.addEventListener("click", () => saveSettingsModal());
+  var _a10;
+  (_a10 = els.btnSettingsClose) == null ? void 0 : _a10.addEventListener("click", () => closeSettingsModal());
+  var _a11;
+  (_a11 = els.btnClientMic) == null ? void 0 : _a11.addEventListener("click", () => onClientMicClick());
+  var _a12;
+  (_a12 = els.btnFullscreen) == null ? void 0 : _a12.addEventListener("click", () => {
+    var _a14;
+    const el = els.clientMain || document.querySelector(".client-main");
     if (document.fullscreenElement) document.exitFullscreen();
-    else (_a60 = el == null ? void 0 : el.requestFullscreen) == null ? void 0 : _a60.call(el);
+    else (_a14 = el == null ? void 0 : el.requestFullscreen) == null ? void 0 : _a14.call(el);
   });
-  var _a59;
-  (_a59 = els2.btnFsSources) == null ? void 0 : _a59.addEventListener("click", (e) => {
+  var _a13;
+  (_a13 = els.btnFsSources) == null ? void 0 : _a13.addEventListener("click", (e) => {
     e.stopPropagation();
-    toggleFsSourceMenu2();
+    toggleFsSourceMenu();
   });
-  document.addEventListener("fullscreenchange", syncFsSourceUi2);
+  document.addEventListener("fullscreenchange", syncFsSourceUi);
   document.addEventListener("click", (e) => {
-    var _a60, _b, _c;
-    if ((_a60 = els2.fsSourceMenu) == null ? void 0 : _a60.hidden) return;
-    if (e.target === els2.btnFsSources || ((_b = els2.btnFsSources) == null ? void 0 : _b.contains(e.target))) return;
-    if ((_c = els2.fsSourceMenu) == null ? void 0 : _c.contains(e.target)) return;
-    closeFsSourceMenu2();
+    var _a14, _b, _c;
+    if ((_a14 = els.fsSourceMenu) == null ? void 0 : _a14.hidden) return;
+    if (e.target === els.btnFsSources || ((_b = els.btnFsSources) == null ? void 0 : _b.contains(e.target))) return;
+    if ((_c = els.fsSourceMenu) == null ? void 0 : _c.contains(e.target)) return;
+    closeFsSourceMenu();
   });
   window.addEventListener("sharescreen-ended", async () => {
-    var _a60;
-    const prefs = getCapturePrefsFromUi();
+    var _a14;
+    if (suppressShareEndedHandler || clientJoinInProgress || bootstrapping) {
+      logCaptureTrackState("share-ended-suppressed");
+      return;
+    }
+    logCaptureTrackState("share-ended-user");
     try {
-      await (media2 == null ? void 0 : media2.stopVideoShare());
+      await (media == null ? void 0 : media.stopVideoShare());
     } catch (e) {
-      errors2.handle(e, "share-ended");
+      errors.handle(e, "share-ended");
     }
     clientDisplayStream = null;
     onboardStep = "identify";
     updateClientMicUi();
-    const micActive = (_a60 = media2 == null ? void 0 : media2.hasPublishedMicrophone) == null ? void 0 : _a60.call(media2);
-    signaling2 == null ? void 0 : signaling2.send("status", { status: micActive ? "transmitindo" : "conectado" });
-    setStatus2(
+    const micActive = (_a14 = media == null ? void 0 : media.hasPublishedMicrophone) == null ? void 0 : _a14.call(media);
+    signaling == null ? void 0 : signaling.send("status", { status: micActive ? "transmitindo" : "conectado" });
+    setStatus(
       micActive ? "Microfone ativo - selecione a tela novamente para compartilhar" : "Compartilhamento encerrado - use o painel para compartilhar novamente"
     );
     updateClientStates(micActive ? "sharing" : "sharing");
@@ -21314,10 +18480,10 @@ Detalhe: ${technical}` : msg;
     await attachVuMeterIfNeeded();
   });
   function teardownClientSessionSync() {
-    if (signaling2 == null ? void 0 : signaling2.ws) {
+    if (signaling == null ? void 0 : signaling.ws) {
       try {
-        signaling2.intentionalClose = true;
-        signaling2.ws.close(1e3, "Pagina encerrada");
+        signaling.intentionalClose = true;
+        signaling.ws.close(1e3, "Pagina encerrada");
       } catch (_) {
       }
     }
@@ -21335,13 +18501,19 @@ Detalhe: ${technical}` : msg;
     resetClientPageState();
     await teardownClientSession({ keepDisplayStream: false });
     showIdentifyStep();
-    setStatus2("Sessao restaurada - selecione a tela novamente");
+    setStatus("Sessao restaurada - selecione a tela novamente");
   });
   initOnboarding();
+  verifyServerBuild({
+    onToast: (m, t) => showToast(m, t),
+    onTitlePrefix: (prefix) => {
+      document.title = prefix + (document.title.replace(/^\[[^\]]+\]\s*/, "") || "ShareScreen Client");
+    }
+  });
   installAudioUnlock(() => {
-    var _a60, _b, _c;
+    var _a14, _b, _c;
     roomAudioMonitor == null ? void 0 : roomAudioMonitor.resume();
-    (_b = (_a60 = els2.audio) == null ? void 0 : _a60.play) == null ? void 0 : _b.call(_a60).catch(() => {
+    (_b = (_a14 = els.audio) == null ? void 0 : _a14.play) == null ? void 0 : _b.call(_a14).catch(() => {
     });
     if (roomAudioMonitor && !((_c = roomAudioMonitor.isAutoplayBlocked) == null ? void 0 : _c.call(roomAudioMonitor))) {
       clientMicAutoplayNeeded = false;
