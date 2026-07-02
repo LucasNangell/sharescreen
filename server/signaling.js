@@ -401,6 +401,13 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       break;
     }
 
+    case 'sincronizarPresenca': {
+      if (!peer) throw new Error('Não autenticado');
+      room.notifyHostState();
+      sendPeerJoinSnapshot(enviar, peer);
+      break;
+    }
+
     case 'solicitarEstado': {
       if (!peer) throw new Error('Não autenticado');
       sendPeerJoinSnapshot(enviar, peer);

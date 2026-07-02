@@ -313,7 +313,15 @@ export class TransmissionSync {
           if (el) el.textContent = `Transmissao finalizada por ${tx.finalizadaPor}`;
           this.onStateChange('finalized', tx);
         } else {
-          this.onStateChange(tx.paused ? 'paused' : viewerOnly ? 'waiting' : 'sharing', tx);
+          const prior = this._lastActiveTransmission;
+          const keepPriorWatch =
+            !viewerOnly &&
+            prior &&
+            hasActiveVideo(prior) &&
+            String(prior.selectedPeerId) !== String(peerId);
+          if (!keepPriorWatch) {
+            this.onStateChange(tx.paused ? 'paused' : viewerOnly ? 'waiting' : 'sharing', tx);
+          }
         }
         return;
       }

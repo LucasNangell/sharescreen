@@ -412,6 +412,8 @@ export class MediaClient {
       return this.stopMicrophone();
     }
 
+    await this.ensureSendTransport();
+
     let track = capturePrefs.prefetchedMicTrack || this._micTrack || null;
     const publishPrefs = this._resolvePublishMicFilterPrefs();
     const micCaptureOptions =

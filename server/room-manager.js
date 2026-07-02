@@ -513,11 +513,25 @@ export class RoomManager {
         if (old.hasAudioProducer()) audioSourcesChanged = true;
         this.cleanupPeerMedia(old);
         if (this.selectedPeerId === old.id) {
-          this.selectedPeerId = null;
-          this.transmissionPaused = false;
-          this.interrompidaPor = null;
-          this.finalizadaPor = null;
-          this.broadcastActiveProducer();
+          const alternative = [...this.peers.values()].find(
+            (p) =>
+              p.id !== old.id &&
+              this.isPeerSocketOpen(p) &&
+              p.hasVideoProducer()
+          );
+          if (alternative) {
+            this.selectedPeerId = alternative.id;
+            this.transmissionPaused = false;
+            this.interrompidaPor = null;
+            this.finalizadaPor = null;
+            this.broadcastActiveProducer();
+          } else {
+            this.selectedPeerId = null;
+            this.transmissionPaused = false;
+            this.interrompidaPor = null;
+            this.finalizadaPor = null;
+            this.broadcastActiveProducer();
+          }
         }
         this.peers.delete(old.id);
       }

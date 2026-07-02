@@ -203,8 +203,18 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T23-31-15-3urpem";
+var BUILD_ID="2026-07-02T17-55-01-gab8rj";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -252,10 +262,10 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T23-31-15-3urpem" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T23-31-15-3urpem" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T23-31-15-3urpem" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-01T23-31-15-3urpem" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02T17-55-01-gab8rj" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-02T17-55-01-gab8rj" />
+  <link rel="stylesheet" href="style.css?v=2026-07-02T17-55-01-gab8rj" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-02T17-55-01-gab8rj" />
 </head>
 <body class="app-client">
   <div id="overlay" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
@@ -320,24 +330,26 @@ try{
   <main class="client-main app-main">
     <div class="preview-area" id="preview-area" style="position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0;">
       <div id="stream-source-badge" class="stream-source-badge" hidden aria-live="polite"></div>
-      <button type="button" id="btn-settings" class="preview-float-btn preview-gear-btn" aria-label="Configurações">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-      <button type="button" id="btn-client-mic" class="preview-mic-toggle preview-mic-below-settings" hidden
-        aria-label="Microfone" aria-pressed="false" title="Silenciar microfone">
-        <svg class="mic-icon-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-          <path d="M19 11v1a7 7 0 0 1-14 0v-1"/>
-          <line x1="12" y1="19" x2="12" y2="22"/>
-        </svg>
-        <svg class="mic-icon-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" hidden>
-          <line x1="1" y1="1" x2="23" y2="23"/>
-          <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
-          <path d="M17 11v1a5 5 0 0 1-5 5"/>
-          <path d="M12 19v3"/>
-          <path d="M8 5a4 4 0 0 1 7.5-1"/>
-        </svg>
-      </button>
+      <div class="preview-float-stack">
+        <button type="button" id="btn-settings" class="preview-float-btn preview-gear-btn" aria-label="Configurações">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button type="button" id="btn-client-mic" class="preview-mic-toggle" hidden
+          aria-label="Microfone" aria-pressed="false" title="Silenciar microfone">
+          <svg class="mic-icon-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M19 11v1a7 7 0 0 1-14 0v-1"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          <svg class="mic-icon-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" hidden>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
+            <path d="M17 11v1a5 5 0 0 1-5 5"/>
+            <path d="M12 19v3"/>
+            <path d="M8 5a4 4 0 0 1 7.5-1"/>
+          </svg>
+        </button>
+      </div>
       <button type="button" id="btn-fullscreen" class="preview-float-btn preview-fullscreen-btn" aria-label="Tela cheia" title="Tela cheia">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
       </button>
@@ -350,7 +362,7 @@ try{
         <h2>Assistindo transmissão</h2>
         <p id="watching-label"></p>
       </div>
-      <div id="state-waiting" class="client-overlay">
+      <div id="state-waiting" class="client-overlay" hidden>
         <h2>Aguardando transmissão</h2>
         <p>O host ainda não selecionou uma fonte ou não há transmissão activa.</p>
       </div>
@@ -639,6 +651,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T23-31-15-3urpem"></script>
+  <script src="app.bundle.js?v=2026-07-02T17-55-01-gab8rj"></script>
 </body>
 </html>

@@ -14,6 +14,11 @@ export const ErrorCodes = {
   UPLOAD_FAILED: 'upload_failed',
   SERVER_UNAVAILABLE: 'server_unavailable',
   AUTH_FAILED: 'auth_failed',
+  ROOM_FULL: 'room_full',
+  FORBIDDEN: 'forbidden',
+  NOT_AUTHENTICATED: 'not_authenticated',
+  NO_SELECTION: 'no_selection',
+  TRANSPORT_ERROR: 'transport_error',
   UNKNOWN: 'unknown'
 };
 
@@ -42,19 +47,88 @@ const FRIENDLY = {
     'Servidor indisponível. Verifique se o ShareScreen está em execução.',
   [ErrorCodes.AUTH_FAILED]:
     'Acesso negado. Verifique o PIN ou credenciais de host.',
-  [ErrorCodes.UNKNOWN]: 'Ocorreu um erro inesperado. Consulte o painel técnico.'
+  [ErrorCodes.ROOM_FULL]:
+    'Sala cheia. Aguarde ou peça ao host para liberar vagas.',
+  [ErrorCodes.FORBIDDEN]:
+    'Sem permissão para esta ação.',
+  [ErrorCodes.NOT_AUTHENTICATED]:
+    'Sessão expirada. Reconectando automaticamente…',
+  [ErrorCodes.NO_SELECTION]:
+    'Nenhuma fonte selecionada para esta operação.',
+  [ErrorCodes.TRANSPORT_ERROR]:
+    'Conexão de mídia instável. Aguarde a reconexão automática.',
+  [ErrorCodes.UNKNOWN]: 'Ocorreu um erro inesperado. Tente novamente em instantes.'
 };
+
+export function classifyServerMessage(msg) {
+  const text = String(msg || '').toLowerCase();
+
+  if (text.includes('limite de') && text.includes('client')) {
+    return ErrorCodes.ROOM_FULL;
+  }
+  if (
+    text.includes('pin inválido') ||
+    text.includes('pin invalido') ||
+    text.includes('acesso negado') ||
+    text.includes('link de acesso inválido') ||
+    text.includes('link de acesso invalido')
+  ) {
+    return ErrorCodes.AUTH_FAILED;
+  }
+  if (text.includes('não autenticado') || text.includes('nao autenticado')) {
+    return ErrorCodes.NOT_AUTHENTICATED;
+  }
+  if (
+    text.includes('apenas o host') ||
+    text.includes('sem permissao') ||
+    text.includes('sem permissão')
+  ) {
+    return ErrorCodes.FORBIDDEN;
+  }
+  if (text.includes('nenhum client selecionado') || text.includes('nenhuma transmiss')) {
+    return ErrorCodes.NO_SELECTION;
+  }
+  if (text.includes('transport') && (text.includes('inválido') || text.includes('invalido'))) {
+    return ErrorCodes.TRANSPORT_ERROR;
+  }
+  if (text.includes('timeout') || text.includes('servidor indispon')) {
+    return ErrorCodes.SERVER_UNAVAILABLE;
+  }
+  return null;
+}
+
+export function isTransientServerError(msg, { joinInProgress = false } = {}) {
+  const text = String(msg || '').toLowerCase();
+  if (joinInProgress && (text.includes('não autenticado') || text.includes('nao autenticado'))) {
+    return true;
+  }
+  if (text.includes('tipo de mensagem desconhecido')) return true;
+  return false;
+}
+
+export function formatServerError(message) {
+  const technical = String(message || '');
+  const code = classifyServerMessage(technical) || classifyError(new Error(technical));
+  return {
+    code,
+    friendly: FRIENDLY[code] || FRIENDLY[ErrorCodes.UNKNOWN],
+    technical
+  };
+}
 
 export function classifyError(err) {
   const name = err?.name || '';
   const msg = String(err?.message || err || '').toLowerCase();
+
+  const serverCode = classifyServerMessage(msg);
+  if (serverCode) return serverCode;
 
   if (name === 'NotAllowedError' || msg.includes('permission')) {
     if (
       msg.includes('local network') ||
       msg.includes('private network') ||
       msg.includes('private ip') ||
-      msg.includes('mDNS')
+      msg.includes('mdns')
     ) {
       return ErrorCodes.ICE_FAILED;
     }
@@ -89,7 +163,7 @@ export function classifyError(err) {
     return ErrorCodes.AUTH_FAILED;
   }
   if (msg.includes('não autenticado') || msg.includes('nao autenticado')) {
-    return ErrorCodes.WS_DISCONNECTED;
+    return ErrorCodes.NOT_AUTHENTICATED;
   }
   if (msg.includes('timeout')) {
     return ErrorCodes.SERVER_UNAVAILABLE;
@@ -98,11 +172,13 @@ export function classifyError(err) {
 }
 
 export class ErrorManager {
-  constructor({ onToast, onTechnicalLog } = {}) {
+  constructor({ onToast, onTechnicalLog, toastDedupeMs = 3000 } = {}) {
     this.onToast = onToast || (() => {});
     this.onTechnicalLog = onTechnicalLog || (() => {});
     this.lastErrors = [];
     this.maxHistory = 50;
+    this.toastDedupeMs = toastDedupeMs;
+    this._lastToast = { code: '', at: 0 };
   }
 
   handle(err, context = '') {
@@ -122,9 +198,26 @@ export class ErrorManager {
     if (this.lastErrors.length > this.maxHistory) this.lastErrors.pop();
 
     this.onTechnicalLog(`[${code}] ${context}: ${technical}`, 'error');
-    this.onToast(friendly, 'error');
+
+    const now = Date.now();
+    if (
+      code !== this._lastToast.code ||
+      now - this._lastToast.at >= this.toastDedupeMs
+    ) {
+      this._lastToast = { code, at: now };
+      this.onToast(friendly, 'error');
+    }
 
     return entry;
+  }
+
+  handleServerMessage(message, context = 'servidor', { joinInProgress = false } = {}) {
+    const technical = String(message || '');
+    if (isTransientServerError(technical, { joinInProgress })) {
+      this.onTechnicalLog(`[transient] ${context}: ${technical}`, 'warn');
+      return null;
+    }
+    return this.handle(new Error(technical), context);
   }
 
   getHistory() {

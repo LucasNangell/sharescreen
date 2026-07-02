@@ -5,7 +5,7 @@ import { loadCapturePrefs, saveCapturePrefs, setupMicrophonePicker, installAudio
 import { RecordingClient, RecordingState } from '../shared/recording-client.js';
 import { RecordingCompositor } from '../shared/recording-compositor.js';
 import { RecordingAudioMixer } from '../shared/recording-audio-mixer.js';
-import { ErrorManager, assertSecureContext } from '../shared/error-manager.js';
+import { ErrorManager, assertSecureContext, isTransientServerError } from '../shared/error-manager.js';
 import { UiStateMachine } from '../shared/ui-state.js';
 import { mergeServerQuality, loadPresetId, savePresetId, getPreset, bitrateMbps } from '../shared/quality-manager.js';
 import { showToast as originalShowToast } from '../shared/toast.js';
@@ -1741,25 +1741,25 @@ function handleMessage(msg) {
   }
   if (msg.type === 'demovidoCoHost') {
     if (isCoHostInstance) {
-      isCoHostInstance = false;
-      if (els.sidebar) els.sidebar.hidden = true;
-      els.appMain?.classList.remove('sidebar-open');
-      els.appMain?.classList.remove('sidebar-collapsed');
-      els.sidebar?.classList.remove('is-collapsed');
-      if (els.btnSidebarCollapse) {
-        els.btnSidebarCollapse.setAttribute('aria-expanded', 'false');
-      }
+      teardownCoHost();
       return;
     }
     window.location.href = `/client/?nome=${encodeURIComponent(hostDisplayName)}`;
   }
   if (msg.type === 'fontesAudio') {
     const sources = msg.payload?.sources || [];
+    const forceMicSync = sources.some(
+      (s) =>
+        (s.source || 'microphone') === 'microphone' &&
+        String(s.peerId || s.id) !== String(hostPeerId)
+    );
     lastAudioSources = sources;
     if (fontesAudioDebounceTimer) clearTimeout(fontesAudioDebounceTimer);
     fontesAudioDebounceTimer = setTimeout(() => {
       fontesAudioDebounceTimer = null;
-      syncHostAudioMonitor(sources).catch((e) => errors.handle(e, 'audio-monitor'));
+      syncHostAudioMonitor(sources, { force: forceMicSync }).catch((e) =>
+        errors.handle(e, 'audio-monitor')
+      );
     }, 80);
     return;
   }
@@ -1812,16 +1812,12 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'erro') {
-    const text = String(msg.payload?.mensagem || '').toLowerCase();
-    const benign =
-      joinInProgress ||
-      text.includes('nao autenticado') ||
-      text.includes('nao autenticado');
-    if (benign) {
-      log(msg.payload?.mensagem || 'Erro transitorio', 'warn');
+    const mensagem = msg.payload?.mensagem || '';
+    if (isTransientServerError(mensagem, { joinInProgress })) {
+      log(mensagem || 'Erro transitorio', 'warn');
       return;
     }
-    errors.handle(new Error(msg.payload?.mensagem), 'servidor');
+    errors.handleServerMessage(mensagem, 'servidor', { joinInProgress });
   }
 }
 
@@ -1912,6 +1908,7 @@ async function joinHost({ autoShare = true } = {}) {
     if (gen !== joinGeneration) return;
 
     await media.ensureRecvTransport();
+    await media.ensureRecvTransport(media._audioRecvTag());
     if (gen !== joinGeneration) return;
 
     media.setVideoQuality(quality);
@@ -3010,6 +3007,20 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+export function teardownCoHost() {
+  if (!isCoHostInstance) return;
+  isCoHostInstance = false;
+  hostReady = false;
+  if (signaling) signaling.removeListener(coHostHandleMessage);
+  if (els.sidebar) els.sidebar.hidden = true;
+  els.appMain?.classList.remove('sidebar-open');
+  els.appMain?.classList.remove('sidebar-collapsed');
+  els.sidebar?.classList.remove('is-collapsed');
+  if (els.btnSidebarCollapse) {
+    els.btnSidebarCollapse.setAttribute('aria-expanded', 'false');
+  }
+}
 
 export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
   signaling = clientSignaling;
