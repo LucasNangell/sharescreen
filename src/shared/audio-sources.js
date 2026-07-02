@@ -32,7 +32,13 @@ export function audioTrace(event, data = {}) {
 /**
  * Normaliza fontes remotas: exclui peer local, deduplica por producerId.
  */
-export function normalizeRemoteAudioSources(sources, { excludePeerId = null } = {}) {
+export function normalizeRemoteAudioSources(
+  sources,
+  { excludePeerId = null, excludeSourceTypes = [] } = {}
+) {
+  const excludedTypes = new Set(
+    (excludeSourceTypes || []).map((t) => normalizeAudioSource(t, t))
+  );
   const byProducer = new Map();
   for (const raw of sources || []) {
     const peerId = raw?.peerId || raw?.id;

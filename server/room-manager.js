@@ -175,6 +175,7 @@ export class RoomManager {
     this.finalizadaPor = null;
     this.mutedPeerIds = new Set();
     this._lastAudioSourcesSig = '';
+    this.meetBridgeLiveMode = false;
   }
 
   isPeerSocketOpen(peer) {
@@ -267,6 +268,14 @@ export class RoomManager {
     this.broadcastToClients({
       type: 'qualidadeAtualizada',
       payload: { presetId }
+    });
+  }
+
+  setMeetBridgeLiveMode(ativo) {
+    this.meetBridgeLiveMode = !!ativo;
+    this.broadcastToClients({
+      type: "modoPonteMeetAtualizado",
+      payload: { ativo: this.meetBridgeLiveMode }
     });
   }
 
@@ -399,6 +408,7 @@ export class RoomManager {
       transmissionPaused: this.transmissionPaused,
       controleExibicao: [...this.displayControllerIds],
       audioSources: this.getAudioSources(),
+      meetBridgeLiveMode: this.meetBridgeLiveMode,
       rtpCapabilities: getRtpCapabilities()
     };
   }
@@ -458,6 +468,7 @@ export class RoomManager {
       audioProducers: audioSources,
       transmissionPaused: this.transmissionPaused,
       controleExibicao: [...this.displayControllerIds],
+      meetBridgeLiveMode: this.meetBridgeLiveMode,
       rtpCapabilities: getRtpCapabilities(),
       mutedPeerIds: [...this.mutedPeerIds]
     };

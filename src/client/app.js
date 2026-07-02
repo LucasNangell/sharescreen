@@ -115,6 +115,7 @@ let lastAudioSources = [];
 let lastAppliedAudioSig = '';
 let fontesAudioDebounceTimer = null;
 let hostPeerId = null;
+let meetBridgeLiveMode = false;
 let audioHealthTimer = null;
 let deferScreenShareOnJoin = false;
 let pendingPostPublishRemoteWork = null;
@@ -139,6 +140,15 @@ const mutedClients = new Set();
 
 function applyClientAudioMute() {
   roomAudioMonitor?.setManualMuted(mutedClients);
+}
+
+function syncOwnMicMuteFromRoom() {
+  if (!peerId || !media?.hasPublishedMicrophone?.()) return;
+  const selfMuted = mutedClients.has(String(peerId));
+  if (media.isPublishedAudioMuted() !== selfMuted) {
+    media.setPublishedAudioMuted(selfMuted);
+  }
+  updateClientMicUi();
 }
 
 const errors = new ErrorManager({
@@ -283,10 +293,12 @@ async function onClientMicClick() {
       showToast('Audio ativado', 'success');
       return;
     }
-    if (!media?.hasPublishedMicrophone?.()) return;
-    media.togglePublishedAudioMuted();
+    if (!media?.hasPublishedMicrophone?.() || !peerId) return;
+    const muted = !media.isPublishedAudioMuted();
+    media.setPublishedAudioMuted(muted);
+    signaling.send('definirClientMute', { peerId, muted });
     updateClientMicUi();
-    showToast(media.isPublishedAudioMuted() ? 'Microfone silenciado' : 'Microfone ativado', 'info');
+    showToast(muted ? 'Microfone silenciado' : 'Microfone ativado', 'info');
   } catch (e) {
     errors.handle(e, 'mic-toggle');
   }
@@ -382,8 +394,27 @@ function onRemoteAudioAutoplayBlocked() {
 
 
 
+function clientAudioNormalizeOptions() {
+  return {
+    excludePeerId: peerId,
+    excludeSourceTypes: meetBridgeLiveMode ? ["system"] : []
+  };
+}
+
 function expectedAudioSourceCount() {
-  return normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId }).length;
+  return normalizeRemoteAudioSources(lastAudioSources, clientAudioNormalizeOptions()).length;
+}
+
+async function applyMeetBridgeLiveMode(ativo, { forceSync = true } = {}) {
+  const next = !!ativo;
+  if (next === meetBridgeLiveMode && !forceSync) return;
+  meetBridgeLiveMode = next;
+  lastAppliedAudioSig = "";
+  if (sessionReady && forceSync) {
+    await syncClientAudioMonitor(lastAudioSources, { force: true }).catch((e) =>
+      errors.handle(e, "audio-sync")
+    );
+  }
 }
 
 function countActiveAudioChannels(monitor) {
@@ -419,7 +450,7 @@ async function repairAllAudioIfNeeded() {
     active
   });
 
-  const list = normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId });
+  const list = normalizeRemoteAudioSources(lastAudioSources, clientAudioNormalizeOptions());
   const backoffs = [0, 400, 800, 1600];
   for (const delay of backoffs) {
     if (delay) await new Promise((r) => setTimeout(r, delay));
@@ -488,7 +519,7 @@ async function syncClientAudioMonitor(sources, { force = false } = {}) {
       if (!monitor) return;
       const list = normalizeRemoteAudioSources(
         sources?.length ? sources : lastAudioSources,
-        { excludePeerId: peerId }
+        clientAudioNormalizeOptions()
       );
       if (sources?.length) lastAudioSources = sources;
       const sig = audioSourcesSignature(list);
@@ -508,7 +539,7 @@ async function syncClientAudioMonitor(sources, { force = false } = {}) {
         await new Promise((r) => setTimeout(r, retryBackoffs[retryCycle]));
         retryCycle += 1;
         await monitor.syncFromSources(
-          normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: peerId })
+          normalizeRemoteAudioSources(lastAudioSources, clientAudioNormalizeOptions())
         );
       }
       await monitor.recoverOutputIfSilent?.();
@@ -1070,11 +1101,16 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   const parsed = parseRoomSnapshot(snapshot);
   applyHostPeerFromSnapshot(parsed);
 
+  if (snapshot.meetBridgeLiveMode !== undefined) {
+    await applyMeetBridgeLiveMode(snapshot.meetBridgeLiveMode, { forceSync: sessionReady });
+  }
+
   if (parsed.mutedPeerIds) {
     mutedClients.clear();
     for (const id of parsed.mutedPeerIds) {
       mutedClients.add(String(id));
     }
+    syncOwnMicMuteFromRoom();
     applyClientAudioMute();
   }
 
@@ -1520,6 +1556,10 @@ async function handleServerMessage(msg) {
     await applyRoomSnapshot(msg.payload);
     return;
   }
+  if (msg.type === 'modoPonteMeetAtualizado') {
+    await applyMeetBridgeLiveMode(!!msg.payload?.ativo);
+    return;
+  }
   if (msg.type === 'filtroAudioAtualizado') {
     pendingMicrophoneFilterPrefs = msg.payload?.prefs || {};
     if (media) {
@@ -1535,6 +1575,7 @@ async function handleServerMessage(msg) {
     for (const id of mutedIds) {
       mutedClients.add(String(id));
     }
+    syncOwnMicMuteFromRoom();
     applyClientAudioMute();
     return;
   }

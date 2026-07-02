@@ -308,9 +308,14 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
     }
 
     case 'definirClientMute': {
-      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode silenciar clients');
       const { peerId, muted } = msg.payload || {};
-      room.setClientMuted(peerId, !!muted);
+      if (isHostOrCoHost(peer)) {
+        room.setClientMuted(peerId, !!muted);
+      } else if (peer?.role === 'client' && String(peerId) === String(peer.id)) {
+        room.setClientMuted(peer.id, !!muted);
+      } else {
+        throw new Error('Sem permissao para alterar mute deste client');
+      }
       break;
     }
 
@@ -410,6 +415,14 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       }
       room.broadcastQualityPreset(presetId);
       enviar({ type: 'qualidadeDefinida', payload: { ok: true, presetId } });
+      break;
+    }
+
+    case 'definirModoPonteMeet': {
+      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode definir modo ponte Meet');
+      const ativo = !!(msg.payload && msg.payload.ativo);
+      room.setMeetBridgeLiveMode(ativo);
+      enviar({ type: 'modoPonteMeetDefinido', payload: { ok: true, ativo } });
       break;
     }
 

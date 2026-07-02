@@ -94,6 +94,7 @@ const els = {
   recordingFilename: $('recording-filename'),
   recExcludeOwnSystem: $('rec-exclude-own-system'),
   recSelectedPeerOnly: $('rec-selected-peer-only'),
+  chkMeetBridgeLive: $('chk-meet-bridge-live'),
   btnRecMeetBridgePreset: $('btn-rec-meet-bridge-preset'),
   recMeetBridgeHint: $('rec-meet-bridge-hint'),
   recDefaultAudioHint: $('rec-default-audio-hint'),
@@ -158,6 +159,7 @@ let hostMicAutoplayNeeded = false;
 let lastAudioSources = [];
 let lastAppliedAudioSig = '';
 let fontesAudioDebounceTimer = null;
+let meetBridgeLiveMode = false;
 let pendingRoomSnapshot = null;
 let lastAppliedSnapshotKey = '';
 let lastAppliedActiveVideoKey = '';
@@ -1382,6 +1384,10 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
 
   const parsed = parseRoomSnapshot(snapshot);
 
+  if (snapshot.meetBridgeLiveMode !== undefined) {
+    applyMeetBridgeLiveModeFromRoom(snapshot.meetBridgeLiveMode);
+  }
+
   if (parsed.mutedPeerIds) {
     mutedClients.clear();
     for (const id of parsed.mutedPeerIds) {
@@ -1682,6 +1688,12 @@ function handleMessage(msg) {
     applyRoomSnapshot(msg.payload).catch((e) => errors.handle(e, 'estado-sala'));
     return;
   }
+  if (msg.type === 'modoPonteMeetDefinido') {
+    if (msg.payload?.ativo !== undefined) {
+      applyMeetBridgeLiveModeFromRoom(msg.payload.ativo);
+    }
+    return;
+  }
   if (msg.type === 'clientesSilenciados') {
     const mutedIds = msg.payload?.mutedPeerIds || [];
     mutedClients.clear();
@@ -1718,6 +1730,9 @@ function handleMessage(msg) {
       totalClients: estado.clients.length,
       videoProducers
     });
+    if (msg.payload?.meetBridgeLiveMode !== undefined) {
+      applyMeetBridgeLiveModeFromRoom(msg.payload.meetBridgeLiveMode);
+    }
     mergeLastAudioSourcesFromEstado(msg.payload || {});
     renderLista();
     syncHostAudioMonitor(msg.payload?.audioSources?.length ? msg.payload.audioSources : null).catch((e) =>
@@ -2376,6 +2391,31 @@ async function loadDir(pathValue) {
   }
 }
 
+function syncMeetBridgeLiveUi() {
+  if (els.chkMeetBridgeLive) {
+    els.chkMeetBridgeLive.checked = meetBridgeLiveMode;
+  }
+  const recPrefs = getRecordingAudioPrefs();
+  if (els.recMeetBridgeHint) {
+    els.recMeetBridgeHint.hidden = !(
+      recPrefs.excludeOwnSystem || recPrefs.selectedPeerOnly || meetBridgeLiveMode
+    );
+  }
+}
+
+function applyMeetBridgeLiveModeFromRoom(ativo) {
+  meetBridgeLiveMode = !!ativo;
+  syncMeetBridgeLiveUi();
+}
+
+function sendMeetBridgeLiveMode(ativo) {
+  meetBridgeLiveMode = !!ativo;
+  syncMeetBridgeLiveUi();
+  if (signaling && hostReady) {
+    signaling.send('definirModoPonteMeet', { ativo: meetBridgeLiveMode });
+  }
+}
+
 function getRecordingAudioPrefs() {
   return {
     excludeOwnSystem: localStorage.getItem(STORAGE_REC_EXCLUDE_OWN_SYSTEM) === '1',
@@ -2391,9 +2431,7 @@ function syncRecordingAudioPrefsUi() {
   if (els.recSelectedPeerOnly) {
     els.recSelectedPeerOnly.checked = prefs.selectedPeerOnly;
   }
-  if (els.recMeetBridgeHint) {
-    els.recMeetBridgeHint.hidden = !(prefs.excludeOwnSystem || prefs.selectedPeerOnly);
-  }
+  syncMeetBridgeLiveUi();
 }
 
 function setRecordingAudioPref(key, value) {
@@ -2411,12 +2449,15 @@ function setupRecordingAudioPrefs() {
   els.recSelectedPeerOnly?.addEventListener('change', () => {
     setRecordingAudioPref(STORAGE_REC_SELECTED_PEER_ONLY, els.recSelectedPeerOnly.checked);
   });
+  els.chkMeetBridgeLive?.addEventListener('change', () => {
+    sendMeetBridgeLiveMode(!!els.chkMeetBridgeLive.checked);
+  });
   els.btnRecMeetBridgePreset?.addEventListener('click', () => {
     setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, true);
     setRecordingAudioPref(STORAGE_REC_SELECTED_PEER_ONLY, true);
     if (els.recExcludeOwnSystem) els.recExcludeOwnSystem.checked = true;
     if (els.recSelectedPeerOnly) els.recSelectedPeerOnly.checked = true;
-    if (els.recMeetBridgeHint) els.recMeetBridgeHint.hidden = false;
+    sendMeetBridgeLiveMode(true);
   });
   els.btnRecClearDefaultAudio?.addEventListener('click', () => {
     setDefaultRecordingAudioClientName('');
@@ -2692,64 +2733,24 @@ async function syncPublishedAudioFiltersToClientsAsync(audioSources = []) {
     sendAudioFiltersToClient({ id }, prefs);
   }
 }
-function applyAudioFiltersFromUi() {
-  const client = activeAudioFiltersClient;
+function getAppliedClientAudioFilterPrefs(peerId) {
+  const id = String(peerId);
+  const sentKey = sentAudioFilterKeys.get(id);
+  if (sentKey) {
+    try {
+      return normalizeMicrophoneFilterPrefs(JSON.parse(sentKey));
+    } catch {
+      // fallback abaixo
+    }
+  }
   const monitor = hostAudioMonitor;
-  if (!client || !monitor) return;
-
-  const prefs = {
-    gain: Number($('audio-gain')?.value !== undefined ? $('audio-gain')?.value : 1.0),
-    bass: Number($('audio-bass')?.value || 0),
-    treble: Number($('audio-treble')?.value || 0),
-    highpass: !!$('audio-hp-enabled')?.checked,
-    highpassFreq: Number($('audio-hp-frequency')?.value || 80),
-    peaking: !!$('audio-peak-enabled')?.checked,
-    peakingFreq: Number($('audio-peak-frequency')?.value || 3000),
-    peakingGain: Number($('audio-peak-gain')?.value || 3),
-    compressor: !!$('audio-comp-enabled')?.checked,
-    noiseGate: !!$('audio-gate-enabled')?.checked,
-    noiseGateThreshold: Number($('audio-gate-threshold')?.value || -45),
-    micSensitivity: !!$('audio-sensitivity-enabled')?.checked,
-    micCaptureDistance: Number($('audio-capture-distance')?.value || 6)
-  };
-
-  monitor.setFilterPrefs(client.id, prefs);
-  sendAudioFiltersToClient(client, prefs, { force: true });
-  saveAudioFiltersPresetDebounced(client.displayName, prefs, 'client');
-  saveAudioFilterPresetApi('client', client.displayName, prefs).catch(() => {});
+  if (monitor) {
+    return normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
+  }
+  return normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
 }
 
-async function ensureClientAudioFilterPresetLoaded(client) {
-  if (!client?.id || !client?.displayName) return;
-  const monitor = hostAudioMonitor;
-  if (!monitor) return;
-  const apiPreset = await fetchAudioFilterPresetApi('client', client.displayName);
-  if (apiPreset?.prefs) {
-    monitor.setFilterPrefs(client.id, normalizeMicrophoneFilterPrefs(apiPreset.prefs));
-    return;
-  }
-  const stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(client.id));
-  if (hasActiveMicrophoneFilter(stored)) {
-    saveAudioFilterPresetApi('client', client.displayName, stored).catch(() => {});
-  }
-}
-
-async function openAudioFiltersModal(client) {
-  if (!client) return;
-  activeAudioFiltersClient = client;
-  const monitor = hostAudioMonitor;
-  if (!monitor) {
-    showToast('Monitor de audio nao inicializado', 'warn');
-    return;
-  }
-
-  await ensureClientAudioFilterPresetLoaded(client);
-  const prefs = monitor.getFilterPrefs(client.id);
-  originalAudioFilterPrefs = { ...prefs };
-
-  const nameEl = $('audio-filters-client-name');
-  if (nameEl) nameEl.textContent = client.displayName || '-';
-
+function populateAudioFiltersUi(prefs) {
   const gainInput = $('audio-gain');
   if (gainInput) {
     gainInput.value = prefs.gain !== undefined ? prefs.gain : 1.0;
@@ -2820,6 +2821,52 @@ async function openAudioFiltersModal(client) {
     const captureDistanceVal = $('audio-capture-distance-val');
     if (captureDistanceVal) captureDistanceVal.textContent = `${captureDistance.value}/10`;
   }
+}
+
+function readAudioFilterPrefsFromUi() {
+  return {
+    gain: Number($('audio-gain')?.value !== undefined ? $('audio-gain')?.value : 1.0),
+    bass: Number($('audio-bass')?.value || 0),
+    treble: Number($('audio-treble')?.value || 0),
+    highpass: !!$('audio-hp-enabled')?.checked,
+    highpassFreq: Number($('audio-hp-frequency')?.value || 80),
+    peaking: !!$('audio-peak-enabled')?.checked,
+    peakingFreq: Number($('audio-peak-frequency')?.value || 3000),
+    peakingGain: Number($('audio-peak-gain')?.value || 3),
+    compressor: !!$('audio-comp-enabled')?.checked,
+    noiseGate: !!$('audio-gate-enabled')?.checked,
+    noiseGateThreshold: Number($('audio-gate-threshold')?.value || -45),
+    micSensitivity: !!$('audio-sensitivity-enabled')?.checked,
+    micCaptureDistance: Number($('audio-capture-distance')?.value || 6)
+  };
+}
+
+function previewAudioFiltersFromUi() {
+  const client = activeAudioFiltersClient;
+  const monitor = hostAudioMonitor;
+  if (!client || !monitor) return;
+
+  const prefs = readAudioFilterPrefsFromUi();
+  monitor.setFilterPrefs(client.id, prefs);
+  sendAudioFiltersToClient(client, prefs, { force: true });
+}
+
+function openAudioFiltersModal(client) {
+  if (!client) return;
+  activeAudioFiltersClient = client;
+  const monitor = hostAudioMonitor;
+  if (!monitor) {
+    showToast('Monitor de audio nao inicializado', 'warn');
+    return;
+  }
+
+  const prefs = getAppliedClientAudioFilterPrefs(client.id);
+  originalAudioFilterPrefs = { ...prefs };
+
+  const nameEl = $('audio-filters-client-name');
+  if (nameEl) nameEl.textContent = client.displayName || '-';
+
+  populateAudioFiltersUi(prefs);
 
   const modal = $('audio-filters-modal');
   if (modal) modal.hidden = false;
@@ -2829,7 +2876,10 @@ function saveAudioFiltersModal() {
   const client = activeAudioFiltersClient;
   if (!client) return;
 
-  applyAudioFiltersFromUi();
+  const prefs = normalizeMicrophoneFilterPrefs(readAudioFilterPrefsFromUi());
+  previewAudioFiltersFromUi();
+  savePresetToLocalStorage(client.displayName, prefs);
+  saveAudioFilterPresetApi('client', client.displayName, prefs).catch(() => {});
   showToast(`Filtros de audio atualizados para ${client.displayName}`, 'success');
   closeAudioFiltersModal(false);
 }
@@ -2848,8 +2898,6 @@ function closeAudioFiltersModal(revert = false) {
   if (revert && client && monitor && originalAudioFilterPrefs) {
     monitor.setFilterPrefs(client.id, originalAudioFilterPrefs);
     sendAudioFiltersToClient(client, originalAudioFilterPrefs, { force: true });
-    savePresetToLocalStorage(client.displayName, originalAudioFilterPrefs);
-    saveAudioFilterPresetApi('client', client.displayName, originalAudioFilterPrefs).catch(() => {});
   }
 
   activeAudioFiltersClient = null;
@@ -2859,47 +2907,47 @@ function closeAudioFiltersModal(revert = false) {
 $('audio-gain')?.addEventListener('input', (e) => {
   const el = $('audio-gain-val');
   if (el) el.textContent = `${Number(e.target.value).toFixed(1)}x`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
 $('audio-bass')?.addEventListener('input', (e) => {
   const el = $('audio-bass-val');
   if (el) el.textContent = `${e.target.value} dB`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
 $('audio-treble')?.addEventListener('input', (e) => {
   const el = $('audio-treble-val');
   if (el) el.textContent = `${e.target.value} dB`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
-$('audio-hp-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
+$('audio-hp-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
 $('audio-hp-frequency')?.addEventListener('input', (e) => {
   const el = $('audio-hp-freq-val');
   if (el) el.textContent = `${e.target.value} Hz`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
-$('audio-peak-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
+$('audio-peak-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
 $('audio-peak-frequency')?.addEventListener('input', (e) => {
   const el = $('audio-peak-freq-val');
   if (el) el.textContent = `${e.target.value} Hz`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
 $('audio-peak-gain')?.addEventListener('input', (e) => {
   const el = $('audio-peak-gain-val');
   if (el) el.textContent = `${e.target.value} dB`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
-$('audio-comp-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
-$('audio-sensitivity-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
-$('audio-gate-enabled')?.addEventListener('change', applyAudioFiltersFromUi);
+$('audio-comp-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
+$('audio-sensitivity-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
+$('audio-gate-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
 $('audio-gate-threshold')?.addEventListener('input', (e) => {
   const el = $('audio-gate-thresh-val');
   if (el) el.textContent = `${e.target.value} dB`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
 $('audio-capture-distance')?.addEventListener('input', (e) => {
   const el = $('audio-capture-distance-val');
   if (el) el.textContent = `${e.target.value}/10`;
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
 
 $('btn-audio-filters-reset')?.addEventListener('click', () => {
@@ -2935,7 +2983,7 @@ $('btn-audio-filters-reset')?.addEventListener('click', () => {
   const captureDistance = $('audio-capture-distance'); if (captureDistance) captureDistance.value = 6;
   const captureDistanceVal = $('audio-capture-distance-val'); if (captureDistanceVal) captureDistanceVal.textContent = '6/10';
 
-  applyAudioFiltersFromUi();
+  previewAudioFiltersFromUi();
 });
 
 $('ctx-audio')?.addEventListener('click', () => {

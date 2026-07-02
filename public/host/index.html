@@ -222,8 +222,21 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-01T16-16-03-tarnlz";
+var BUILD_ID="2026-07-01T23-31-15-3urpem";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -257,9 +270,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T16-16-03-tarnlz" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T16-16-03-tarnlz" />
-  <link rel="stylesheet" href="style.css?v=2026-07-01T16-16-03-tarnlz" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-01T23-31-15-3urpem" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-01T23-31-15-3urpem" />
+  <link rel="stylesheet" href="style.css?v=2026-07-01T23-31-15-3urpem" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -489,9 +502,13 @@ try{
                     <input id="rec-selected-peer-only" type="checkbox" style="margin-top: 2px;" />
                     <span>Gravar apenas áudio da fonte selecionada</span>
                   </label>
+                  <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: var(--space-xs); font-size: 0.8rem; cursor: pointer; margin-top: var(--space-xs);">
+                    <input id="chk-meet-bridge-live" type="checkbox" style="margin-top: 2px;" />
+                    <span>Anti-eco ao vivo (Ponte Meet)</span>
+                  </label>
                   <button type="button" id="btn-rec-meet-bridge-preset" class="btn btn-secondary" style="margin-top: var(--space-sm); width: 100%; font-size: 0.8rem; padding: 0.35rem 0.6rem;">Ponte externa (Meet)</button>
                   <p id="rec-meet-bridge-hint" class="hint-text" hidden style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">
-                    Ponte: compartilhe só a janela do Meet com áudio da aba, sem microfone e com fone. Host: mantenha transmissão normal; não reproduza o Meet no alto-falante. Para vídeo do host + áudio da ponte, use só &quot;Excluir áudio do sistema&quot;.
+                    Ponte: compartilhe só a aba do Meet no client (áudio da aba, sem sons do sistema bidirecionais), use fone e não reproduza o Meet no alto-falante. Ative &quot;Anti-eco ao vivo&quot; antes da sessão — os clients LAN ouvem mics, não fontes system (loopback do Meet). Para gravação, use &quot;Excluir áudio do sistema&quot;.
                   </p>
                   <p id="rec-default-audio-hint" class="hint-text" style="margin-top: var(--space-xs); font-size: 0.75rem; line-height: 1.35;">Áudio padrão da gravação: nenhum</p>
                   <button type="button" id="btn-rec-clear-default-audio" class="btn btn-secondary" hidden style="margin-top: var(--space-xs); width: 100%; font-size: 0.8rem; padding: 0.35rem 0.6rem;">Remover áudio padrão da gravação</button>
@@ -788,6 +805,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-01T16-16-03-tarnlz"></script>
+  <script src="app.bundle.js?v=2026-07-01T23-31-15-3urpem"></script>
 </body>
 </html>
