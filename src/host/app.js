@@ -30,6 +30,8 @@ import { sortDisplaySources } from '../shared/display-sources.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
 import { createLiveAnnotation } from '../shared/live-annotation.js';
+import { createStudioState } from '../shared/studio-state.js';
+import { StudioCompositor } from '../shared/studio-compositor.js';
 
 const STORAGE_HOST_NAME = 'sharescreen_host_name';
 const STORAGE_RECORDINGS_DIR = 'sharescreen_recordings_dir';
@@ -174,6 +176,14 @@ let lastAppliedActiveVideoKey = '';
 let lastActiveTransmission = null;
 let pendingHostAudioSync = null;
 const peerDisplayNameById = new Map();
+
+const studio = createStudioState({ onChange: () => scheduleStudioUiRefresh() });
+let studioUi = null;
+let studioPreviewCompositor = null;
+let studioProgramCompositor = null;
+let studioPreviewVideoEls = [];
+let studioProgramMirrorId = null;
+let studioUiRefreshTimer = null;
 
 const HOST_MIC_GAIN_STORAGE_KEY = 'sharescreen_host_mic_gain';
 
@@ -1225,6 +1235,13 @@ function renderLista() {
     isPaused: !!estado.selecionado?.pausado
   });
   updatePreviewOverlays();
+  if (isSidebarPoppedOut()) {
+    studio.syncSlotProducerIds(estado.clients);
+    renderStudioParticipantsList();
+    renderStudioTransmissionCard();
+    syncStudioProgramMirror();
+    syncStudioPopoutChrome();
+  }
 }
 
 async function selecionar(peerId) {
@@ -1308,17 +1325,25 @@ async function runTransmission(raw, gen = transmissionGeneration) {
       setStatus('Nenhuma transmissao ativa');
     } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
       await media?.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true });
-      const localVideoTrack = media?.localScreenStream?.getVideoTracks?.()[0];
+      let previewStream = null;
+      if (media?.isSyntheticVideoActive?.() && studioProgramCompositor?.stream) {
+        previewStream = studioProgramCompositor.stream;
+      } else if (media?.isSyntheticVideoActive?.() && media._syntheticStream) {
+        previewStream = media._syntheticStream;
+      } else {
+        previewStream = media?.localScreenStream;
+      }
+      const localVideoTrack = previewStream?.getVideoTracks?.()?.[0];
       if (els.preview && localVideoTrack?.readyState === 'live') {
-        if (els.preview.srcObject !== media.localScreenStream) {
-          els.preview.srcObject = media.localScreenStream;
+        if (els.preview.srcObject !== previewStream) {
+          els.preview.srcObject = previewStream;
         }
         els.preview.play?.().catch(() => {});
       }
       applyLtOverlayForTransmission(tx);
       ui.set({ hasPreview: true, isSharing: true });
       updatePreviewOverlays();
-      setStatus('Exibindo sua tela');
+      setStatus(media?.isSyntheticVideoActive?.() ? 'Exibindo cena composta' : 'Exibindo sua tela');
     } else {
       if (gen !== transmissionGeneration) return;
 
@@ -2245,6 +2270,656 @@ els.btnSidebarCollapse?.addEventListener('click', toggleSidebarCollapsed);
 let controlsPopoutWindow = null;
 let controlsPopoutWatchId = null;
 let sidebarWasCollapsed = false;
+let sidebarHiddenForPopout = false;
+let studioPopoutRoot = null;
+
+function scheduleStudioUiRefresh() {
+  if (studioUiRefreshTimer) clearTimeout(studioUiRefreshTimer);
+  studioUiRefreshTimer = setTimeout(() => {
+    studioUiRefreshTimer = null;
+    refreshStudioUi();
+  }, 50);
+}
+
+function getStudioUiFromPopout(win) {
+  if (!win?.document) return null;
+  const root = win.document.getElementById('studio-popout-root');
+  if (!root) return null;
+  return {
+    root,
+    modeToggle: root.querySelector('#studio-mode-toggle'),
+    btnTransition: root.querySelector('#studio-btn-transition'),
+    programVideo: root.querySelector('#studio-program-video'),
+    programEmpty: root.querySelector('#studio-program-empty'),
+    previewVideo: root.querySelector('#studio-preview-video'),
+    previewCanvas: root.querySelector('#studio-preview-canvas'),
+    previewEmpty: root.querySelector('#studio-preview-empty'),
+    sceneList: root.querySelector('#studio-scene-list'),
+    sceneName: root.querySelector('#studio-scene-name'),
+    sceneLayout: root.querySelector('#studio-scene-layout'),
+    primaryAudio: root.querySelector('#studio-primary-audio'),
+    slotList: root.querySelector('#studio-slot-list'),
+    btnNew: root.querySelector('#studio-btn-new-scene'),
+    btnDup: root.querySelector('#studio-btn-dup-scene'),
+    btnDel: root.querySelector('#studio-btn-del-scene'),
+    participantsList: root.querySelector('#studio-participants-list'),
+    transmissionCard: root.querySelector('#studio-transmission-card'),
+    sourcesHint: root.querySelector('#studio-sources-hint'),
+    btnStop: root.querySelector('#studio-btn-stop'),
+    btnPause: root.querySelector('#studio-btn-pause'),
+    btnRecord: root.querySelector('#studio-btn-record'),
+    btnMute: root.querySelector('#studio-btn-mute')
+  };
+}
+
+function resolveClientProducerId(client) {
+  return (
+    client?.producerIds?.video ||
+    client?.producerId ||
+    null
+  );
+}
+
+function getClientByPeerId(peerId) {
+  if (hostPeerId && String(peerId) === String(hostPeerId)) {
+    return {
+      id: hostPeerId,
+      displayName: estado.clients.find((c) => String(c.id) === String(hostPeerId))?.displayName || 'Host',
+      ehHost: true,
+      isProducing: media?.hasVideoProducer?.() || !!media?.localScreenStream || media?.isSyntheticVideoActive?.(),
+      producerIds: { video: media?.producers?.video?.id || null }
+    };
+  }
+  return estado.clients.find((c) => String(c.id) === String(peerId)) || null;
+}
+
+function stopStudioPreviewCompositor() {
+  if (studioPreviewCompositor) {
+    studioPreviewCompositor.stop();
+    studioPreviewCompositor = null;
+  }
+  for (const el of studioPreviewVideoEls) {
+    try {
+      el.pause();
+      el.srcObject = null;
+      el.remove();
+    } catch (_) {}
+  }
+  studioPreviewVideoEls = [];
+  media?.closePreviewConsumers?.().catch(() => {});
+}
+
+function stopStudioProgramCompositor() {
+  if (studioProgramCompositor) {
+    studioProgramCompositor.stop();
+    studioProgramCompositor = null;
+  }
+}
+
+function syncStudioProgramMirror() {
+  if (!studioUi?.programVideo) return;
+  const stream = els.preview?.srcObject;
+  const hasStream = stream instanceof MediaStream && stream.getVideoTracks().some((t) => t.readyState === 'live');
+  if (hasStream) {
+    if (studioUi.programVideo.srcObject !== stream) {
+      studioUi.programVideo.srcObject = stream;
+    }
+    studioUi.programVideo.hidden = false;
+    studioUi.programEmpty.hidden = true;
+    studioUi.programVideo.play?.().catch(() => {});
+  } else {
+    studioUi.programVideo.srcObject = null;
+    studioUi.programVideo.hidden = true;
+    studioUi.programEmpty.hidden = false;
+  }
+}
+
+async function buildStudioPreviewSources(scene) {
+  const sources = [];
+  const ownProducerId = media?.producers?.video?.id || null;
+
+  for (const slot of scene.slots) {
+    const client = getClientByPeerId(slot.peerId);
+    const producerId = slot.producerId || resolveClientProducerId(client);
+
+    if (hostPeerId && String(slot.peerId) === String(hostPeerId)) {
+      const localStream = media?.localScreenStream;
+      const track = localStream?.getVideoTracks?.()?.[0];
+      if (track?.readyState === 'live') {
+        sources.push({ stream: localStream });
+        continue;
+      }
+      sources.push({ stream: null });
+      continue;
+    }
+
+    if (!producerId) {
+      sources.push({ stream: null });
+      continue;
+    }
+
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.className = 'studio-preview-hidden-video';
+    video.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
+    document.body.appendChild(video);
+    studioPreviewVideoEls.push(video);
+
+    try {
+      await media.consumePreviewVideo(producerId, video, {
+        ownProducerIds: { video: ownProducerId }
+      });
+      sources.push({ videoEl: video });
+    } catch (_) {
+      sources.push({ stream: null });
+    }
+  }
+
+  return sources;
+}
+
+async function applyStudioPreview(sceneId) {
+  if (!studio.isStudioModeEnabled() || !studioUi) return;
+  const scene = sceneId ? studio.getScene(sceneId) : studio.getPreviewScene();
+  if (!scene || !scene.slots.length) {
+    stopStudioPreviewCompositor();
+    if (studioUi.previewVideo) {
+      studioUi.previewVideo.hidden = true;
+      studioUi.previewVideo.srcObject = null;
+    }
+    if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
+    if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+    if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+    return;
+  }
+
+  stopStudioPreviewCompositor();
+  const sources = await buildStudioPreviewSources(scene);
+  const validCount = sources.filter((s) => s.videoEl || s.stream).length;
+  if (!validCount) {
+    if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+    if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
+    if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+    return;
+  }
+
+  const frame = studioUi.previewCanvas?.parentElement;
+  const w = frame?.clientWidth ? Math.max(320, frame.clientWidth) : 640;
+  const h = Math.round((w * 9) / 16);
+
+  if (scene.slots.length === 1 && sources[0]?.videoEl) {
+    const stream = sources[0].videoEl.srcObject;
+    if (studioUi.previewVideo && stream) {
+      studioUi.previewVideo.srcObject = stream;
+      studioUi.previewVideo.hidden = false;
+      studioUi.previewCanvas.hidden = true;
+      studioUi.previewEmpty.hidden = true;
+      studioUi.previewVideo.play?.().catch(() => {});
+      if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+      return;
+    }
+    if (sources[0]?.stream) {
+      if (studioUi.previewVideo) {
+        studioUi.previewVideo.srcObject = sources[0].stream;
+        studioUi.previewVideo.hidden = false;
+        studioUi.previewCanvas.hidden = true;
+        studioUi.previewEmpty.hidden = true;
+        studioUi.previewVideo.play?.().catch(() => {});
+        if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+        return;
+      }
+    }
+  }
+
+  studioPreviewCompositor = StudioCompositor.start({
+    canvas: studioUi.previewCanvas,
+    sources,
+    layout: scene.layout,
+    width: w,
+    height: h,
+    fps: 30
+  });
+
+  if (studioPreviewCompositor) {
+    studioUi.previewCanvas.hidden = false;
+    studioUi.previewVideo.hidden = true;
+    studioUi.previewEmpty.hidden = true;
+    if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+  } else {
+    if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+    if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+  }
+}
+
+function renderStudioSceneList() {
+  if (!studioUi?.sceneList) return;
+  const snap = studio.getSnapshot();
+  studioUi.sceneList.innerHTML = '';
+  for (const scene of snap.scenes) {
+    const li = document.createElement('li');
+    li.className = 'studio-scene-item';
+    if (scene.id === snap.previewSceneId) li.classList.add('is-preview');
+    if (scene.id === snap.programSceneId) li.classList.add('is-program');
+    li.textContent = scene.name;
+    li.title = scene.name;
+    li.addEventListener('click', () => handleStudioSceneClick(scene.id));
+    studioUi.sceneList.appendChild(li);
+  }
+}
+
+function renderStudioSlotList() {
+  if (!studioUi?.slotList) return;
+  const scene = studio.getEditingScene();
+  studioUi.slotList.innerHTML = '';
+  if (!scene) return;
+  scene.slots.forEach((slot, index) => {
+    const li = document.createElement('li');
+    li.className = 'studio-slot-item';
+    const label = document.createElement('span');
+    label.textContent = `${index + 1}. ${slot.label || slot.peerId}`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Remover';
+    btn.addEventListener('click', () => {
+      studio.removeSlotFromEditingScene(slot.peerId);
+      applyStudioPreview(scene.id);
+      renderStudioSlotList();
+      renderStudioSceneEditor();
+    });
+    li.append(label, btn);
+    studioUi.slotList.appendChild(li);
+  });
+}
+
+function renderStudioPrimaryAudioOptions() {
+  if (!studioUi?.primaryAudio) return;
+  const scene = studio.getEditingScene();
+  const sel = studioUi.primaryAudio;
+  const current = scene?.primaryAudioPeerId || '';
+  sel.innerHTML = '<option value="">— automático —</option>';
+  for (const slot of scene?.slots || []) {
+    const opt = document.createElement('option');
+    opt.value = slot.peerId;
+    opt.textContent = slot.label || slot.peerId;
+    sel.appendChild(opt);
+  }
+  sel.value = current;
+}
+
+function renderStudioSceneEditor() {
+  const scene = studio.getEditingScene();
+  if (!scene || !studioUi) return;
+  if (studioUi.sceneName) studioUi.sceneName.value = scene.name;
+  if (studioUi.sceneLayout) studioUi.sceneLayout.value = scene.layout;
+  renderStudioPrimaryAudioOptions();
+  renderStudioSlotList();
+}
+
+function refreshStudioUi() {
+  if (!studioUi) return;
+  studio.syncSlotProducerIds(estado.clients);
+  renderStudioSceneList();
+  renderStudioSceneEditor();
+  renderStudioTransmissionCard();
+  renderStudioParticipantsList();
+  syncStudioPopoutChrome();
+  syncStudioProgramMirror();
+  const preview = studio.getPreviewScene();
+  if (preview && studio.isStudioModeEnabled()) {
+    applyStudioPreview(preview.id);
+  }
+}
+
+function syncStudioPopoutChrome() {
+  if (!studioUi?.root) return;
+  const on = studio.isStudioModeEnabled();
+  studioUi.root.classList.toggle('studio-mode-off', !on);
+  if (studioUi.modeToggle) studioUi.modeToggle.checked = on;
+  if (studioUi.btnTransition) {
+    studioUi.btnTransition.disabled = !on || !studio.getPreviewScene()?.slots?.length;
+  }
+  if (studioUi.sourcesHint) {
+    studioUi.sourcesHint.textContent = on
+      ? 'Clique em uma fonte para adicionar à cena em edição.'
+      : 'Clique em uma fonte para ir ao ar imediatamente.';
+  }
+}
+
+function renderStudioTransmissionCard() {
+  if (!studioUi?.transmissionCard) return;
+  studioUi.transmissionCard.innerHTML = '';
+  const sel = estado.selecionado;
+  if (sel && sel.isProducing) {
+    studioUi.transmissionCard.appendChild(buildSourceCard(sel, () => {}, true));
+  } else {
+    const empty = document.createElement('div');
+    empty.className = 'hint-text';
+    empty.textContent = 'Nenhuma transmissao ativa';
+    studioUi.transmissionCard.appendChild(empty);
+  }
+}
+
+function handleStudioParticipantClick(peerId) {
+  if (studio.isStudioModeEnabled()) {
+    handleStudioAddParticipant(peerId);
+    return;
+  }
+  selecionar(peerId);
+}
+
+function renderStudioParticipantsList() {
+  if (!studioUi?.participantsList) return;
+  studioUi.participantsList.innerHTML = '';
+  if (!estado.clients.length) {
+    const li = document.createElement('li');
+    li.className = 'hint-text';
+    li.textContent = 'Nenhuma fonte conectada';
+    studioUi.participantsList.appendChild(li);
+    return;
+  }
+  for (const c of sortClientsForDisplay(estado.clients)) {
+    studioUi.participantsList.appendChild(
+      buildSourceCard(c, (id) => handleStudioParticipantClick(id), false)
+    );
+  }
+}
+
+function handleStudioSceneClick(sceneId) {
+  studio.setPreviewScene(sceneId);
+  studio.setEditingScene(sceneId);
+  renderStudioSceneEditor();
+  renderStudioSceneList();
+  if (studio.isStudioModeEnabled()) {
+    applyStudioPreview(sceneId);
+    syncStudioPopoutChrome();
+    return;
+  }
+  goLiveScene(sceneId);
+}
+
+function getValidSceneSlots(scene) {
+  if (!scene?.slots?.length) return [];
+  return scene.slots.filter((slot) => {
+    const client = getClientByPeerId(slot.peerId);
+    const pid = slot.producerId || resolveClientProducerId(client);
+    if (hostPeerId && String(slot.peerId) === String(hostPeerId)) {
+      return (
+        media?.localScreenStream?.getVideoTracks?.()?.[0]?.readyState === 'live' ||
+        media?.hasVideoProducer?.() ||
+        media?.isSyntheticVideoActive?.()
+      );
+    }
+    return !!pid;
+  });
+}
+
+async function ensureSceneCompositor(scene, validSlots) {
+  const snap = studio.getSnapshot();
+  if (
+    studioPreviewCompositor?.stream &&
+    snap.previewSceneId === scene.id &&
+    validSlots.length > 1
+  ) {
+    return studioPreviewCompositor;
+  }
+  stopStudioPreviewCompositor();
+  const sources = await buildStudioPreviewSources({ ...scene, slots: validSlots });
+  const frame = studioUi?.previewCanvas?.parentElement;
+  const w = frame?.clientWidth ? Math.max(640, frame.clientWidth) : 1280;
+  const h = Math.round((w * 9) / 16);
+  const comp = StudioCompositor.start({
+    sources,
+    layout: scene.layout,
+    width: w,
+    height: h,
+    fps: 30
+  });
+  if (!comp?.stream) throw new Error('Falha ao compor cena multi-fonte');
+  studioPreviewCompositor = comp;
+  return comp;
+}
+
+async function goLiveScene(sceneId) {
+  const scene = studio.getScene(sceneId);
+  if (!scene) return;
+
+  const validSlots = getValidSceneSlots(scene);
+  if (!validSlots.length) {
+    showToast('Adicione fontes validas à cena antes de transmitir', 'warn');
+    return;
+  }
+
+  try {
+    if (validSlots.length === 1) {
+      if (media?.isSyntheticVideoActive?.()) {
+        await media.stopSyntheticVideo();
+        stopStudioProgramCompositor();
+      }
+      await selecionar(validSlots[0].peerId);
+      studio.setProgramScene(scene.id);
+      refreshStudioUi();
+      showToast('Cena no ar', 'success');
+      return;
+    }
+
+    const comp = await ensureSceneCompositor(scene, validSlots);
+    studioProgramCompositor = comp;
+    studioPreviewCompositor = null;
+
+    await media.publishSyntheticVideoStream(comp.stream);
+    try {
+      await media.producers?.video?.requestKeyFrame?.();
+    } catch (_) {}
+
+    await selecionar(hostPeerId);
+
+    if (els.preview && comp.stream) {
+      els.preview.srcObject = comp.stream;
+      await els.preview.play?.().catch(() => {});
+    }
+
+    studio.setProgramScene(scene.id);
+    syncStudioProgramMirror();
+    renderStudioSceneList();
+    showToast('Cena composta no ar', 'success');
+  } catch (e) {
+    errors.handle(e, 'studio-golive');
+    showToast('Falha ao colocar cena no ar', 'error');
+  }
+}
+
+async function executeStudioTransition() {
+  if (!studio.isStudioModeEnabled()) return;
+  const scene = studio.getPreviewScene();
+  if (!scene) {
+    showToast('Selecione uma cena no preview', 'warn');
+    return;
+  }
+  await goLiveScene(scene.id);
+}
+
+function handleStudioAddParticipant(peerId) {
+  const client = getClientByPeerId(peerId);
+  if (!client) return;
+  const producerId = resolveClientProducerId(client);
+  const hasVideo =
+    (hostPeerId && String(peerId) === String(hostPeerId) && media?.localScreenStream?.getVideoTracks?.()?.[0]?.readyState === 'live') ||
+    !!producerId ||
+    client.isProducing ||
+    client.hasVideo;
+  if (!hasVideo) {
+    showToast('Esta fonte nao esta transmitindo tela', 'warn');
+    return;
+  }
+  const scene = studio.getEditingScene();
+  if (!scene) {
+    studio.createScene({ name: 'Nova cena' });
+  }
+  const added = studio.addSlotToEditingScene({
+    peerId,
+    producerId,
+    label: client.displayName || peerId
+  });
+  if (!added) {
+    showToast('Nao foi possivel adicionar (limite 4 ou ja na cena)', 'warn');
+    return;
+  }
+  const editing = studio.getEditingScene();
+  if (editing) {
+    studio.setPreviewScene(editing.id);
+    applyStudioPreview(editing.id);
+  }
+  renderStudioSceneList();
+  renderStudioSceneEditor();
+  syncStudioPopoutChrome();
+  showToast('Fonte adicionada à cena', 'info');
+}
+
+function mountStudioPopoutShell(win) {
+  const tpl = document.getElementById('studio-popout-shell');
+  if (!tpl?.content) {
+    showToast('Painel Studio indisponivel — recarregue a pagina do host (Ctrl+F5)', 'warn');
+    return null;
+  }
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  win.document.body.insertBefore(node, win.document.body.firstChild);
+  studioPopoutRoot = node;
+  studioUi = getStudioUiFromPopout(win);
+
+  const snap = studio.getSnapshot();
+  syncStudioPopoutChrome();
+
+  studioUi?.modeToggle?.addEventListener('change', () => {
+    studio.setStudioModeEnabled(!!studioUi.modeToggle.checked);
+    if (studio.isStudioModeEnabled()) {
+      if (!studioProgramMirrorId) {
+        studioProgramMirrorId = setInterval(syncStudioProgramMirror, 500);
+      }
+    } else if (studioProgramMirrorId) {
+      clearInterval(studioProgramMirrorId);
+      studioProgramMirrorId = null;
+    }
+    try {
+      controlsPopoutWindow.document.title = studio.isStudioModeEnabled()
+        ? 'Studio — ShareScreen'
+        : 'Controles — ShareScreen';
+    } catch (_) {}
+    refreshStudioUi();
+  });
+
+  studioUi?.btnTransition?.addEventListener('click', () => executeStudioTransition());
+  studioUi?.btnStop?.addEventListener('click', () => els.btnLimpar?.click());
+  studioUi?.btnPause?.addEventListener('click', () => els.btnPlayPause?.click());
+  studioUi?.btnRecord?.addEventListener('click', () => els.btnRecordingToggle?.click());
+  studioUi?.btnMute?.addEventListener('click', () => els.btnMuteAudio?.click());
+
+  studioUi?.btnNew?.addEventListener('click', () => {
+    studio.createScene({ name: `Cena ${studio.getSnapshot().scenes.length + 1}` });
+    refreshStudioUi();
+  });
+
+  studioUi?.btnDup?.addEventListener('click', () => {
+    const editing = studio.getEditingScene();
+    if (editing) studio.duplicateScene(editing.id);
+    refreshStudioUi();
+  });
+
+  studioUi?.btnDel?.addEventListener('click', () => {
+    const editing = studio.getEditingScene();
+    if (!editing) return;
+    if (studio.getSnapshot().scenes.length <= 1) {
+      showToast('Mantenha ao menos uma cena', 'warn');
+      return;
+    }
+    studio.deleteScene(editing.id);
+    refreshStudioUi();
+  });
+
+  studioUi?.sceneName?.addEventListener('change', () => {
+    const editing = studio.getEditingScene();
+    if (editing) {
+      studio.updateScene(editing.id, { name: studioUi.sceneName.value });
+      renderStudioSceneList();
+    }
+  });
+
+  studioUi?.sceneLayout?.addEventListener('change', () => {
+    const editing = studio.getEditingScene();
+    if (editing) {
+      studio.updateScene(editing.id, { layout: studioUi.sceneLayout.value });
+      applyStudioPreview(editing.id);
+    }
+  });
+
+  studioUi?.primaryAudio?.addEventListener('change', () => {
+    const editing = studio.getEditingScene();
+    if (editing) {
+      studio.updateScene(editing.id, { primaryAudioPeerId: studioUi.primaryAudio.value });
+    }
+  });
+
+  refreshStudioUi();
+
+  return node;
+}
+
+function teardownStudioPopout() {
+  if (studioProgramMirrorId) {
+    clearInterval(studioProgramMirrorId);
+    studioProgramMirrorId = null;
+  }
+  stopStudioPreviewCompositor();
+  stopStudioProgramCompositor();
+  media?.closePreviewConsumers?.().catch(() => {});
+  studioUi = null;
+  studioPopoutRoot = null;
+}
+
+const POPOUT_OPEN_ICON =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="13" height="11" rx="1"/><path d="M15 3h6v6"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+const POPOUT_DOCK_ICON =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="13" height="11" rx="1"/><path d="M9 3H3v6"/><line x1="14" y1="10" x2="3" y2="21"/></svg>';
+
+function isFullscreenInSidebar() {
+  return !!els.btnFullscreen?.closest('#sidebar');
+}
+
+function moveFullscreenToPreview() {
+  if (!els.btnFullscreen || !els.previewArea || !isFullscreenInSidebar()) return;
+  els.btnFullscreen.classList.remove('sidebar-icon-btn');
+  els.btnFullscreen.classList.add('preview-float-btn', 'preview-fullscreen-btn');
+  els.btnFullscreen.hidden = false;
+  els.previewArea.appendChild(els.btnFullscreen);
+}
+
+function restoreFullscreenToSidebar() {
+  if (!els.btnFullscreen || !els.previewArea?.contains(els.btnFullscreen)) return;
+  const actions = els.sidebar?.querySelector('.sidebar-actions');
+  const anchor = els.btnPopoutControls;
+  if (!actions) return;
+  els.btnFullscreen.classList.remove('preview-float-btn', 'preview-fullscreen-btn');
+  els.btnFullscreen.classList.add('sidebar-icon-btn');
+  if (anchor?.parentNode === actions) {
+    actions.insertBefore(els.btnFullscreen, anchor);
+  } else {
+    actions.appendChild(els.btnFullscreen);
+  }
+}
+
+function syncPopoutControlsUi(popped) {
+  const btn = els.btnPopoutControls;
+  if (!btn) return;
+  if (popped) {
+    btn.setAttribute('aria-label', 'Voltar para janela principal');
+    btn.setAttribute('title', 'Voltar para janela principal');
+    btn.innerHTML = POPOUT_DOCK_ICON;
+  } else {
+    btn.setAttribute('aria-label', 'Abrir controles em nova janela');
+    btn.setAttribute('title', 'Abrir controles em nova janela');
+    btn.innerHTML = POPOUT_OPEN_ICON;
+  }
+}
 
 function injectPopoutGuardScript(win) {
   const script = win.document.createElement('script');
@@ -2299,17 +2974,21 @@ function applySidebarDockedLayout() {
   }
 }
 
-function dockControlsPopout(skipClosePopup = false) {
+function finalizePopoutDock({ skipClosePopup = false } = {}) {
   if (controlsPopoutWatchId) {
     clearInterval(controlsPopoutWatchId);
     controlsPopoutWatchId = null;
   }
 
-  restoreSidebarFromPopout();
-  const placeholder = document.getElementById('sidebar-popout-placeholder');
-  placeholder?.remove();
-
+  teardownStudioPopout();
+  if (els.sidebar && !sidebarHiddenForPopout) {
+    els.sidebar.hidden = false;
+  }
+  sidebarHiddenForPopout = false;
+  document.getElementById('sidebar-popout-placeholder')?.remove();
+  restoreFullscreenToSidebar();
   applySidebarDockedLayout();
+  syncPopoutControlsUi(false);
 
   if (!skipClosePopup && controlsPopoutWindow && !controlsPopoutWindow.closed) {
     try {
@@ -2319,23 +2998,30 @@ function dockControlsPopout(skipClosePopup = false) {
   controlsPopoutWindow = null;
 }
 
+function dockControlsPopout(skipClosePopup = false) {
+  finalizePopoutDock({ skipClosePopup });
+}
+
 function watchPopoutClosed() {
   if (controlsPopoutWatchId) clearInterval(controlsPopoutWatchId);
   controlsPopoutWatchId = setInterval(() => {
     if (!controlsPopoutWindow || controlsPopoutWindow.closed) {
-      dockControlsPopout();
+      finalizePopoutDock({ skipClosePopup: true });
     }
   }, 300);
+}
+
+function handlePopoutControlsClick() {
+  if (isSidebarPoppedOut()) {
+    dockControlsPopout();
+    return;
+  }
+  openControlsPopout();
 }
 
 function openControlsPopout() {
   if (!canHostCommand() && !isCoHostInstance) {
     showToast('Aguarde o painel conectar ao servidor', 'warn');
-    return;
-  }
-
-  if (isSidebarPoppedOut()) {
-    controlsPopoutWindow.focus();
     return;
   }
 
@@ -2345,7 +3031,7 @@ function openControlsPopout() {
   }
 
   const features =
-    'width=320,height=800,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
+    'width=1000,height=900,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
   const win = window.open('about:blank', 'sharescreen-controls', features);
   if (!win) {
     showToast('Permita pop-ups para abrir os controles em nova janela', 'warn');
@@ -2353,38 +3039,35 @@ function openControlsPopout() {
   }
 
   setupPopoutDocument(win);
+  mountStudioPopoutShell(win);
 
   sidebarWasCollapsed = els.sidebar.classList.contains('is-collapsed');
-
-  const placeholder = document.createElement('div');
-  placeholder.id = 'sidebar-popout-placeholder';
-  placeholder.hidden = true;
-  els.sidebar.parentNode?.insertBefore(placeholder, els.sidebar);
-
-  els.sidebar.hidden = false;
-  win.document.body.appendChild(els.sidebar);
+  sidebarHiddenForPopout = !!els.sidebar.hidden;
+  els.sidebar.hidden = true;
+  moveFullscreenToPreview();
 
   els.appMain?.classList.add('sidebar-popped-out');
   els.appMain?.classList.remove('sidebar-open', 'sidebar-collapsed');
 
   controlsPopoutWindow = win;
-  win.document.title = 'Controles — ShareScreen';
+  win.document.title = studio.isStudioModeEnabled()
+    ? 'Studio — ShareScreen'
+    : 'Controles — ShareScreen';
+  syncPopoutControlsUi(true);
+
+  if (!studioProgramMirrorId) {
+    studioProgramMirrorId = setInterval(syncStudioProgramMirror, 500);
+  }
+  refreshStudioUi();
 
   win.addEventListener('beforeunload', () => {
-    if (controlsPopoutWatchId) {
-      clearInterval(controlsPopoutWatchId);
-      controlsPopoutWatchId = null;
-    }
-    restoreSidebarFromPopout();
-    document.getElementById('sidebar-popout-placeholder')?.remove();
-    applySidebarDockedLayout();
-    controlsPopoutWindow = null;
+    finalizePopoutDock({ skipClosePopup: true });
   });
 
   watchPopoutClosed();
 }
 
-els.btnPopoutControls?.addEventListener('click', openControlsPopout);
+els.btnPopoutControls?.addEventListener('click', handlePopoutControlsClick);
 window.addEventListener('pagehide', dockControlsPopout);
 
 els.btnTech?.addEventListener('click', () => {

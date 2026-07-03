@@ -13757,6 +13757,9 @@
       this.producers = { video: null, microphone: null, system: null, mixed: null };
       this.remoteConsumers = { video: null, audio: null };
       this.videoConsumersByProducerId = /* @__PURE__ */ new Map();
+      this.previewVideoConsumers = /* @__PURE__ */ new Map();
+      this._isSyntheticVideo = false;
+      this._syntheticStream = null;
       this.currentActiveVideoProducerId = null;
       this.auxAudioConsumers = /* @__PURE__ */ new Map();
       this.consumeGeneration = 0;
@@ -13867,6 +13870,9 @@
     }
     _videoRecvTag() {
       return this.splitRecvTransports ? "video" : "default";
+    }
+    _previewRecvTag() {
+      return "studio-preview";
     }
     _audioRecvTag() {
       return this.splitRecvTransports ? "audio" : "default";
@@ -14707,6 +14713,120 @@
       }
       return null;
     }
+    async consumePreviewVideo(producerId, videoEl2, { ownProducerIds = null } = {}) {
+      var _a48;
+      if (!producerId || !videoEl2) return null;
+      const ownVideoIds = new Set(
+        [ownProducerIds == null ? void 0 : ownProducerIds.video, (_a48 = this.producers.video) == null ? void 0 : _a48.id].filter(Boolean)
+      );
+      if (ownVideoIds.has(producerId)) return null;
+      return this._runVideoMediaOp(async () => {
+        const cached = this.previewVideoConsumers.get(producerId);
+        if (cached && !cached.closed) {
+          if (cached.appStream && videoEl2.srcObject !== cached.appStream) {
+            videoEl2.srcObject = cached.appStream;
+            videoEl2.muted = true;
+            try {
+              await videoEl2.play();
+            } catch (_) {
+            }
+          }
+          return cached;
+        }
+        await this.ensureRecvTransport(this._previewRecvTag());
+        const consumer = await this._consumeOne(
+          producerId,
+          videoEl2,
+          "video",
+          this._previewRecvTag()
+        );
+        this.previewVideoConsumers.set(producerId, consumer);
+        return consumer;
+      });
+    }
+    async closePreviewConsumers() {
+      return this._runVideoMediaOp(async () => {
+        for (const [producerId, consumer] of [...this.previewVideoConsumers.entries()]) {
+          if (consumer && !consumer.closed) {
+            consumer.close();
+            try {
+              if (this.signaling.connected) {
+                this.signaling.send("fecharConsumer", { consumerId: consumer.id });
+              }
+            } catch (_) {
+            }
+          }
+          this.previewVideoConsumers.delete(producerId);
+        }
+      });
+    }
+    async publishSyntheticVideoStream(displayStream) {
+      if (!displayStream) throw new Error("Nenhum stream sintetico fornecido");
+      const videoTrack = displayStream.getVideoTracks().find((t) => t.readyState === "live");
+      if (!videoTrack) {
+        throw new Error("Pista de video sintetica indisponivel");
+      }
+      await this.ensureSendTransport();
+      this._syntheticStream = displayStream;
+      this._isSyntheticVideo = true;
+      if (this.producers.video && !this.producers.video.closed) {
+        if (typeof this.producers.video.replaceTrack === "function") {
+          await this.producers.video.replaceTrack({ track: videoTrack });
+          try {
+            await this.producers.video.requestKeyFrame();
+          } catch (_) {
+          }
+          this._producing = true;
+          return this.producers.video;
+        }
+        this.producers.video.close();
+        this.producers.video = null;
+      }
+      try {
+        applyContentHint(videoTrack, this.videoQuality.contentHint || "detail");
+        const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
+        videoOpts.track = videoTrack;
+        this.producers.video = await this.sendTransport.produce(videoOpts);
+        try {
+          await this.producers.video.requestKeyFrame();
+        } catch (_) {
+        }
+        this._producing = true;
+        this.onLog("Producer de video sintetico publicado", "info");
+        return this.producers.video;
+      } catch (err) {
+        this._isSyntheticVideo = false;
+        this._syntheticStream = null;
+        throw err;
+      }
+    }
+    async stopSyntheticVideo({ notifyServer = false } = {}) {
+      if (!this._isSyntheticVideo) return;
+      this._isSyntheticVideo = false;
+      if (this._syntheticStream) {
+        for (const track of this._syntheticStream.getTracks()) {
+          try {
+            track.stop();
+          } catch (_) {
+          }
+        }
+        this._syntheticStream = null;
+      }
+      if (this.producers.video && !this.producers.video.closed) {
+        this.producers.video.close();
+        this.producers.video = null;
+      }
+      this._producing = this.hasVideoProducer();
+      if (notifyServer && !this.hasVideoProducer() && !this.hasPublishedAudio() && this.signaling.connected && this.signaling.authenticated) {
+        try {
+          this.signaling.send("pararProducao", {});
+        } catch (_) {
+        }
+      }
+    }
+    isSyntheticVideoActive() {
+      return !!this._isSyntheticVideo;
+    }
     getStatsTargets() {
       const targets = [];
       for (const slot of ["video", "audio"]) {
@@ -14754,6 +14874,8 @@
         await this.stopScreenShare({ notifyServer, stopMicrophone: !keepMicTrack });
       }
       await this.closeRemoteConsumers();
+      await this.closePreviewConsumers();
+      await this.stopSyntheticVideo();
       await this.closeAllAuxiliaryAudio();
       (_a48 = this.sendTransport) == null ? void 0 : _a48.close();
       for (const transport of this.recvTransports.values()) {
@@ -17357,6 +17479,362 @@
     };
   }
 
+  // src/shared/studio-state.js
+  var STORAGE_KEY3 = "sharescreen_studio_scenes_v1";
+  var MAX_SLOTS = 4;
+  var LAYOUTS = ["full", "split-h", "split-v", "pip-br", "pip-bl"];
+  function newId() {
+    return `scene-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+  function normalizeSlot(raw) {
+    if (!raw || !raw.peerId) return null;
+    return {
+      peerId: String(raw.peerId),
+      producerId: raw.producerId ? String(raw.producerId) : null,
+      label: String(raw.label || raw.peerId)
+    };
+  }
+  function normalizeScene(raw) {
+    var _a48;
+    if (!raw || !raw.id) return null;
+    const slots = (raw.slots || []).map(normalizeSlot).filter(Boolean).slice(0, MAX_SLOTS);
+    const layout = LAYOUTS.includes(raw.layout) ? raw.layout : "full";
+    return {
+      id: String(raw.id),
+      name: String(raw.name || "Cena"),
+      layout,
+      slots,
+      primaryAudioPeerId: raw.primaryAudioPeerId ? String(raw.primaryAudioPeerId) : ((_a48 = slots[0]) == null ? void 0 : _a48.peerId) || ""
+    };
+  }
+  function loadPersisted() {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY3);
+      if (!raw) return { scenes: [], previewSceneId: null, programSceneId: null, studioModeEnabled: false };
+      const data = JSON.parse(raw);
+      const scenes = (data.scenes || []).map(normalizeScene).filter(Boolean);
+      return {
+        scenes,
+        previewSceneId: data.previewSceneId || null,
+        programSceneId: data.programSceneId || null,
+        studioModeEnabled: !!data.studioModeEnabled
+      };
+    } catch {
+      return { scenes: [], previewSceneId: null, programSceneId: null, studioModeEnabled: false };
+    }
+  }
+  function createStudioState({ onChange } = {}) {
+    var _a48;
+    let state = loadPersisted();
+    let editingSceneId = state.previewSceneId || ((_a48 = state.scenes[0]) == null ? void 0 : _a48.id) || null;
+    function persist() {
+      try {
+        sessionStorage.setItem(
+          STORAGE_KEY3,
+          JSON.stringify({
+            scenes: state.scenes,
+            previewSceneId: state.previewSceneId,
+            programSceneId: state.programSceneId,
+            studioModeEnabled: state.studioModeEnabled
+          })
+        );
+      } catch (_) {
+      }
+      onChange == null ? void 0 : onChange(getSnapshot());
+    }
+    function getSnapshot() {
+      return {
+        scenes: state.scenes.map((s) => ({ ...s, slots: s.slots.map((sl) => ({ ...sl })) })),
+        previewSceneId: state.previewSceneId,
+        programSceneId: state.programSceneId,
+        studioModeEnabled: state.studioModeEnabled,
+        editingSceneId
+      };
+    }
+    function getScene(id) {
+      return state.scenes.find((s) => s.id === id) || null;
+    }
+    function getEditingScene() {
+      return getScene(editingSceneId);
+    }
+    function getPreviewScene() {
+      return getScene(state.previewSceneId);
+    }
+    function getProgramScene() {
+      return getScene(state.programSceneId);
+    }
+    function setStudioModeEnabled(enabled) {
+      state.studioModeEnabled = !!enabled;
+      persist();
+    }
+    function isStudioModeEnabled() {
+      return !!state.studioModeEnabled;
+    }
+    function createScene({ name = "Nova cena", layout = "full" } = {}) {
+      const scene = normalizeScene({
+        id: newId(),
+        name,
+        layout,
+        slots: [],
+        primaryAudioPeerId: ""
+      });
+      state.scenes.push(scene);
+      editingSceneId = scene.id;
+      if (!state.previewSceneId) state.previewSceneId = scene.id;
+      persist();
+      return scene;
+    }
+    function updateScene(id, patch) {
+      const scene = getScene(id);
+      if (!scene) return null;
+      if (patch.name !== void 0) scene.name = String(patch.name).trim() || scene.name;
+      if (patch.layout !== void 0 && LAYOUTS.includes(patch.layout)) scene.layout = patch.layout;
+      if (patch.slots !== void 0) {
+        scene.slots = (patch.slots || []).map(normalizeSlot).filter(Boolean).slice(0, MAX_SLOTS);
+      }
+      if (patch.primaryAudioPeerId !== void 0) {
+        scene.primaryAudioPeerId = patch.primaryAudioPeerId ? String(patch.primaryAudioPeerId) : "";
+      }
+      persist();
+      return scene;
+    }
+    function deleteScene(id) {
+      var _a49, _b;
+      const idx = state.scenes.findIndex((s) => s.id === id);
+      if (idx < 0) return false;
+      state.scenes.splice(idx, 1);
+      if (state.previewSceneId === id) {
+        state.previewSceneId = ((_a49 = state.scenes[0]) == null ? void 0 : _a49.id) || null;
+      }
+      if (state.programSceneId === id) {
+        state.programSceneId = null;
+      }
+      if (editingSceneId === id) {
+        editingSceneId = state.previewSceneId || ((_b = state.scenes[0]) == null ? void 0 : _b.id) || null;
+      }
+      persist();
+      return true;
+    }
+    function duplicateScene(id) {
+      const src = getScene(id);
+      if (!src) return null;
+      const copy = normalizeScene({
+        id: newId(),
+        name: `${src.name} (c\xF3pia)`,
+        layout: src.layout,
+        slots: src.slots.map((s) => ({ ...s })),
+        primaryAudioPeerId: src.primaryAudioPeerId
+      });
+      state.scenes.push(copy);
+      editingSceneId = copy.id;
+      persist();
+      return copy;
+    }
+    function setPreviewScene(id) {
+      if (!getScene(id)) return false;
+      state.previewSceneId = id;
+      editingSceneId = id;
+      persist();
+      return true;
+    }
+    function setProgramScene(id) {
+      state.programSceneId = id || null;
+      persist();
+    }
+    function setEditingScene(id) {
+      if (id && !getScene(id)) return false;
+      editingSceneId = id;
+      onChange == null ? void 0 : onChange(getSnapshot());
+      return true;
+    }
+    function addSlotToEditingScene(slot) {
+      const scene = getEditingScene();
+      if (!scene) return false;
+      const normalized = normalizeSlot(slot);
+      if (!normalized) return false;
+      if (scene.slots.length >= MAX_SLOTS) return false;
+      if (scene.slots.some((s) => s.peerId === normalized.peerId)) return false;
+      scene.slots.push(normalized);
+      if (!scene.primaryAudioPeerId) scene.primaryAudioPeerId = normalized.peerId;
+      persist();
+      return true;
+    }
+    function removeSlotFromEditingScene(peerId) {
+      var _a49;
+      const scene = getEditingScene();
+      if (!scene) return false;
+      scene.slots = scene.slots.filter((s) => s.peerId !== peerId);
+      if (scene.primaryAudioPeerId === peerId) {
+        scene.primaryAudioPeerId = ((_a49 = scene.slots[0]) == null ? void 0 : _a49.peerId) || "";
+      }
+      persist();
+      return true;
+    }
+    function syncSlotProducerIds(clients) {
+      var _a49, _b;
+      let changed = false;
+      for (const scene of state.scenes) {
+        for (const slot of scene.slots) {
+          const client = clients.find((c) => String(c.id) === String(slot.peerId));
+          if (!client) continue;
+          const pid = ((_a49 = client.producerIds) == null ? void 0 : _a49.video) || client.producerId || ((_b = client.producerIds) == null ? void 0 : _b.video) || null;
+          if (pid && slot.producerId !== pid) {
+            slot.producerId = pid;
+            slot.label = client.displayName || slot.label;
+            changed = true;
+          }
+        }
+      }
+      if (changed) persist();
+    }
+    if (!state.scenes.length) {
+      createScene({ name: "Cena 1" });
+    }
+    return {
+      getSnapshot,
+      getScene,
+      getEditingScene,
+      getPreviewScene,
+      getProgramScene,
+      setStudioModeEnabled,
+      isStudioModeEnabled,
+      createScene,
+      updateScene,
+      deleteScene,
+      duplicateScene,
+      setPreviewScene,
+      setProgramScene,
+      setEditingScene,
+      addSlotToEditingScene,
+      removeSlotFromEditingScene,
+      syncSlotProducerIds,
+      MAX_SLOTS,
+      LAYOUTS
+    };
+  }
+
+  // src/shared/studio-compositor.js
+  function getLiveVideoTrack2(stream) {
+    var _a48;
+    return ((_a48 = stream == null ? void 0 : stream.getVideoTracks) == null ? void 0 : _a48.call(stream).find((track) => track.readyState === "live")) || null;
+  }
+  function createHiddenVideo(stream) {
+    if (!getLiveVideoTrack2(stream)) return null;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    video.srcObject = stream;
+    video.play().catch(() => {
+    });
+    return video;
+  }
+  function drawVideoIntoRect(ctx, canvas, source, rect) {
+    if (!source || source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return false;
+    if (!source.videoWidth || !source.videoHeight) return false;
+    const x = rect.x * canvas.width;
+    const y = rect.y * canvas.height;
+    const w = rect.w * canvas.width;
+    const h = rect.h * canvas.height;
+    ctx.drawImage(source, x, y, w, h);
+    return true;
+  }
+  function layoutRectsFor(layout, slotCount) {
+    const n = Math.max(1, Math.min(slotCount, 4));
+    if (layout === "split-h" && n >= 2) {
+      return [
+        { x: 0, y: 0, w: 0.5, h: 1 },
+        { x: 0.5, y: 0, w: 0.5, h: 1 },
+        { x: 0, y: 0, w: 0.5, h: 0.5 },
+        { x: 0.5, y: 0, w: 0.5, h: 0.5 }
+      ].slice(0, n);
+    }
+    if (layout === "split-v" && n >= 2) {
+      return [
+        { x: 0, y: 0, w: 1, h: 0.5 },
+        { x: 0, y: 0.5, w: 1, h: 0.5 },
+        { x: 0, y: 0, w: 1, h: 0.5 },
+        { x: 0, y: 0.5, w: 1, h: 0.5 }
+      ].slice(0, n);
+    }
+    if (layout === "pip-br" && n >= 2) {
+      const rects = [{ x: 0, y: 0, w: 1, h: 1 }];
+      for (let i = 1; i < n; i++) {
+        rects.push({ x: 0.62, y: 0.62, w: 0.36, h: 0.36 });
+      }
+      return rects;
+    }
+    if (layout === "pip-bl" && n >= 2) {
+      const rects = [{ x: 0, y: 0, w: 1, h: 1 }];
+      for (let i = 1; i < n; i++) {
+        rects.push({ x: 0.02, y: 0.62, w: 0.36, h: 0.36 });
+      }
+      return rects;
+    }
+    return [{ x: 0, y: 0, w: 1, h: 1 }];
+  }
+  var StudioCompositor = {
+    /**
+     * @param {Object} opts
+     * @param {HTMLCanvasElement} [opts.canvas]
+     * @param {Array<{ videoEl?: HTMLVideoElement, stream?: MediaStream }>} opts.sources
+     * @param {string} [opts.layout]
+     * @param {number} [opts.fps]
+     */
+    start({ canvas, sources = [], layout = "full", fps = 30, width = 1280, height = 720 } = {}) {
+      const targetCanvas = canvas || document.createElement("canvas");
+      targetCanvas.width = width;
+      targetCanvas.height = height;
+      const ctx = targetCanvas.getContext("2d", { alpha: false });
+      if (!ctx || typeof targetCanvas.captureStream !== "function") {
+        return null;
+      }
+      const rects = layoutRectsFor(layout, sources.length);
+      const entries = sources.map((src, i) => {
+        let video = src.videoEl || null;
+        if (!video && src.stream) {
+          video = createHiddenVideo(src.stream);
+        }
+        return { video, rect: rects[i] || rects[0], hidden: video && !src.videoEl ? video : null };
+      });
+      let raf = 0;
+      let stopped = false;
+      const tick = () => {
+        if (stopped) return;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+        for (const entry of entries) {
+          if (entry.video) {
+            drawVideoIntoRect(ctx, targetCanvas, entry.video, entry.rect);
+          }
+        }
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+      const capturedStream = targetCanvas.captureStream(fps);
+      return {
+        stream: capturedStream,
+        canvas: targetCanvas,
+        stop() {
+          stopped = true;
+          if (raf) cancelAnimationFrame(raf);
+          for (const track of capturedStream.getTracks()) {
+            try {
+              track.stop();
+            } catch (_) {
+            }
+          }
+          for (const entry of entries) {
+            if (entry.hidden) {
+              entry.hidden.pause();
+              entry.hidden.srcObject = null;
+            }
+          }
+        }
+      };
+    }
+  };
+
   // src/host/app.js
   var STORAGE_HOST_NAME = "sharescreen_host_name";
   var STORAGE_RECORDINGS_DIR = "sharescreen_recordings_dir";
@@ -17497,6 +17975,13 @@
   var lastActiveTransmission = null;
   var pendingHostAudioSync = null;
   var peerDisplayNameById = /* @__PURE__ */ new Map();
+  var studio = createStudioState({ onChange: () => scheduleStudioUiRefresh() });
+  var studioUi = null;
+  var studioPreviewCompositor = null;
+  var studioProgramCompositor = null;
+  var studioPreviewVideoEls = [];
+  var studioProgramMirrorId = null;
+  var studioUiRefreshTimer = null;
   var HOST_MIC_GAIN_STORAGE_KEY = "sharescreen_host_mic_gain";
   async function fetchAudioFilterPresetApi(kind, name) {
     const trimmed = String(name || "").trim();
@@ -18437,6 +18922,13 @@
       isPaused: !!((_a48 = estado.selecionado) == null ? void 0 : _a48.pausado)
     });
     updatePreviewOverlays();
+    if (isSidebarPoppedOut()) {
+      studio.syncSlotProducerIds(estado.clients);
+      renderStudioParticipantsList();
+      renderStudioTransmissionCard();
+      syncStudioProgramMirror();
+      syncStudioPopoutChrome();
+    }
   }
   async function selecionar(peerId) {
     if (!canHostCommand()) {
@@ -18464,7 +18956,7 @@
     }
   }
   async function runTransmission(raw, gen = transmissionGeneration) {
-    var _a48, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
+    var _a48, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
     if (gen !== transmissionGeneration) return;
     const tx = normalizeTransmission(raw);
     lastActiveTransmission = tx;
@@ -18513,31 +19005,39 @@
         setStatus("Nenhuma transmissao ativa");
       } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
         await (media == null ? void 0 : media.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true }));
-        const localVideoTrack = (_f = (_e = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _e.getVideoTracks) == null ? void 0 : _f.call(_e)[0];
+        let previewStream = null;
+        if (((_e = media == null ? void 0 : media.isSyntheticVideoActive) == null ? void 0 : _e.call(media)) && (studioProgramCompositor == null ? void 0 : studioProgramCompositor.stream)) {
+          previewStream = studioProgramCompositor.stream;
+        } else if (((_f = media == null ? void 0 : media.isSyntheticVideoActive) == null ? void 0 : _f.call(media)) && media._syntheticStream) {
+          previewStream = media._syntheticStream;
+        } else {
+          previewStream = media == null ? void 0 : media.localScreenStream;
+        }
+        const localVideoTrack = (_h = (_g = previewStream == null ? void 0 : previewStream.getVideoTracks) == null ? void 0 : _g.call(previewStream)) == null ? void 0 : _h[0];
         if (els.preview && (localVideoTrack == null ? void 0 : localVideoTrack.readyState) === "live") {
-          if (els.preview.srcObject !== media.localScreenStream) {
-            els.preview.srcObject = media.localScreenStream;
+          if (els.preview.srcObject !== previewStream) {
+            els.preview.srcObject = previewStream;
           }
-          (_h = (_g = els.preview).play) == null ? void 0 : _h.call(_g).catch(() => {
+          (_j = (_i = els.preview).play) == null ? void 0 : _j.call(_i).catch(() => {
           });
         }
         applyLtOverlayForTransmission(tx);
         ui.set({ hasPreview: true, isSharing: true });
         updatePreviewOverlays();
-        setStatus("Exibindo sua tela");
+        setStatus(((_k = media == null ? void 0 : media.isSyntheticVideoActive) == null ? void 0 : _k.call(media)) ? "Exibindo cena composta" : "Exibindo sua tela");
       } else {
         if (gen !== transmissionGeneration) return;
-        const ownProducerId = ((_j = (_i = media.producers) == null ? void 0 : _i.video) == null ? void 0 : _j.id) || null;
-        const currentProducerId = media.currentActiveVideoProducerId || ((_l = (_k = media.remoteConsumers) == null ? void 0 : _k.video) == null ? void 0 : _l.producerId);
+        const ownProducerId = ((_m = (_l = media.producers) == null ? void 0 : _l.video) == null ? void 0 : _m.id) || null;
+        const currentProducerId = media.currentActiveVideoProducerId || ((_o = (_n = media.remoteConsumers) == null ? void 0 : _n.video) == null ? void 0 : _o.producerId);
         const needsConsume = remoteVideoConsumeNeeded(tx, {
           currentProducerId,
           isSelfSelected: false,
-          hasVideoElement: !!((_m = els.preview) == null ? void 0 : _m.srcObject),
-          consumerClosed: !((_n = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _n.video) || media.remoteConsumers.video.closed
+          hasVideoElement: !!((_p = els.preview) == null ? void 0 : _p.srcObject),
+          consumerClosed: !((_q = media == null ? void 0 : media.remoteConsumers) == null ? void 0 : _q.video) || media.remoteConsumers.video.closed
         });
         if (needsConsume) {
           debugHostLog("H2", "[CLIENT_CONSUME] host consumindo video ativo", {
-            producerVideo: ((_p = (_o = tx.producerIds) == null ? void 0 : _o.video) == null ? void 0 : _p.slice(0, 8)) || null,
+            producerVideo: ((_s = (_r = tx.producerIds) == null ? void 0 : _r.video) == null ? void 0 : _s.slice(0, 8)) || null,
             previousProducer: (currentProducerId == null ? void 0 : currentProducerId.slice(0, 8)) || null
           });
           await media.consumeRemoteMedia(tx.producerIds, {
@@ -18557,13 +19057,13 @@
         setStatus(tx.paused ? "Transmissao pausada" : `Exibindo: ${tx.peerName || "fonte"}`);
         if (!tx.paused) {
           try {
-            await ((_r = (_q = els.preview) == null ? void 0 : _q.play) == null ? void 0 : _r.call(_q));
+            await ((_u = (_t = els.preview) == null ? void 0 : _t.play) == null ? void 0 : _u.call(_t));
           } catch (_) {
           }
         }
       }
     } catch (e) {
-      if (((_s = e.message) == null ? void 0 : _s.includes("Autoplay")) || e.name === "NotAllowedError") {
+      if (((_v = e.message) == null ? void 0 : _v.includes("Autoplay")) || e.name === "NotAllowedError") {
         hostMicAutoplayNeeded = true;
         updateHostMicUi();
       }
@@ -19387,6 +19887,612 @@ ${entry.technical}`;
   var controlsPopoutWindow = null;
   var controlsPopoutWatchId = null;
   var sidebarWasCollapsed = false;
+  var sidebarHiddenForPopout = false;
+  var studioPopoutRoot = null;
+  function scheduleStudioUiRefresh() {
+    if (studioUiRefreshTimer) clearTimeout(studioUiRefreshTimer);
+    studioUiRefreshTimer = setTimeout(() => {
+      studioUiRefreshTimer = null;
+      refreshStudioUi();
+    }, 50);
+  }
+  function getStudioUiFromPopout(win) {
+    if (!(win == null ? void 0 : win.document)) return null;
+    const root = win.document.getElementById("studio-popout-root");
+    if (!root) return null;
+    return {
+      root,
+      modeToggle: root.querySelector("#studio-mode-toggle"),
+      btnTransition: root.querySelector("#studio-btn-transition"),
+      programVideo: root.querySelector("#studio-program-video"),
+      programEmpty: root.querySelector("#studio-program-empty"),
+      previewVideo: root.querySelector("#studio-preview-video"),
+      previewCanvas: root.querySelector("#studio-preview-canvas"),
+      previewEmpty: root.querySelector("#studio-preview-empty"),
+      sceneList: root.querySelector("#studio-scene-list"),
+      sceneName: root.querySelector("#studio-scene-name"),
+      sceneLayout: root.querySelector("#studio-scene-layout"),
+      primaryAudio: root.querySelector("#studio-primary-audio"),
+      slotList: root.querySelector("#studio-slot-list"),
+      btnNew: root.querySelector("#studio-btn-new-scene"),
+      btnDup: root.querySelector("#studio-btn-dup-scene"),
+      btnDel: root.querySelector("#studio-btn-del-scene"),
+      participantsList: root.querySelector("#studio-participants-list"),
+      transmissionCard: root.querySelector("#studio-transmission-card"),
+      sourcesHint: root.querySelector("#studio-sources-hint"),
+      btnStop: root.querySelector("#studio-btn-stop"),
+      btnPause: root.querySelector("#studio-btn-pause"),
+      btnRecord: root.querySelector("#studio-btn-record"),
+      btnMute: root.querySelector("#studio-btn-mute")
+    };
+  }
+  function resolveClientProducerId(client) {
+    var _a48;
+    return ((_a48 = client == null ? void 0 : client.producerIds) == null ? void 0 : _a48.video) || (client == null ? void 0 : client.producerId) || null;
+  }
+  function getClientByPeerId(peerId) {
+    var _a48, _b, _c, _d, _e;
+    if (hostPeerId && String(peerId) === String(hostPeerId)) {
+      return {
+        id: hostPeerId,
+        displayName: ((_a48 = estado.clients.find((c) => String(c.id) === String(hostPeerId))) == null ? void 0 : _a48.displayName) || "Host",
+        ehHost: true,
+        isProducing: ((_b = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _b.call(media)) || !!(media == null ? void 0 : media.localScreenStream) || ((_c = media == null ? void 0 : media.isSyntheticVideoActive) == null ? void 0 : _c.call(media)),
+        producerIds: { video: ((_e = (_d = media == null ? void 0 : media.producers) == null ? void 0 : _d.video) == null ? void 0 : _e.id) || null }
+      };
+    }
+    return estado.clients.find((c) => String(c.id) === String(peerId)) || null;
+  }
+  function stopStudioPreviewCompositor() {
+    var _a48;
+    if (studioPreviewCompositor) {
+      studioPreviewCompositor.stop();
+      studioPreviewCompositor = null;
+    }
+    for (const el of studioPreviewVideoEls) {
+      try {
+        el.pause();
+        el.srcObject = null;
+        el.remove();
+      } catch (_) {
+      }
+    }
+    studioPreviewVideoEls = [];
+    (_a48 = media == null ? void 0 : media.closePreviewConsumers) == null ? void 0 : _a48.call(media).catch(() => {
+    });
+  }
+  function stopStudioProgramCompositor() {
+    if (studioProgramCompositor) {
+      studioProgramCompositor.stop();
+      studioProgramCompositor = null;
+    }
+  }
+  function syncStudioProgramMirror() {
+    var _a48, _b, _c;
+    if (!(studioUi == null ? void 0 : studioUi.programVideo)) return;
+    const stream = (_a48 = els.preview) == null ? void 0 : _a48.srcObject;
+    const hasStream = stream instanceof MediaStream && stream.getVideoTracks().some((t) => t.readyState === "live");
+    if (hasStream) {
+      if (studioUi.programVideo.srcObject !== stream) {
+        studioUi.programVideo.srcObject = stream;
+      }
+      studioUi.programVideo.hidden = false;
+      studioUi.programEmpty.hidden = true;
+      (_c = (_b = studioUi.programVideo).play) == null ? void 0 : _c.call(_b).catch(() => {
+      });
+    } else {
+      studioUi.programVideo.srcObject = null;
+      studioUi.programVideo.hidden = true;
+      studioUi.programEmpty.hidden = false;
+    }
+  }
+  async function buildStudioPreviewSources(scene) {
+    var _a48, _b, _c, _d;
+    const sources = [];
+    const ownProducerId = ((_b = (_a48 = media == null ? void 0 : media.producers) == null ? void 0 : _a48.video) == null ? void 0 : _b.id) || null;
+    for (const slot of scene.slots) {
+      const client = getClientByPeerId(slot.peerId);
+      const producerId = slot.producerId || resolveClientProducerId(client);
+      if (hostPeerId && String(slot.peerId) === String(hostPeerId)) {
+        const localStream = media == null ? void 0 : media.localScreenStream;
+        const track = (_d = (_c = localStream == null ? void 0 : localStream.getVideoTracks) == null ? void 0 : _c.call(localStream)) == null ? void 0 : _d[0];
+        if ((track == null ? void 0 : track.readyState) === "live") {
+          sources.push({ stream: localStream });
+          continue;
+        }
+        sources.push({ stream: null });
+        continue;
+      }
+      if (!producerId) {
+        sources.push({ stream: null });
+        continue;
+      }
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.className = "studio-preview-hidden-video";
+      video.style.cssText = "position:absolute;width:0;height:0;opacity:0;pointer-events:none";
+      document.body.appendChild(video);
+      studioPreviewVideoEls.push(video);
+      try {
+        await media.consumePreviewVideo(producerId, video, {
+          ownProducerIds: { video: ownProducerId }
+        });
+        sources.push({ videoEl: video });
+      } catch (_) {
+        sources.push({ stream: null });
+      }
+    }
+    return sources;
+  }
+  async function applyStudioPreview(sceneId) {
+    var _a48, _b, _c, _d, _e, _f, _g;
+    if (!studio.isStudioModeEnabled() || !studioUi) return;
+    const scene = sceneId ? studio.getScene(sceneId) : studio.getPreviewScene();
+    if (!scene || !scene.slots.length) {
+      stopStudioPreviewCompositor();
+      if (studioUi.previewVideo) {
+        studioUi.previewVideo.hidden = true;
+        studioUi.previewVideo.srcObject = null;
+      }
+      if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
+      if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+      if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+      return;
+    }
+    stopStudioPreviewCompositor();
+    const sources = await buildStudioPreviewSources(scene);
+    const validCount = sources.filter((s) => s.videoEl || s.stream).length;
+    if (!validCount) {
+      if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+      if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
+      if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+      return;
+    }
+    const frame = (_a48 = studioUi.previewCanvas) == null ? void 0 : _a48.parentElement;
+    const w = (frame == null ? void 0 : frame.clientWidth) ? Math.max(320, frame.clientWidth) : 640;
+    const h = Math.round(w * 9 / 16);
+    if (scene.slots.length === 1 && ((_b = sources[0]) == null ? void 0 : _b.videoEl)) {
+      const stream = sources[0].videoEl.srcObject;
+      if (studioUi.previewVideo && stream) {
+        studioUi.previewVideo.srcObject = stream;
+        studioUi.previewVideo.hidden = false;
+        studioUi.previewCanvas.hidden = true;
+        studioUi.previewEmpty.hidden = true;
+        (_d = (_c = studioUi.previewVideo).play) == null ? void 0 : _d.call(_c).catch(() => {
+        });
+        if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+        return;
+      }
+      if ((_e = sources[0]) == null ? void 0 : _e.stream) {
+        if (studioUi.previewVideo) {
+          studioUi.previewVideo.srcObject = sources[0].stream;
+          studioUi.previewVideo.hidden = false;
+          studioUi.previewCanvas.hidden = true;
+          studioUi.previewEmpty.hidden = true;
+          (_g = (_f = studioUi.previewVideo).play) == null ? void 0 : _g.call(_f).catch(() => {
+          });
+          if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+          return;
+        }
+      }
+    }
+    studioPreviewCompositor = StudioCompositor.start({
+      canvas: studioUi.previewCanvas,
+      sources,
+      layout: scene.layout,
+      width: w,
+      height: h,
+      fps: 30
+    });
+    if (studioPreviewCompositor) {
+      studioUi.previewCanvas.hidden = false;
+      studioUi.previewVideo.hidden = true;
+      studioUi.previewEmpty.hidden = true;
+      if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+    } else {
+      if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+      if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+    }
+  }
+  function renderStudioSceneList() {
+    if (!(studioUi == null ? void 0 : studioUi.sceneList)) return;
+    const snap = studio.getSnapshot();
+    studioUi.sceneList.innerHTML = "";
+    for (const scene of snap.scenes) {
+      const li = document.createElement("li");
+      li.className = "studio-scene-item";
+      if (scene.id === snap.previewSceneId) li.classList.add("is-preview");
+      if (scene.id === snap.programSceneId) li.classList.add("is-program");
+      li.textContent = scene.name;
+      li.title = scene.name;
+      li.addEventListener("click", () => handleStudioSceneClick(scene.id));
+      studioUi.sceneList.appendChild(li);
+    }
+  }
+  function renderStudioSlotList() {
+    if (!(studioUi == null ? void 0 : studioUi.slotList)) return;
+    const scene = studio.getEditingScene();
+    studioUi.slotList.innerHTML = "";
+    if (!scene) return;
+    scene.slots.forEach((slot, index) => {
+      const li = document.createElement("li");
+      li.className = "studio-slot-item";
+      const label = document.createElement("span");
+      label.textContent = `${index + 1}. ${slot.label || slot.peerId}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Remover";
+      btn.addEventListener("click", () => {
+        studio.removeSlotFromEditingScene(slot.peerId);
+        applyStudioPreview(scene.id);
+        renderStudioSlotList();
+        renderStudioSceneEditor();
+      });
+      li.append(label, btn);
+      studioUi.slotList.appendChild(li);
+    });
+  }
+  function renderStudioPrimaryAudioOptions() {
+    if (!(studioUi == null ? void 0 : studioUi.primaryAudio)) return;
+    const scene = studio.getEditingScene();
+    const sel = studioUi.primaryAudio;
+    const current = (scene == null ? void 0 : scene.primaryAudioPeerId) || "";
+    sel.innerHTML = '<option value="">\u2014 autom\xE1tico \u2014</option>';
+    for (const slot of (scene == null ? void 0 : scene.slots) || []) {
+      const opt = document.createElement("option");
+      opt.value = slot.peerId;
+      opt.textContent = slot.label || slot.peerId;
+      sel.appendChild(opt);
+    }
+    sel.value = current;
+  }
+  function renderStudioSceneEditor() {
+    const scene = studio.getEditingScene();
+    if (!scene || !studioUi) return;
+    if (studioUi.sceneName) studioUi.sceneName.value = scene.name;
+    if (studioUi.sceneLayout) studioUi.sceneLayout.value = scene.layout;
+    renderStudioPrimaryAudioOptions();
+    renderStudioSlotList();
+  }
+  function refreshStudioUi() {
+    if (!studioUi) return;
+    studio.syncSlotProducerIds(estado.clients);
+    renderStudioSceneList();
+    renderStudioSceneEditor();
+    renderStudioTransmissionCard();
+    renderStudioParticipantsList();
+    syncStudioPopoutChrome();
+    syncStudioProgramMirror();
+    const preview = studio.getPreviewScene();
+    if (preview && studio.isStudioModeEnabled()) {
+      applyStudioPreview(preview.id);
+    }
+  }
+  function syncStudioPopoutChrome() {
+    var _a48, _b;
+    if (!(studioUi == null ? void 0 : studioUi.root)) return;
+    const on = studio.isStudioModeEnabled();
+    studioUi.root.classList.toggle("studio-mode-off", !on);
+    if (studioUi.modeToggle) studioUi.modeToggle.checked = on;
+    if (studioUi.btnTransition) {
+      studioUi.btnTransition.disabled = !on || !((_b = (_a48 = studio.getPreviewScene()) == null ? void 0 : _a48.slots) == null ? void 0 : _b.length);
+    }
+    if (studioUi.sourcesHint) {
+      studioUi.sourcesHint.textContent = on ? "Clique em uma fonte para adicionar \xE0 cena em edi\xE7\xE3o." : "Clique em uma fonte para ir ao ar imediatamente.";
+    }
+  }
+  function renderStudioTransmissionCard() {
+    if (!(studioUi == null ? void 0 : studioUi.transmissionCard)) return;
+    studioUi.transmissionCard.innerHTML = "";
+    const sel = estado.selecionado;
+    if (sel && sel.isProducing) {
+      studioUi.transmissionCard.appendChild(buildSourceCard(sel, () => {
+      }, true));
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "hint-text";
+      empty.textContent = "Nenhuma transmissao ativa";
+      studioUi.transmissionCard.appendChild(empty);
+    }
+  }
+  function handleStudioParticipantClick(peerId) {
+    if (studio.isStudioModeEnabled()) {
+      handleStudioAddParticipant(peerId);
+      return;
+    }
+    selecionar(peerId);
+  }
+  function renderStudioParticipantsList() {
+    if (!(studioUi == null ? void 0 : studioUi.participantsList)) return;
+    studioUi.participantsList.innerHTML = "";
+    if (!estado.clients.length) {
+      const li = document.createElement("li");
+      li.className = "hint-text";
+      li.textContent = "Nenhuma fonte conectada";
+      studioUi.participantsList.appendChild(li);
+      return;
+    }
+    for (const c of sortClientsForDisplay(estado.clients)) {
+      studioUi.participantsList.appendChild(
+        buildSourceCard(c, (id) => handleStudioParticipantClick(id), false)
+      );
+    }
+  }
+  function handleStudioSceneClick(sceneId) {
+    studio.setPreviewScene(sceneId);
+    studio.setEditingScene(sceneId);
+    renderStudioSceneEditor();
+    renderStudioSceneList();
+    if (studio.isStudioModeEnabled()) {
+      applyStudioPreview(sceneId);
+      syncStudioPopoutChrome();
+      return;
+    }
+    goLiveScene(sceneId);
+  }
+  function getValidSceneSlots(scene) {
+    var _a48;
+    if (!((_a48 = scene == null ? void 0 : scene.slots) == null ? void 0 : _a48.length)) return [];
+    return scene.slots.filter((slot) => {
+      var _a49, _b, _c, _d, _e, _f;
+      const client = getClientByPeerId(slot.peerId);
+      const pid = slot.producerId || resolveClientProducerId(client);
+      if (hostPeerId && String(slot.peerId) === String(hostPeerId)) {
+        return ((_d = (_c = (_b = (_a49 = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _a49.getVideoTracks) == null ? void 0 : _b.call(_a49)) == null ? void 0 : _c[0]) == null ? void 0 : _d.readyState) === "live" || ((_e = media == null ? void 0 : media.hasVideoProducer) == null ? void 0 : _e.call(media)) || ((_f = media == null ? void 0 : media.isSyntheticVideoActive) == null ? void 0 : _f.call(media));
+      }
+      return !!pid;
+    });
+  }
+  async function ensureSceneCompositor(scene, validSlots) {
+    var _a48;
+    const snap = studio.getSnapshot();
+    if ((studioPreviewCompositor == null ? void 0 : studioPreviewCompositor.stream) && snap.previewSceneId === scene.id && validSlots.length > 1) {
+      return studioPreviewCompositor;
+    }
+    stopStudioPreviewCompositor();
+    const sources = await buildStudioPreviewSources({ ...scene, slots: validSlots });
+    const frame = (_a48 = studioUi == null ? void 0 : studioUi.previewCanvas) == null ? void 0 : _a48.parentElement;
+    const w = (frame == null ? void 0 : frame.clientWidth) ? Math.max(640, frame.clientWidth) : 1280;
+    const h = Math.round(w * 9 / 16);
+    const comp = StudioCompositor.start({
+      sources,
+      layout: scene.layout,
+      width: w,
+      height: h,
+      fps: 30
+    });
+    if (!(comp == null ? void 0 : comp.stream)) throw new Error("Falha ao compor cena multi-fonte");
+    studioPreviewCompositor = comp;
+    return comp;
+  }
+  async function goLiveScene(sceneId) {
+    var _a48, _b, _c, _d, _e, _f;
+    const scene = studio.getScene(sceneId);
+    if (!scene) return;
+    const validSlots = getValidSceneSlots(scene);
+    if (!validSlots.length) {
+      showToast2("Adicione fontes validas \xE0 cena antes de transmitir", "warn");
+      return;
+    }
+    try {
+      if (validSlots.length === 1) {
+        if ((_a48 = media == null ? void 0 : media.isSyntheticVideoActive) == null ? void 0 : _a48.call(media)) {
+          await media.stopSyntheticVideo();
+          stopStudioProgramCompositor();
+        }
+        await selecionar(validSlots[0].peerId);
+        studio.setProgramScene(scene.id);
+        refreshStudioUi();
+        showToast2("Cena no ar", "success");
+        return;
+      }
+      const comp = await ensureSceneCompositor(scene, validSlots);
+      studioProgramCompositor = comp;
+      studioPreviewCompositor = null;
+      await media.publishSyntheticVideoStream(comp.stream);
+      try {
+        await ((_d = (_c = (_b = media.producers) == null ? void 0 : _b.video) == null ? void 0 : _c.requestKeyFrame) == null ? void 0 : _d.call(_c));
+      } catch (_) {
+      }
+      await selecionar(hostPeerId);
+      if (els.preview && comp.stream) {
+        els.preview.srcObject = comp.stream;
+        await ((_f = (_e = els.preview).play) == null ? void 0 : _f.call(_e).catch(() => {
+        }));
+      }
+      studio.setProgramScene(scene.id);
+      syncStudioProgramMirror();
+      renderStudioSceneList();
+      showToast2("Cena composta no ar", "success");
+    } catch (e) {
+      errors.handle(e, "studio-golive");
+      showToast2("Falha ao colocar cena no ar", "error");
+    }
+  }
+  async function executeStudioTransition() {
+    if (!studio.isStudioModeEnabled()) return;
+    const scene = studio.getPreviewScene();
+    if (!scene) {
+      showToast2("Selecione uma cena no preview", "warn");
+      return;
+    }
+    await goLiveScene(scene.id);
+  }
+  function handleStudioAddParticipant(peerId) {
+    var _a48, _b, _c, _d;
+    const client = getClientByPeerId(peerId);
+    if (!client) return;
+    const producerId = resolveClientProducerId(client);
+    const hasVideo = hostPeerId && String(peerId) === String(hostPeerId) && ((_d = (_c = (_b = (_a48 = media == null ? void 0 : media.localScreenStream) == null ? void 0 : _a48.getVideoTracks) == null ? void 0 : _b.call(_a48)) == null ? void 0 : _c[0]) == null ? void 0 : _d.readyState) === "live" || !!producerId || client.isProducing || client.hasVideo;
+    if (!hasVideo) {
+      showToast2("Esta fonte nao esta transmitindo tela", "warn");
+      return;
+    }
+    const scene = studio.getEditingScene();
+    if (!scene) {
+      studio.createScene({ name: "Nova cena" });
+    }
+    const added = studio.addSlotToEditingScene({
+      peerId,
+      producerId,
+      label: client.displayName || peerId
+    });
+    if (!added) {
+      showToast2("Nao foi possivel adicionar (limite 4 ou ja na cena)", "warn");
+      return;
+    }
+    const editing = studio.getEditingScene();
+    if (editing) {
+      studio.setPreviewScene(editing.id);
+      applyStudioPreview(editing.id);
+    }
+    renderStudioSceneList();
+    renderStudioSceneEditor();
+    syncStudioPopoutChrome();
+    showToast2("Fonte adicionada \xE0 cena", "info");
+  }
+  function mountStudioPopoutShell(win) {
+    var _a48, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    const tpl = document.getElementById("studio-popout-shell");
+    if (!(tpl == null ? void 0 : tpl.content)) {
+      showToast2("Painel Studio indisponivel \u2014 recarregue a pagina do host (Ctrl+F5)", "warn");
+      return null;
+    }
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    win.document.body.insertBefore(node, win.document.body.firstChild);
+    studioPopoutRoot = node;
+    studioUi = getStudioUiFromPopout(win);
+    const snap = studio.getSnapshot();
+    syncStudioPopoutChrome();
+    (_a48 = studioUi == null ? void 0 : studioUi.modeToggle) == null ? void 0 : _a48.addEventListener("change", () => {
+      studio.setStudioModeEnabled(!!studioUi.modeToggle.checked);
+      if (studio.isStudioModeEnabled()) {
+        if (!studioProgramMirrorId) {
+          studioProgramMirrorId = setInterval(syncStudioProgramMirror, 500);
+        }
+      } else if (studioProgramMirrorId) {
+        clearInterval(studioProgramMirrorId);
+        studioProgramMirrorId = null;
+      }
+      try {
+        controlsPopoutWindow.document.title = studio.isStudioModeEnabled() ? "Studio \u2014 ShareScreen" : "Controles \u2014 ShareScreen";
+      } catch (_) {
+      }
+      refreshStudioUi();
+    });
+    (_b = studioUi == null ? void 0 : studioUi.btnTransition) == null ? void 0 : _b.addEventListener("click", () => executeStudioTransition());
+    (_c = studioUi == null ? void 0 : studioUi.btnStop) == null ? void 0 : _c.addEventListener("click", () => {
+      var _a49;
+      return (_a49 = els.btnLimpar) == null ? void 0 : _a49.click();
+    });
+    (_d = studioUi == null ? void 0 : studioUi.btnPause) == null ? void 0 : _d.addEventListener("click", () => {
+      var _a49;
+      return (_a49 = els.btnPlayPause) == null ? void 0 : _a49.click();
+    });
+    (_e = studioUi == null ? void 0 : studioUi.btnRecord) == null ? void 0 : _e.addEventListener("click", () => {
+      var _a49;
+      return (_a49 = els.btnRecordingToggle) == null ? void 0 : _a49.click();
+    });
+    (_f = studioUi == null ? void 0 : studioUi.btnMute) == null ? void 0 : _f.addEventListener("click", () => {
+      var _a49;
+      return (_a49 = els.btnMuteAudio) == null ? void 0 : _a49.click();
+    });
+    (_g = studioUi == null ? void 0 : studioUi.btnNew) == null ? void 0 : _g.addEventListener("click", () => {
+      studio.createScene({ name: `Cena ${studio.getSnapshot().scenes.length + 1}` });
+      refreshStudioUi();
+    });
+    (_h = studioUi == null ? void 0 : studioUi.btnDup) == null ? void 0 : _h.addEventListener("click", () => {
+      const editing = studio.getEditingScene();
+      if (editing) studio.duplicateScene(editing.id);
+      refreshStudioUi();
+    });
+    (_i = studioUi == null ? void 0 : studioUi.btnDel) == null ? void 0 : _i.addEventListener("click", () => {
+      const editing = studio.getEditingScene();
+      if (!editing) return;
+      if (studio.getSnapshot().scenes.length <= 1) {
+        showToast2("Mantenha ao menos uma cena", "warn");
+        return;
+      }
+      studio.deleteScene(editing.id);
+      refreshStudioUi();
+    });
+    (_j = studioUi == null ? void 0 : studioUi.sceneName) == null ? void 0 : _j.addEventListener("change", () => {
+      const editing = studio.getEditingScene();
+      if (editing) {
+        studio.updateScene(editing.id, { name: studioUi.sceneName.value });
+        renderStudioSceneList();
+      }
+    });
+    (_k = studioUi == null ? void 0 : studioUi.sceneLayout) == null ? void 0 : _k.addEventListener("change", () => {
+      const editing = studio.getEditingScene();
+      if (editing) {
+        studio.updateScene(editing.id, { layout: studioUi.sceneLayout.value });
+        applyStudioPreview(editing.id);
+      }
+    });
+    (_l = studioUi == null ? void 0 : studioUi.primaryAudio) == null ? void 0 : _l.addEventListener("change", () => {
+      const editing = studio.getEditingScene();
+      if (editing) {
+        studio.updateScene(editing.id, { primaryAudioPeerId: studioUi.primaryAudio.value });
+      }
+    });
+    refreshStudioUi();
+    return node;
+  }
+  function teardownStudioPopout() {
+    var _a48;
+    if (studioProgramMirrorId) {
+      clearInterval(studioProgramMirrorId);
+      studioProgramMirrorId = null;
+    }
+    stopStudioPreviewCompositor();
+    stopStudioProgramCompositor();
+    (_a48 = media == null ? void 0 : media.closePreviewConsumers) == null ? void 0 : _a48.call(media).catch(() => {
+    });
+    studioUi = null;
+    studioPopoutRoot = null;
+  }
+  var POPOUT_OPEN_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="13" height="11" rx="1"/><path d="M15 3h6v6"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+  var POPOUT_DOCK_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="13" height="11" rx="1"/><path d="M9 3H3v6"/><line x1="14" y1="10" x2="3" y2="21"/></svg>';
+  function isFullscreenInSidebar() {
+    var _a48;
+    return !!((_a48 = els.btnFullscreen) == null ? void 0 : _a48.closest("#sidebar"));
+  }
+  function moveFullscreenToPreview() {
+    if (!els.btnFullscreen || !els.previewArea || !isFullscreenInSidebar()) return;
+    els.btnFullscreen.classList.remove("sidebar-icon-btn");
+    els.btnFullscreen.classList.add("preview-float-btn", "preview-fullscreen-btn");
+    els.btnFullscreen.hidden = false;
+    els.previewArea.appendChild(els.btnFullscreen);
+  }
+  function restoreFullscreenToSidebar() {
+    var _a48, _b;
+    if (!els.btnFullscreen || !((_a48 = els.previewArea) == null ? void 0 : _a48.contains(els.btnFullscreen))) return;
+    const actions = (_b = els.sidebar) == null ? void 0 : _b.querySelector(".sidebar-actions");
+    const anchor = els.btnPopoutControls;
+    if (!actions) return;
+    els.btnFullscreen.classList.remove("preview-float-btn", "preview-fullscreen-btn");
+    els.btnFullscreen.classList.add("sidebar-icon-btn");
+    if ((anchor == null ? void 0 : anchor.parentNode) === actions) {
+      actions.insertBefore(els.btnFullscreen, anchor);
+    } else {
+      actions.appendChild(els.btnFullscreen);
+    }
+  }
+  function syncPopoutControlsUi(popped) {
+    const btn = els.btnPopoutControls;
+    if (!btn) return;
+    if (popped) {
+      btn.setAttribute("aria-label", "Voltar para janela principal");
+      btn.setAttribute("title", "Voltar para janela principal");
+      btn.innerHTML = POPOUT_DOCK_ICON;
+    } else {
+      btn.setAttribute("aria-label", "Abrir controles em nova janela");
+      btn.setAttribute("title", "Abrir controles em nova janela");
+      btn.innerHTML = POPOUT_OPEN_ICON;
+    }
+  }
   function injectPopoutGuardScript(win) {
     const script = win.document.createElement("script");
     script.textContent = "setInterval(function(){if(!window.opener||window.opener.closed)window.close();},500);";
@@ -19406,24 +20512,6 @@ ${entry.technical}`;
   function isSidebarPoppedOut() {
     return !!(controlsPopoutWindow && !controlsPopoutWindow.closed);
   }
-  function restoreSidebarFromPopout() {
-    var _a48, _b, _c;
-    const sidebar = els.sidebar;
-    if (!sidebar || !controlsPopoutWindow) return false;
-    try {
-      if (!((_b = (_a48 = controlsPopoutWindow.document) == null ? void 0 : _a48.body) == null ? void 0 : _b.contains(sidebar))) return false;
-    } catch {
-      return false;
-    }
-    const placeholder = document.getElementById("sidebar-popout-placeholder");
-    if (placeholder == null ? void 0 : placeholder.parentNode) {
-      placeholder.parentNode.insertBefore(sidebar, placeholder);
-      placeholder.remove();
-    } else {
-      (_c = els.appMain) == null ? void 0 : _c.appendChild(sidebar);
-    }
-    return true;
-  }
   function applySidebarDockedLayout() {
     var _a48, _b;
     (_a48 = els.appMain) == null ? void 0 : _a48.classList.remove("sidebar-popped-out");
@@ -19435,15 +20523,21 @@ ${entry.technical}`;
       }
     }
   }
-  function dockControlsPopout(skipClosePopup = false) {
+  function finalizePopoutDock({ skipClosePopup = false } = {}) {
+    var _a48;
     if (controlsPopoutWatchId) {
       clearInterval(controlsPopoutWatchId);
       controlsPopoutWatchId = null;
     }
-    restoreSidebarFromPopout();
-    const placeholder = document.getElementById("sidebar-popout-placeholder");
-    placeholder == null ? void 0 : placeholder.remove();
+    teardownStudioPopout();
+    if (els.sidebar && !sidebarHiddenForPopout) {
+      els.sidebar.hidden = false;
+    }
+    sidebarHiddenForPopout = false;
+    (_a48 = document.getElementById("sidebar-popout-placeholder")) == null ? void 0 : _a48.remove();
+    restoreFullscreenToSidebar();
     applySidebarDockedLayout();
+    syncPopoutControlsUi(false);
     if (!skipClosePopup && controlsPopoutWindow && !controlsPopoutWindow.closed) {
       try {
         controlsPopoutWindow.close();
@@ -19452,61 +20546,62 @@ ${entry.technical}`;
     }
     controlsPopoutWindow = null;
   }
+  function dockControlsPopout(skipClosePopup = false) {
+    finalizePopoutDock({ skipClosePopup });
+  }
   function watchPopoutClosed() {
     if (controlsPopoutWatchId) clearInterval(controlsPopoutWatchId);
     controlsPopoutWatchId = setInterval(() => {
       if (!controlsPopoutWindow || controlsPopoutWindow.closed) {
-        dockControlsPopout();
+        finalizePopoutDock({ skipClosePopup: true });
       }
     }, 300);
   }
-  function openControlsPopout() {
-    var _a48, _b, _c;
-    if (!canHostCommand() && !isCoHostInstance) {
-      showToast2("Aguarde o painel conectar ao servidor", "warn");
+  function handlePopoutControlsClick() {
+    if (isSidebarPoppedOut()) {
+      dockControlsPopout();
       return;
     }
-    if (isSidebarPoppedOut()) {
-      controlsPopoutWindow.focus();
+    openControlsPopout();
+  }
+  function openControlsPopout() {
+    var _a48, _b;
+    if (!canHostCommand() && !isCoHostInstance) {
+      showToast2("Aguarde o painel conectar ao servidor", "warn");
       return;
     }
     if (!els.sidebar || els.sidebar.hidden) {
       showToast2("Painel de controles indisponivel", "warn");
       return;
     }
-    const features = "width=320,height=800,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes";
+    const features = "width=1000,height=900,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes";
     const win = window.open("about:blank", "sharescreen-controls", features);
     if (!win) {
       showToast2("Permita pop-ups para abrir os controles em nova janela", "warn");
       return;
     }
     setupPopoutDocument(win);
+    mountStudioPopoutShell(win);
     sidebarWasCollapsed = els.sidebar.classList.contains("is-collapsed");
-    const placeholder = document.createElement("div");
-    placeholder.id = "sidebar-popout-placeholder";
-    placeholder.hidden = true;
-    (_a48 = els.sidebar.parentNode) == null ? void 0 : _a48.insertBefore(placeholder, els.sidebar);
-    els.sidebar.hidden = false;
-    win.document.body.appendChild(els.sidebar);
-    (_b = els.appMain) == null ? void 0 : _b.classList.add("sidebar-popped-out");
-    (_c = els.appMain) == null ? void 0 : _c.classList.remove("sidebar-open", "sidebar-collapsed");
+    sidebarHiddenForPopout = !!els.sidebar.hidden;
+    els.sidebar.hidden = true;
+    moveFullscreenToPreview();
+    (_a48 = els.appMain) == null ? void 0 : _a48.classList.add("sidebar-popped-out");
+    (_b = els.appMain) == null ? void 0 : _b.classList.remove("sidebar-open", "sidebar-collapsed");
     controlsPopoutWindow = win;
-    win.document.title = "Controles \u2014 ShareScreen";
+    win.document.title = studio.isStudioModeEnabled() ? "Studio \u2014 ShareScreen" : "Controles \u2014 ShareScreen";
+    syncPopoutControlsUi(true);
+    if (!studioProgramMirrorId) {
+      studioProgramMirrorId = setInterval(syncStudioProgramMirror, 500);
+    }
+    refreshStudioUi();
     win.addEventListener("beforeunload", () => {
-      var _a49;
-      if (controlsPopoutWatchId) {
-        clearInterval(controlsPopoutWatchId);
-        controlsPopoutWatchId = null;
-      }
-      restoreSidebarFromPopout();
-      (_a49 = document.getElementById("sidebar-popout-placeholder")) == null ? void 0 : _a49.remove();
-      applySidebarDockedLayout();
-      controlsPopoutWindow = null;
+      finalizePopoutDock({ skipClosePopup: true });
     });
     watchPopoutClosed();
   }
   var _a15;
-  (_a15 = els.btnPopoutControls) == null ? void 0 : _a15.addEventListener("click", openControlsPopout);
+  (_a15 = els.btnPopoutControls) == null ? void 0 : _a15.addEventListener("click", handlePopoutControlsClick);
   window.addEventListener("pagehide", dockControlsPopout);
   var _a16;
   (_a16 = els.btnTech) == null ? void 0 : _a16.addEventListener("click", () => {

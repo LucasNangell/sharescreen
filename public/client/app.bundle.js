@@ -13766,6 +13766,9 @@
       this.producers = { video: null, microphone: null, system: null, mixed: null };
       this.remoteConsumers = { video: null, audio: null };
       this.videoConsumersByProducerId = /* @__PURE__ */ new Map();
+      this.previewVideoConsumers = /* @__PURE__ */ new Map();
+      this._isSyntheticVideo = false;
+      this._syntheticStream = null;
       this.currentActiveVideoProducerId = null;
       this.auxAudioConsumers = /* @__PURE__ */ new Map();
       this.consumeGeneration = 0;
@@ -13876,6 +13879,9 @@
     }
     _videoRecvTag() {
       return this.splitRecvTransports ? "video" : "default";
+    }
+    _previewRecvTag() {
+      return "studio-preview";
     }
     _audioRecvTag() {
       return this.splitRecvTransports ? "audio" : "default";
@@ -14716,6 +14722,120 @@
       }
       return null;
     }
+    async consumePreviewVideo(producerId, videoEl2, { ownProducerIds = null } = {}) {
+      var _a14;
+      if (!producerId || !videoEl2) return null;
+      const ownVideoIds = new Set(
+        [ownProducerIds == null ? void 0 : ownProducerIds.video, (_a14 = this.producers.video) == null ? void 0 : _a14.id].filter(Boolean)
+      );
+      if (ownVideoIds.has(producerId)) return null;
+      return this._runVideoMediaOp(async () => {
+        const cached = this.previewVideoConsumers.get(producerId);
+        if (cached && !cached.closed) {
+          if (cached.appStream && videoEl2.srcObject !== cached.appStream) {
+            videoEl2.srcObject = cached.appStream;
+            videoEl2.muted = true;
+            try {
+              await videoEl2.play();
+            } catch (_) {
+            }
+          }
+          return cached;
+        }
+        await this.ensureRecvTransport(this._previewRecvTag());
+        const consumer = await this._consumeOne(
+          producerId,
+          videoEl2,
+          "video",
+          this._previewRecvTag()
+        );
+        this.previewVideoConsumers.set(producerId, consumer);
+        return consumer;
+      });
+    }
+    async closePreviewConsumers() {
+      return this._runVideoMediaOp(async () => {
+        for (const [producerId, consumer] of [...this.previewVideoConsumers.entries()]) {
+          if (consumer && !consumer.closed) {
+            consumer.close();
+            try {
+              if (this.signaling.connected) {
+                this.signaling.send("fecharConsumer", { consumerId: consumer.id });
+              }
+            } catch (_) {
+            }
+          }
+          this.previewVideoConsumers.delete(producerId);
+        }
+      });
+    }
+    async publishSyntheticVideoStream(displayStream) {
+      if (!displayStream) throw new Error("Nenhum stream sintetico fornecido");
+      const videoTrack = displayStream.getVideoTracks().find((t) => t.readyState === "live");
+      if (!videoTrack) {
+        throw new Error("Pista de video sintetica indisponivel");
+      }
+      await this.ensureSendTransport();
+      this._syntheticStream = displayStream;
+      this._isSyntheticVideo = true;
+      if (this.producers.video && !this.producers.video.closed) {
+        if (typeof this.producers.video.replaceTrack === "function") {
+          await this.producers.video.replaceTrack({ track: videoTrack });
+          try {
+            await this.producers.video.requestKeyFrame();
+          } catch (_) {
+          }
+          this._producing = true;
+          return this.producers.video;
+        }
+        this.producers.video.close();
+        this.producers.video = null;
+      }
+      try {
+        applyContentHint(videoTrack, this.videoQuality.contentHint || "detail");
+        const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
+        videoOpts.track = videoTrack;
+        this.producers.video = await this.sendTransport.produce(videoOpts);
+        try {
+          await this.producers.video.requestKeyFrame();
+        } catch (_) {
+        }
+        this._producing = true;
+        this.onLog("Producer de video sintetico publicado", "info");
+        return this.producers.video;
+      } catch (err) {
+        this._isSyntheticVideo = false;
+        this._syntheticStream = null;
+        throw err;
+      }
+    }
+    async stopSyntheticVideo({ notifyServer = false } = {}) {
+      if (!this._isSyntheticVideo) return;
+      this._isSyntheticVideo = false;
+      if (this._syntheticStream) {
+        for (const track of this._syntheticStream.getTracks()) {
+          try {
+            track.stop();
+          } catch (_) {
+          }
+        }
+        this._syntheticStream = null;
+      }
+      if (this.producers.video && !this.producers.video.closed) {
+        this.producers.video.close();
+        this.producers.video = null;
+      }
+      this._producing = this.hasVideoProducer();
+      if (notifyServer && !this.hasVideoProducer() && !this.hasPublishedAudio() && this.signaling.connected && this.signaling.authenticated) {
+        try {
+          this.signaling.send("pararProducao", {});
+        } catch (_) {
+        }
+      }
+    }
+    isSyntheticVideoActive() {
+      return !!this._isSyntheticVideo;
+    }
     getStatsTargets() {
       const targets = [];
       for (const slot of ["video", "audio"]) {
@@ -14763,6 +14883,8 @@
         await this.stopScreenShare({ notifyServer, stopMicrophone: !keepMicTrack });
       }
       await this.closeRemoteConsumers();
+      await this.closePreviewConsumers();
+      await this.stopSyntheticVideo();
       await this.closeAllAuxiliaryAudio();
       (_a14 = this.sendTransport) == null ? void 0 : _a14.close();
       for (const transport of this.recvTransports.values()) {

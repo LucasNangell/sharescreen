@@ -299,8 +299,10 @@
   
   
   
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-03T20-22-03-9gn32a";
+var BUILD_ID="2026-07-03T21-04-55-10tg1c";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -334,9 +336,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-07-03T20-22-03-9gn32a" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-03T20-22-03-9gn32a" />
-  <link rel="stylesheet" href="style.css?v=2026-07-03T20-22-03-9gn32a" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-07-03T21-04-55-10tg1c" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-03T21-04-55-10tg1c" />
+  <link rel="stylesheet" href="style.css?v=2026-07-03T21-04-55-10tg1c" />
 </head>
 <body class="app-host">
   <main class="app-main">
@@ -888,6 +890,105 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-03T20-22-03-9gn32a"></script>
+
+  <template id="studio-popout-shell">
+    <div id="studio-popout-root" class="studio-popout-root">
+      <header class="studio-popout-header">
+        <div class="studio-header-brand">
+          <span class="studio-header-title">ShareScreen Studio</span>
+          <label class="studio-switch" title="Modo Estúdio: preview antes de ir ao ar">
+            <input type="checkbox" id="studio-mode-toggle" class="studio-switch-input" />
+            <span class="studio-switch-track" aria-hidden="true"></span>
+            <span class="studio-switch-label">Modo Estúdio</span>
+          </label>
+        </div>
+        <button type="button" id="studio-btn-transition" class="btn btn-primary studio-transition-btn" disabled title="Colocar preview no ar">
+          Transição
+        </button>
+      </header>
+
+      <section class="studio-monitors" aria-label="Program e Preview">
+        <div class="studio-monitor studio-monitor--program">
+          <div class="studio-monitor-label">Program <span class="studio-monitor-tag">ao vivo</span></div>
+          <div class="studio-monitor-frame">
+            <video id="studio-program-video" class="studio-monitor-video" muted playsinline></video>
+            <div id="studio-program-empty" class="studio-monitor-empty">Nenhuma transmissão ativa</div>
+          </div>
+        </div>
+        <div class="studio-monitor studio-monitor--preview">
+          <div class="studio-monitor-label">Preview <span class="studio-monitor-tag studio-monitor-tag--preview">preparação</span></div>
+          <div class="studio-monitor-frame studio-monitor-frame--preview">
+            <video id="studio-preview-video" class="studio-monitor-video" muted playsinline hidden></video>
+            <canvas id="studio-preview-canvas" class="studio-monitor-canvas"></canvas>
+            <div id="studio-preview-empty" class="studio-monitor-empty">Selecione uma cena</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="studio-workspace">
+        <section class="studio-scenes-panel" aria-label="Cenas">
+          <div class="studio-scenes-toolbar">
+            <h3 class="studio-section-title">Cenas</h3>
+            <div class="studio-scenes-actions">
+              <button type="button" id="studio-btn-new-scene" class="btn btn-ghost btn-sm">+ Nova</button>
+              <button type="button" id="studio-btn-dup-scene" class="btn btn-ghost btn-sm">Duplicar</button>
+              <button type="button" id="studio-btn-del-scene" class="btn btn-ghost btn-sm">Remover</button>
+            </div>
+          </div>
+          <ul id="studio-scene-list" class="studio-scene-list" role="list"></ul>
+
+          <div class="studio-scene-editor">
+            <div class="studio-editor-grid">
+              <label class="studio-field">
+                <span class="studio-field-label">Nome</span>
+                <input type="text" id="studio-scene-name" class="studio-scene-name-input" maxlength="48" />
+              </label>
+              <label class="studio-field">
+                <span class="studio-field-label">Layout</span>
+                <select id="studio-scene-layout" aria-label="Layout da cena">
+                  <option value="full">Tela cheia</option>
+                  <option value="split-h">Dividido horizontal</option>
+                  <option value="split-v">Dividido vertical</option>
+                  <option value="pip-br">PiP inferior direito</option>
+                  <option value="pip-bl">PiP inferior esquerdo</option>
+                </select>
+              </label>
+              <label class="studio-field">
+                <span class="studio-field-label">Áudio primário</span>
+                <select id="studio-primary-audio" aria-label="Fonte de áudio primária">
+                  <option value="">Automático</option>
+                </select>
+              </label>
+            </div>
+            <div class="studio-slots-wrap">
+              <span class="studio-field-label">Fontes na cena</span>
+              <ul id="studio-slot-list" class="studio-slot-list" role="list"></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="studio-side-panel" aria-label="Controles">
+          <div class="studio-transmission-block">
+            <h3 class="studio-section-title">Transmissão</h3>
+            <div id="studio-transmission-card" class="studio-transmission-card"></div>
+            <div class="studio-trans-controls">
+              <button type="button" id="studio-btn-stop" class="studio-ctrl-btn" title="Interromper">⏹</button>
+              <button type="button" id="studio-btn-pause" class="studio-ctrl-btn" title="Pausar/Retomar">⏸</button>
+              <button type="button" id="studio-btn-record" class="studio-ctrl-btn studio-ctrl-btn--rec" title="Gravar">●</button>
+              <button type="button" id="studio-btn-mute" class="studio-ctrl-btn" title="Silenciar">🔊</button>
+            </div>
+          </div>
+
+          <div class="studio-participants-block">
+            <h3 class="studio-section-title">Fontes</h3>
+            <p id="studio-sources-hint" class="studio-sources-hint">Clique para adicionar à cena ou ir ao ar.</p>
+            <ul id="studio-participants-list" class="studio-participants-list source-list" role="list"></ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </template>
+
+  <script src="app.bundle.js?v=2026-07-03T21-04-55-10tg1c"></script>
 </body>
 </html>
