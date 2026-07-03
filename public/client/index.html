@@ -248,8 +248,21 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-03T18-45-45-j4388q";
+var BUILD_ID="2026-07-03T20-06-24-jio7t1";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -297,10 +310,10 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-03T18-45-45-j4388q" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-03T18-45-45-j4388q" />
-  <link rel="stylesheet" href="style.css?v=2026-07-03T18-45-45-j4388q" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-03T18-45-45-j4388q" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-03T20-06-24-jio7t1" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-03T20-06-24-jio7t1" />
+  <link rel="stylesheet" href="style.css?v=2026-07-03T20-06-24-jio7t1" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-03T20-06-24-jio7t1" />
 </head>
 <body class="app-client">
   <div id="overlay" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
@@ -426,6 +439,14 @@ try{
       <div id="lt-overlay" class="lt-overlay" hidden>
         <canvas id="lt-overlay-canvas"></canvas>
       </div>
+      <canvas id="live-annotation-canvas" class="live-annotation-canvas" aria-hidden="true"></canvas>
+      <button type="button" id="btn-draw-toggle" class="preview-draw-toggle" hidden
+        aria-label="Anotar na tela" aria-pressed="false" title="Anotar na tela">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Host-like sidebar for co-host client usage -->
@@ -686,6 +707,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-03T18-45-45-j4388q"></script>
+  <script src="app.bundle.js?v=2026-07-03T20-06-24-jio7t1"></script>
 </body>
 </html>

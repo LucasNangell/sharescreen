@@ -29,6 +29,7 @@ import {
 import { sortDisplaySources } from '../shared/display-sources.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
+import { createLiveAnnotation } from '../shared/live-annotation.js';
 
 const STORAGE_HOST_NAME = 'sharescreen_host_name';
 const STORAGE_RECORDINGS_DIR = 'sharescreen_recordings_dir';
@@ -112,6 +113,8 @@ const els = {
   hostMicGainSlider: $('host-mic-gain-slider'),
   hostMicGainVal: $('host-mic-gain-val'),
   btnHostMic: $('btn-host-mic'),
+  btnDraw: $('btn-draw-toggle'),
+  drawCanvas: $('live-annotation-canvas'),
   statusBar: $('status-bar'),
   qualityPreset: $('quality-preset'),
   qualityHint: $('quality-hint'),
@@ -674,6 +677,8 @@ function updatePreviewOverlays() {
       els.previewQuality.textContent = getPreset(loadPresetId()).label;
     }
   }
+  liveAnnotation?.updateButtonVisibility(hostReady && hasPreview);
+  liveAnnotation?.resize();
 }
 
 function formatClientName(c) {
@@ -1754,6 +1759,10 @@ function handleMessage(msg) {
     renderLista();
     return;
   }
+  if (msg.type === 'anotacaoSegmento') {
+    liveAnnotation?.receive(msg.payload);
+    return;
+  }
   if (msg.type === 'estado') {
     // #region agent log
     debugClientSessionLog('H5', 'host:handleMessage', 'estado', {
@@ -2650,6 +2659,18 @@ if (isHost) {
 let activeContextClient = null;
 let activeAudioFiltersClient = null;
 bindLtOverlayResize(els.previewArea);
+
+const liveAnnotation = createLiveAnnotation({
+  previewArea: els.previewArea,
+  videoEl: els.preview,
+  canvasEl: els.drawCanvas,
+  btnDraw: els.btnDraw,
+  getPeerId: () => hostPeerId,
+  getPeerName: () => hostDisplayName || 'Host',
+  onSegment: (payload) => {
+    if (signaling?.connected) signaling.send('anotacaoSegmento', payload);
+  }
+});
 
 function applyLtOverlayForTransmission(_tx) {
   hideLtOverlay();

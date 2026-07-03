@@ -78,6 +78,7 @@ Arquivos envolvidos:
 5. `addPeer()` envia `fontesAudio` ao novo peer; `broadcastAudioSources()` global só quando a assinatura de producers muda (evita ressync desnecessário nos demais participantes).
 6. `definirModoPonteMeet` (host/co-host) ativa `meetBridgeLiveMode` na sala; `getHostState()` e `buildRoomSnapshot()` incluem o flag; clients recebem `modoPonteMeetAtualizado`.
 7. `definirClientMute` atualiza `mutedPeerIds` na sala e faz broadcast de `clientesSilenciados`. Host/co-host pode silenciar qualquer client; um client pode silenciar apenas a si (`peerId` deve ser o próprio id).
+8. `anotacaoSegmento` (qualquer peer autenticado) valida payload (pontos normalizados, rate-limit ~20/s) e rebroadcast via `room.broadcastToRoom()` como `anotacaoSegmento` para todos exceto o remetente.
 
 ---
 

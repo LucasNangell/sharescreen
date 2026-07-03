@@ -26,6 +26,7 @@ import { ClientSession, SessionPhase, requestRoomStateWithRetry, joinPayloadExtr
 import { MediaPublisher } from './media-publisher.js';
 import { PublisherConnection } from './publisher-connection.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
+import { createLiveAnnotation } from '../shared/live-annotation.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
 import { verifyServerBuild } from '../shared/build-verify.js';
 import { debugClientSessionLog } from '../shared/debug-session-client.js';
@@ -75,6 +76,8 @@ const els = {
   watchingLabel: $('watching-label'),
   erro: $('erro-box'),
   btnClientMic: $('btn-client-mic'),
+  btnDraw: $('btn-draw-toggle'),
+  drawCanvas: $('live-annotation-canvas'),
   btnSettings: $('btn-settings'),
   settingsModal: $('settings-modal'),
   settingsNomeInput: $('settings-nome-input'),
@@ -206,11 +209,94 @@ ensureAgentHostname();
 
 bindLtOverlayResize(els.previewArea);
 
+function getClientLocalPreviewStream() {
+  const fromDisplay = clientDisplayStream?.getVideoTracks?.()?.[0];
+  if (fromDisplay?.readyState === 'live') return clientDisplayStream;
+  const fromMedia = media?.localScreenStream?.getVideoTracks?.()?.[0];
+  if (fromMedia?.readyState === 'live') return media.localScreenStream;
+  const producerTrack = media?.producers?.video?.track;
+  if (producerTrack?.readyState === 'live') {
+    return new MediaStream([producerTrack]);
+  }
+  return null;
+}
+
+function clientIsPublishingVideo() {
+  return !!media?.hasVideoProducer?.();
+}
+
+function isClientSelectedSource(tx) {
+  if (!tx || !peerId) return false;
+  const normalized = normalizeTransmission(tx);
+  return hasActiveVideo(normalized) && String(normalized.selectedPeerId) === String(peerId);
+}
+
+/** Igual ao host: espelho local quando é a fonte selecionada ou ainda não há vídeo ativo na sala. */
+function shouldShowClientLocalPreview(tx) {
+  if (!clientIsPublishingVideo() || !getClientLocalPreviewStream()) return false;
+  const normalized = tx ? normalizeTransmission(tx) : null;
+  if (!normalized || !hasActiveVideo(normalized) || normalized.paused) return true;
+  return isClientSelectedSource(normalized);
+}
+
+function applyClientLocalPreview(tx = txSync.lastActiveTransmission) {
+  if (!shouldShowClientLocalPreview(tx)) return;
+
+  const stream = getClientLocalPreviewStream();
+  if (!stream) return;
+
+  if (media?.remoteConsumers?.video && !media.remoteConsumers.video.closed) {
+    media.closeActiveVideoConsumer({ videoEl: els.video, notifyServer: false }).catch(() => {});
+  }
+
+  if (els.video.srcObject !== stream) {
+    els.video.srcObject = stream;
+  }
+  els.video.play?.().catch(() => {});
+  liveAnnotation?.resize();
+}
+
+function clientHasPreview() {
+  if (!sessionReady) return false;
+  if (shouldShowClientLocalPreview(txSync.lastActiveTransmission)) return true;
+  const tx = txSync.lastActiveTransmission;
+  if (tx && hasActiveVideo(tx) && !tx.paused) return true;
+  const vt = els.video?.srcObject?.getVideoTracks?.()?.[0];
+  return vt?.readyState === 'live';
+}
+
+function clientHasDrawSurface() {
+  return clientHasPreview();
+}
+
+function updateClientDrawUi() {
+  liveAnnotation?.updateButtonVisibility(clientHasDrawSurface());
+}
+
+function onClientTransmissionVideoUpdated() {
+  applyClientLocalPreview();
+  updateClientDrawUi();
+}
+
+const liveAnnotation = createLiveAnnotation({
+  previewArea: els.previewArea,
+  videoEl: els.video,
+  canvasEl: els.drawCanvas,
+  btnDraw: els.btnDraw,
+  getPeerId: () => peerId,
+  getPeerName: () => displayName || getNome(),
+  onSegment: (payload) => {
+    if (signaling?.connected) signaling.send('anotacaoSegmento', payload);
+  }
+});
+
 function updateClientStates(mode, _tx, opts = {}) {
   const hideAllOverlays = mode === 'idle';
-  els.stateSharing.hidden = hideAllOverlays || mode !== 'sharing';
-  els.stateSelected.hidden = hideAllOverlays || mode !== 'selected';
-  els.stateWatching.hidden = hideAllOverlays || mode !== 'watching' || !!opts.hideWatchingBanner;
+  const showLocalPreview = shouldShowClientLocalPreview(_tx ?? txSync.lastActiveTransmission);
+  els.stateSharing.hidden = hideAllOverlays || mode !== 'sharing' || showLocalPreview;
+  els.stateSelected.hidden = hideAllOverlays || mode !== 'selected' || showLocalPreview;
+  els.stateWatching.hidden =
+    hideAllOverlays || mode !== 'watching' || !!opts.hideWatchingBanner || showLocalPreview;
   els.stateWaiting.hidden = hideAllOverlays || mode !== 'waiting';
   els.statePaused.hidden = hideAllOverlays || mode !== 'paused';
   if (els.stateInterrupted) els.stateInterrupted.hidden = hideAllOverlays || mode !== 'interrupted';
@@ -222,7 +308,11 @@ const txSync = new TransmissionSync({
   getVideoEl: () => els.video,
   getPeerId: () => peerId,
   isViewerOnly: () => viewerOnly,
-  onStateChange: (mode, _tx, opts) => updateClientStates(mode, _tx, opts),
+  onStateChange: (mode, tx, opts) => {
+    updateClientStates(mode, tx, opts);
+    applyClientLocalPreview(tx);
+    updateClientDrawUi();
+  },
   onStatus: (text) => setStatus(text),
   onLtOverlay: (tx) => applyLtOverlayForTransmission(tx),
   onAutoplayBlocked: () => onRemoteAudioAutoplayBlocked(),
@@ -257,6 +347,8 @@ function updateClientStreamBadge(tx) {
 function applyLtOverlayForTransmission(tx) {
   updateClientStreamBadge(tx);
   hideLtOverlay();
+  applyClientLocalPreview(tx);
+  updateClientDrawUi();
 }
 
 const capturePrefs = loadCapturePrefs();
@@ -1456,24 +1548,25 @@ function updateClientStateAfterPublish() {
   const tx =
     txSync.lastActiveTransmission ||
     (pendingTransmission ? normalizeTransmission(pendingTransmission) : null);
+
   if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) === String(peerId)) {
     updateClientStates('selected');
     setStatus('Voce esta selecionado - transmitindo para todos');
-    return;
-  }
-  if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) !== String(peerId)) {
+  } else if (tx && hasActiveVideo(tx) && String(tx.selectedPeerId) !== String(peerId)) {
     updateClientStates('watching', tx, { hideWatchingBanner: true });
     setStatus(
       tx.paused ? 'Transmissao pausada pelo host' : `Assistindo: ${tx.peerName || 'fonte'}`
     );
-    return;
-  }
-  if (viewerOnly) {
+  } else if (viewerOnly) {
     updateClientStates('waiting');
     setStatus('Modo espectador - aguardando transmissao');
-    return;
+  } else {
+    updateClientStates('sharing');
+    setStatus('Transmitindo — aguardando selecao do host');
   }
-  updateClientStates('sharing');
+
+  applyClientLocalPreview();
+  updateClientDrawUi();
 }
 
 async function publishClientMedia(publishPrefs) {
@@ -1537,6 +1630,8 @@ async function publishClientMedia(publishPrefs) {
   }
   signaling.send('status', { status: 'transmitindo' });
   clientSession.setPhase(SessionPhase.ACTIVE);
+  applyClientLocalPreview();
+  updateClientDrawUi();
 }
 
 async function finalizeAfterPublish() {
@@ -1590,6 +1685,7 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   await syncClientAudioMonitor(parsed.audioSources).catch((e) =>
     errors.handle(e, 'audio-sync')
   );
+  onClientTransmissionVideoUpdated();
 }
 
 async function reconcileRemoteMediaState() {
@@ -1618,6 +1714,7 @@ async function reconcileRemoteMediaState() {
   }
   pendingTransmission = null;
   pendingAudioSources = null;
+  onClientTransmissionVideoUpdated();
 }
 
 async function flushPostPublishRemoteWork() {
@@ -1832,6 +1929,7 @@ async function executeJoinAndStart() {
     }
     skipJoinPublishOnJoin = false;
     deferScreenShareOnJoin = false;
+    updateClientDrawUi();
   } finally {
     joinInFlight = false;
   }
@@ -2045,6 +2143,10 @@ async function handleServerMessage(msg) {
     applyClientAudioMute();
     return;
   }
+  if (msg.type === 'anotacaoSegmento') {
+    liveAnnotation?.receive(msg.payload);
+    return;
+  }
   if (msg.type === 'fontesAudio') {
     const sources = msg.payload?.sources || [];
     lastAudioSources = sources;
@@ -2073,6 +2175,7 @@ async function handleServerMessage(msg) {
     await syncClientAudioMonitor(lastAudioSources).catch((e) =>
       errors.handle(e, 'audio-sync')
     );
+    onClientTransmissionVideoUpdated();
     return;
   }
   if (msg.type === 'erro') {

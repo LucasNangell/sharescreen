@@ -34,6 +34,7 @@ Os arquivos em [src/shared/](file:///e:/Projetos/Trabalho/Screen%20Share/src/sha
 * **Monitoramento de Áudio:** [host-audio-monitor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/host-audio-monitor.js) e [audio-level-meter.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/audio-level-meter.js) — Medidores VU no painel do host. Sync incremental de canais (`syncFromSources`, `syncPeerSources`), `pinnedPeerIds` para preservar áudio do host no client, `recoverOutputIfSilent()` e `countLiveChannels()`, filas separadas de consumo em `media-client.js` (`_runVideoMediaOp` / `_runAudioMediaOp`). Host e client deduplicam sync por `audioSourcesSignature` (`lastAppliedAudioSig`), debounce de `fontesAudio` (~80ms) e `repairAllAudioIfNeeded` / `repairHostRemoteAudioIfNeeded` com watchdog 5s no client.
 * **Filtro Chroma Key (Lower Thirds):** [lt-chroma.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-chroma.js) — Algoritmo em canvas 2D que remove a cor verde (ou outra chroma configurada) do vídeo de Lower Thirds frame a frame.
 * **Modais e Layout de Overlays:** [lt-modal.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-modal.js) e [lt-overlay.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-overlay.js) — Exibição e ajuste de posicionamento de lower thirds.
+* **Anotações live (desenho efêmero):** [live-annotation.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/live-annotation.js) — Canvas sobre `#preview-area` (`#live-annotation-canvas`), botão `#btn-draw-toggle` (canto inferior esquerdo), coordenadas normalizadas, fade 3s, sync via WebSocket `anotacaoSegmento`. Integrado em `src/host/app.js` e `src/client/app.js`. Client: preview local via `shouldShowClientLocalPreview` (fonte selecionada ou sala sem vídeo ativo); botão lápis visível quando há transmissão ativa na preview.
 * **Gravação:** [recording-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-client.js) — Grava via `MediaRecorder` e envia chunks em tempo real para `/api/gravacao/stream/*` (sem acumular na RAM); fallback legado em memória se streaming indisponível. [recording-compositor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-compositor.js) compõe o vídeo gravado com badge em canvas, e [recording-audio-mixer.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-audio-mixer.js) monta a trilha de áudio da gravação a partir das `consumer.track` WebRTC (paridade com o áudio ouvido pelos clients). O host pode definir opcionalmente um client como áudio padrão da gravação (`sharescreen_rec_default_audio_client` no localStorage) para gravar só essa fonte e evitar eco. Em `pagehide`, gravações ativas são finalizadas como `_incompleto.webm` no servidor.
 * **Ponte Meet (anti-eco ao vivo):** preset/botão no host envia `definirModoPonteMeet`; clients em `src/client/app.js` filtram fontes `system` via `excludeSourceTypes` em `audio-sources.js` enquanto `meetBridgeLiveMode` estiver ativo (evita loopback do Meet nos clients LAN).
 * **Controle de UI:** [ui-state.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/ui-state.js), [toast.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/toast.js), [source-cards.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/source-cards.js).
@@ -84,6 +85,19 @@ Passos:
 2. Renderiza o vídeo em um elemento oculto de `<video>`.
 3. Executa um laço `requestAnimationFrame` que desenha cada frame do vídeo em um `<canvas>`.
 4. O algoritmo em [lt-chroma.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-chroma.js) varre a imagem do canvas pixel a pixel e substitui a cor verde por transparência (alfa = 0).
+
+### Fluxo 4: Anotações live sobre a transmissão
+Arquivos envolvidos:
+* [live-annotation.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/live-annotation.js)
+* [app.js (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/src/host/app.js)
+* [app.js (Client)](file:///e:/Projetos/Trabalho/Screen%20Share/src/client/app.js)
+* [signaling.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/signaling.js)
+
+Passos:
+1. Participante ativa `#btn-draw-toggle`; canvas passa a capturar pointer events.
+2. Traços são desenhados localmente e enviados como `anotacaoSegmento` (pontos normalizados 0–1).
+3. Servidor faz rebroadcast para todos os peers (`broadcastToRoom`); cada um renderiza e aplica fade após 3s.
+4. Client que transmite: preview local quando é a fonte selecionada ou não há transmissão ativa na sala; caso contrário consome o vídeo remoto como antes.
 
 ---
 

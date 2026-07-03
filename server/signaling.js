@@ -23,6 +23,45 @@ function parseMessage(raw) {
   }
 }
 
+const annotationRateByPeer = new Map();
+const ANNOTATION_MAX_MSG_PER_SEC = 20;
+const ANNOTATION_MAX_POINTS = 30;
+
+function annotationRateAllowed(peerId) {
+  const now = Date.now();
+  let bucket = annotationRateByPeer.get(peerId);
+  if (!bucket || now - bucket.windowStart >= 1000) {
+    bucket = { windowStart: now, count: 0 };
+    annotationRateByPeer.set(peerId, bucket);
+  }
+  if (bucket.count >= ANNOTATION_MAX_MSG_PER_SEC) return false;
+  bucket.count += 1;
+  return true;
+}
+
+function validateAnnotationSegment(payload, senderPeerId) {
+  if (!payload || typeof payload !== 'object') return null;
+  const { strokeId, peerId, points, color, width, final } = payload;
+  if (typeof strokeId !== 'string' || !strokeId.trim()) return null;
+  if (String(peerId) !== String(senderPeerId)) return null;
+  if (!Array.isArray(points) || points.length === 0 || points.length > ANNOTATION_MAX_POINTS) return null;
+  const normalized = [];
+  for (const p of points) {
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+    if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return null;
+    normalized.push({ x: p.x, y: p.y });
+  }
+  return {
+    strokeId: strokeId.trim(),
+    peerId: String(peerId),
+    peerName: typeof payload.peerName === 'string' ? payload.peerName.slice(0, 120) : '',
+    points: normalized,
+    color: typeof color === 'string' ? color.slice(0, 32) : '#e53935',
+    width: typeof width === 'number' && width > 0 && width <= 20 ? width : 3,
+    final: !!final
+  };
+}
+
 export function attachSignaling(server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
@@ -468,6 +507,18 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
     case 'clientTrace': {
       if (!peer) throw new Error('Não autenticado');
       logClientTrace(peer, msg.payload || {});
+      break;
+    }
+
+    case 'anotacaoSegmento': {
+      if (!peer) throw new Error('Não autenticado');
+      if (!annotationRateAllowed(peer.id)) break;
+      const segment = validateAnnotationSegment(msg.payload, peer.id);
+      if (!segment) break;
+      room.broadcastToRoom(
+        { type: 'anotacaoSegmento', payload: segment },
+        peer.id
+      );
       break;
     }
 

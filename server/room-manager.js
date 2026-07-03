@@ -304,6 +304,13 @@ export class RoomManager {
     }
   }
 
+  broadcastToRoom(message, exceptPeerId = null) {
+    for (const peer of this.peers.values()) {
+      if (exceptPeerId && peer.id === exceptPeerId) continue;
+      peer.send(message);
+    }
+  }
+
   broadcastQualityPreset(presetId) {
     if (!presetId) return;
     this.broadcastToClients({
