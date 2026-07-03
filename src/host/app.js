@@ -1628,8 +1628,11 @@ async function getRecordingStream() {
   const compositor = RecordingCompositor.start({
     videoEl: els.preview,
     fallbackStream: own ? media?.localScreenStream : null,
-    badgeText: selected?.displayName || 'Fonte',
-    visible: !!selected && !selected?.pausado
+    getBadgeText: () => getActiveRecordingSelection()?.displayName || 'Fonte',
+    getBadgeVisible: () => {
+      const active = getActiveRecordingSelection();
+      return !!active && !active.pausado;
+    }
   });
   const videoTrack = compositor?.stream?.getVideoTracks?.()[0];
   if (videoTrack?.readyState !== 'live') {

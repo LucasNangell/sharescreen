@@ -92,10 +92,19 @@ function drawVideoFrame(ctx, canvas, source) {
 }
 
 export const RecordingCompositor = {
-  start({ videoEl, fallbackStream, badgeText, visible = true } = {}) {
+  start({ videoEl, fallbackStream, badgeText, getBadgeText, visible = true, getBadgeVisible } = {}) {
     const sourceStream = videoEl?.srcObject instanceof MediaStream ? videoEl.srcObject : fallbackStream;
     const rawTrack = getLiveVideoTrack(sourceStream) || getLiveVideoTrack(fallbackStream);
     if (!rawTrack) return null;
+
+    const resolveBadgeText = () => {
+      if (typeof getBadgeText === 'function') return getBadgeText();
+      return badgeText;
+    };
+    const resolveBadgeVisible = () => {
+      if (typeof getBadgeVisible === 'function') return !!getBadgeVisible();
+      return visible;
+    };
 
     const canvas = document.createElement('canvas');
     const dims = getVideoDimensions(videoEl, fallbackStream || sourceStream);
@@ -123,7 +132,7 @@ export const RecordingCompositor = {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-      if (visible) drawBadge(ctx, canvas, badgeText);
+      if (resolveBadgeVisible()) drawBadge(ctx, canvas, resolveBadgeText());
       raf = requestAnimationFrame(tick);
     };
     tick();
