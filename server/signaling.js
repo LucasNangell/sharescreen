@@ -58,6 +58,7 @@ function validateAnnotationSegment(payload, senderPeerId) {
     points: normalized,
     color: typeof color === 'string' ? color.slice(0, 32) : '#e53935',
     width: typeof width === 'number' && width > 0 && width <= 20 ? width : 3,
+    shape: payload.shape === 'rect' ? 'rect' : 'stroke',
     final: !!final
   };
 }

@@ -78,6 +78,8 @@ const els = {
   btnClientMic: $('btn-client-mic'),
   btnDraw: $('btn-draw-toggle'),
   drawCanvas: $('live-annotation-canvas'),
+  btnRect: $('btn-rect-toggle'),
+  drawStack: $('preview-draw-stack'),
   btnSettings: $('btn-settings'),
   settingsModal: $('settings-modal'),
   settingsNomeInput: $('settings-nome-input'),
@@ -283,6 +285,8 @@ const liveAnnotation = createLiveAnnotation({
   videoEl: els.video,
   canvasEl: els.drawCanvas,
   btnDraw: els.btnDraw,
+  btnRect: els.btnRect,
+  drawStack: els.drawStack,
   getPeerId: () => peerId,
   getPeerName: () => displayName || getNome(),
   onSegment: (payload) => {

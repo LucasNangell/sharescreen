@@ -115,6 +115,8 @@ const els = {
   btnHostMic: $('btn-host-mic'),
   btnDraw: $('btn-draw-toggle'),
   drawCanvas: $('live-annotation-canvas'),
+  btnRect: $('btn-rect-toggle'),
+  drawStack: $('preview-draw-stack'),
   statusBar: $('status-bar'),
   qualityPreset: $('quality-preset'),
   qualityHint: $('quality-hint'),
@@ -2665,6 +2667,8 @@ const liveAnnotation = createLiveAnnotation({
   videoEl: els.preview,
   canvasEl: els.drawCanvas,
   btnDraw: els.btnDraw,
+  btnRect: els.btnRect,
+  drawStack: els.drawStack,
   getPeerId: () => hostPeerId,
   getPeerName: () => hostDisplayName || 'Host',
   onSegment: (payload) => {
