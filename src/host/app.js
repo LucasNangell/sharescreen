@@ -131,6 +131,7 @@ const els = {
   btnExternalLinkSubmit: $('btn-external-link-submit'),
   btnExternalLinkCancel: $('btn-external-link-cancel'),
   btnFullscreen: $('btn-fullscreen'),
+  btnPopoutControls: $('btn-popout-controls'),
   btnFsSources: $('btn-fs-sources'),
   fsSourceMenu: $('fs-source-menu'),
   fsSourceList: $('fs-source-list'),
@@ -2241,6 +2242,151 @@ function toggleSidebarCollapsed() {
 
 els.btnSidebarCollapse?.addEventListener('click', toggleSidebarCollapsed);
 
+let controlsPopoutWindow = null;
+let controlsPopoutWatchId = null;
+let sidebarWasCollapsed = false;
+
+function injectPopoutGuardScript(win) {
+  const script = win.document.createElement('script');
+  script.textContent =
+    'setInterval(function(){if(!window.opener||window.opener.closed)window.close();},500);';
+  win.document.body.appendChild(script);
+}
+
+function setupPopoutDocument(win) {
+  win.document.open();
+  win.document.write(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Controles — ShareScreen</title></head>' +
+      '<body class="controls-popout-body app-host"></body></html>'
+  );
+  win.document.close();
+  document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
+    win.document.head.appendChild(link.cloneNode(true));
+  });
+  injectPopoutGuardScript(win);
+}
+
+function isSidebarPoppedOut() {
+  return !!(controlsPopoutWindow && !controlsPopoutWindow.closed);
+}
+
+function restoreSidebarFromPopout() {
+  const sidebar = els.sidebar;
+  if (!sidebar || !controlsPopoutWindow) return false;
+  try {
+    if (!controlsPopoutWindow.document?.body?.contains(sidebar)) return false;
+  } catch {
+    return false;
+  }
+  const placeholder = document.getElementById('sidebar-popout-placeholder');
+  if (placeholder?.parentNode) {
+    placeholder.parentNode.insertBefore(sidebar, placeholder);
+    placeholder.remove();
+  } else {
+    els.appMain?.appendChild(sidebar);
+  }
+  return true;
+}
+
+function applySidebarDockedLayout() {
+  els.appMain?.classList.remove('sidebar-popped-out');
+  if (els.sidebar && !els.sidebar.hidden) {
+    els.appMain?.classList.add('sidebar-open');
+    if (sidebarWasCollapsed) {
+      els.appMain.classList.add('sidebar-collapsed');
+      els.sidebar.classList.add('is-collapsed');
+    }
+  }
+}
+
+function dockControlsPopout(skipClosePopup = false) {
+  if (controlsPopoutWatchId) {
+    clearInterval(controlsPopoutWatchId);
+    controlsPopoutWatchId = null;
+  }
+
+  restoreSidebarFromPopout();
+  const placeholder = document.getElementById('sidebar-popout-placeholder');
+  placeholder?.remove();
+
+  applySidebarDockedLayout();
+
+  if (!skipClosePopup && controlsPopoutWindow && !controlsPopoutWindow.closed) {
+    try {
+      controlsPopoutWindow.close();
+    } catch (_) {}
+  }
+  controlsPopoutWindow = null;
+}
+
+function watchPopoutClosed() {
+  if (controlsPopoutWatchId) clearInterval(controlsPopoutWatchId);
+  controlsPopoutWatchId = setInterval(() => {
+    if (!controlsPopoutWindow || controlsPopoutWindow.closed) {
+      dockControlsPopout();
+    }
+  }, 300);
+}
+
+function openControlsPopout() {
+  if (!canHostCommand() && !isCoHostInstance) {
+    showToast('Aguarde o painel conectar ao servidor', 'warn');
+    return;
+  }
+
+  if (isSidebarPoppedOut()) {
+    controlsPopoutWindow.focus();
+    return;
+  }
+
+  if (!els.sidebar || els.sidebar.hidden) {
+    showToast('Painel de controles indisponivel', 'warn');
+    return;
+  }
+
+  const features =
+    'width=320,height=800,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
+  const win = window.open('about:blank', 'sharescreen-controls', features);
+  if (!win) {
+    showToast('Permita pop-ups para abrir os controles em nova janela', 'warn');
+    return;
+  }
+
+  setupPopoutDocument(win);
+
+  sidebarWasCollapsed = els.sidebar.classList.contains('is-collapsed');
+
+  const placeholder = document.createElement('div');
+  placeholder.id = 'sidebar-popout-placeholder';
+  placeholder.hidden = true;
+  els.sidebar.parentNode?.insertBefore(placeholder, els.sidebar);
+
+  els.sidebar.hidden = false;
+  win.document.body.appendChild(els.sidebar);
+
+  els.appMain?.classList.add('sidebar-popped-out');
+  els.appMain?.classList.remove('sidebar-open', 'sidebar-collapsed');
+
+  controlsPopoutWindow = win;
+  win.document.title = 'Controles — ShareScreen';
+
+  win.addEventListener('beforeunload', () => {
+    if (controlsPopoutWatchId) {
+      clearInterval(controlsPopoutWatchId);
+      controlsPopoutWatchId = null;
+    }
+    restoreSidebarFromPopout();
+    document.getElementById('sidebar-popout-placeholder')?.remove();
+    applySidebarDockedLayout();
+    controlsPopoutWindow = null;
+  });
+
+  watchPopoutClosed();
+}
+
+els.btnPopoutControls?.addEventListener('click', openControlsPopout);
+window.addEventListener('pagehide', dockControlsPopout);
+
 els.btnTech?.addEventListener('click', () => {
   const open = els.techDrawer.hidden;
   els.techDrawer.hidden = !open;
@@ -3108,6 +3254,7 @@ export function teardownCoHost() {
   isCoHostInstance = false;
   hostReady = false;
   if (signaling) signaling.removeListener(coHostHandleMessage);
+  dockControlsPopout();
   if (els.sidebar) els.sidebar.hidden = true;
   els.appMain?.classList.remove('sidebar-open');
   els.appMain?.classList.remove('sidebar-collapsed');
