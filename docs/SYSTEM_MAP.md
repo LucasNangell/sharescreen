@@ -26,12 +26,13 @@ graph TD
     subgraph Host (Navegador)
         H[Host / public/host] <-->|Signaling WebSocket| S
         H <-->|WebRTC Producer| MS
-        H -->|Gravação WebM| R[Upload Chunks]
+        H -->|Gravação WebM streaming| R[Append em disco]
     end
     subgraph Servidor (Node.js)
         S <--> MS
         S <--> DB[(SQLite / data/sharescreen.db)]
-        R --> RS[recording-save.js]
+        R --> RS[recording-stream-session.js]
+        RS --> RF[recording-save.js]
     end
 ```
 

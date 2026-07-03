@@ -9,8 +9,11 @@ export const RecordingState = {
   ERROR: 'error'
 };
 
+const CHUNK_UPLOAD_RETRIES = 3;
+const CHUNK_RETRY_DELAY_MS = 1500;
+
 /**
- * Gravação robusta com chunks e upload (simples ou em partes).
+ * Gravação com streaming em tempo real para o servidor (fallback legado em memória).
  */
 export class RecordingClient {
   constructor({ onLog, onStateChange, onProgress, onTimer } = {}) {
@@ -25,11 +28,29 @@ export class RecordingClient {
     this._timerInterval = null;
     this._startedAt = 0;
     this._approxBytes = 0;
+    this._bytesPersisted = 0;
     this._hostToken = '';
+    this._streamingEnabled = true;
+    this._streamSessionId = null;
+    this._nextChunkIndex = 0;
+    this._customDir = '';
+    this._uploadQueue = [];
+    this._uploadQueueActive = false;
+    this._stopResolve = null;
+    this._legacyMode = false;
+    this._finishRequested = false;
   }
 
   get state() {
     return this._state;
+  }
+
+  get bytesPersisted() {
+    return this._bytesPersisted;
+  }
+
+  isStreaming() {
+    return !!this._streamSessionId && !this._legacyMode;
   }
 
   setState(s) {
@@ -39,6 +60,12 @@ export class RecordingClient {
 
   setHostToken(token) {
     this._hostToken = token || '';
+  }
+
+  _headers(extra = {}) {
+    const headers = { ...extra };
+    if (this._hostToken) headers['X-Host-Token'] = this._hostToken;
+    return headers;
   }
 
   _pickMimeType() {
@@ -53,7 +80,91 @@ export class RecordingClient {
     return 'video/webm';
   }
 
-  start(stream, quality = {}) {
+  async _startStreamSession(customDir = '') {
+    const res = await fetch('/api/gravacao/stream/start', {
+      method: 'POST',
+      headers: {
+        ...this._headers(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ customDir: customDir || '' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok || !data.sessionId) {
+      throw new Error(data.erro || `Falha ao iniciar streaming (${res.status})`);
+    }
+    return data.sessionId;
+  }
+
+  _enqueueChunk(blob) {
+    if (!blob?.size) return;
+    const index = this._nextChunkIndex++;
+    this._uploadQueue.push({ index, blob });
+    this._drainUploadQueue();
+  }
+
+  async _drainUploadQueue() {
+    if (this._uploadQueueActive || this._legacyMode || !this._streamSessionId) return;
+    this._uploadQueueActive = true;
+    try {
+      while (this._uploadQueue.length > 0) {
+        const item = this._uploadQueue[0];
+        let lastError = null;
+        for (let attempt = 0; attempt < CHUNK_UPLOAD_RETRIES; attempt++) {
+          try {
+            const res = await fetch('/api/gravacao/stream/chunk', {
+              method: 'POST',
+              headers: {
+                ...this._headers(),
+                'X-Session-Id': this._streamSessionId,
+                'X-Chunk-Index': String(item.index),
+                'Content-Type': 'application/octet-stream'
+              },
+              body: item.blob
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) {
+              throw new Error(data.erro || `Chunk ${item.index} falhou (${res.status})`);
+            }
+            this._bytesPersisted = data.bytesWritten ?? this._bytesPersisted + item.blob.size;
+            this._uploadQueue.shift();
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err;
+            if (attempt < CHUNK_UPLOAD_RETRIES - 1) {
+              await new Promise((r) => setTimeout(r, CHUNK_RETRY_DELAY_MS * (attempt + 1)));
+            }
+          }
+        }
+        if (lastError) {
+          this.setState(RecordingState.ERROR);
+          this.onLog(`Falha ao enviar chunk ${item.index}: ${lastError.message}`, 'error');
+          throw lastError;
+        }
+      }
+    } finally {
+      this._uploadQueueActive = false;
+      if (this._stopResolve && this._uploadQueue.length === 0) {
+        const resolve = this._stopResolve;
+        this._stopResolve = null;
+        resolve();
+      }
+    }
+  }
+
+  async _flushUploadQueue() {
+    if (this._legacyMode) return;
+    await this._drainUploadQueue();
+    if (this._uploadQueue.length > 0) {
+      await new Promise((resolve) => {
+        this._stopResolve = resolve;
+        this._drainUploadQueue().catch(() => resolve());
+      });
+    }
+  }
+
+  async start(stream, quality = {}, { customDir = '' } = {}) {
     if (!stream?.getVideoTracks?.().length) {
       throw new Error('Nenhum vídeo disponível para gravar');
     }
@@ -65,8 +176,27 @@ export class RecordingClient {
 
     this.chunks = [];
     this._approxBytes = 0;
+    this._bytesPersisted = 0;
+    this._nextChunkIndex = 0;
+    this._uploadQueue = [];
+    this._legacyMode = false;
+    this._streamSessionId = null;
+    this._customDir = customDir || '';
+    this._finishRequested = false;
     this._mimeType = this._pickMimeType();
     const vbps = quality.videoBitsPerSecond ?? 2_500_000;
+
+    if (this._streamingEnabled) {
+      try {
+        this._streamSessionId = await this._startStreamSession(this._customDir);
+        this.onLog('Gravação em streaming para o servidor', 'info');
+      } catch (err) {
+        this._legacyMode = true;
+        this.onLog(`Streaming indisponível, usando buffer local: ${err.message}`, 'warn');
+      }
+    } else {
+      this._legacyMode = true;
+    }
 
     this.mediaRecorder = new MediaRecorder(stream, {
       mimeType: this._mimeType,
@@ -74,9 +204,12 @@ export class RecordingClient {
     });
 
     this.mediaRecorder.ondataavailable = (e) => {
-      if (e.data?.size > 0) {
+      if (!e.data?.size) return;
+      this._approxBytes += e.data.size;
+      if (this._legacyMode) {
         this.chunks.push(e.data);
-        this._approxBytes += e.data.size;
+      } else {
+        this._enqueueChunk(e.data);
       }
     };
 
@@ -89,7 +222,8 @@ export class RecordingClient {
     this._startedAt = Date.now();
     this._timerInterval = setInterval(() => {
       const sec = Math.floor((Date.now() - this._startedAt) / 1000);
-      this.onTimer(sec, this._approxBytes);
+      const bytes = this.isStreaming() ? this._bytesPersisted : this._approxBytes;
+      this.onTimer(sec, bytes);
     }, 1000);
 
     this.setState(RecordingState.RECORDING);
@@ -100,19 +234,30 @@ export class RecordingClient {
     return new Promise((resolve, reject) => {
       const mr = this.mediaRecorder;
       if (!mr || mr.state === 'inactive') {
-        resolve(null);
+        resolve(this._legacyMode ? null : { streaming: true });
         return;
       }
 
       this.setState(RecordingState.FINALIZING);
       clearInterval(this._timerInterval);
 
-      mr.onstop = () => {
-        const blob = new Blob(this.chunks, { type: this._mimeType });
-        this.chunks = [];
+      mr.onstop = async () => {
         this.mediaRecorder = null;
-        resolve(blob.size > 0 ? blob : null);
+        try {
+          if (this._legacyMode) {
+            const blob = new Blob(this.chunks, { type: this._mimeType });
+            this.chunks = [];
+            resolve(blob.size > 0 ? blob : null);
+            return;
+          }
+          await this._flushUploadQueue();
+          resolve({ streaming: true });
+        } catch (err) {
+          this.setState(RecordingState.ERROR);
+          reject(err);
+        }
       };
+
       mr.onerror = () => {
         this.setState(RecordingState.ERROR);
         reject(new Error('Falha ao finalizar gravação'));
@@ -126,7 +271,80 @@ export class RecordingClient {
     });
   }
 
+  async finishStream(filename, customDir = '') {
+    if (!this._streamSessionId || this._legacyMode) {
+      return null;
+    }
+    if (this._finishRequested) return null;
+    this._finishRequested = true;
+
+    try {
+      await this._flushUploadQueue();
+      const res = await fetch('/api/gravacao/stream/finish', {
+        method: 'POST',
+        headers: {
+          ...this._headers(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId: this._streamSessionId,
+          filename,
+          customDir: customDir || this._customDir || '',
+          incomplete: false
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.erro || `Falha ao finalizar gravação (${res.status})`);
+      }
+      this._streamSessionId = null;
+      this.setState(RecordingState.SAVED);
+      this.onProgress(100);
+      return data;
+    } catch (err) {
+      this.setState(RecordingState.ERROR);
+      throw err;
+    }
+  }
+
+  finishIncomplete(filename = '') {
+    if (!this._streamSessionId || this._legacyMode || this._finishRequested) return;
+    this._finishRequested = true;
+
+    const payload = {
+      sessionId: this._streamSessionId,
+      filename,
+      incomplete: true
+    };
+
+    fetch('/api/gravacao/stream/finish', {
+      method: 'POST',
+      headers: {
+        ...this._headers(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      keepalive: true
+    }).catch(() => {});
+
+    this._streamSessionId = null;
+  }
+
+  prepareIncompleteFinish(filename = '') {
+    if (this.isRecording() && this.mediaRecorder) {
+      try {
+        clearInterval(this._timerInterval);
+        this.mediaRecorder.stop();
+      } catch (_) {}
+    }
+    this.finishIncomplete(filename);
+  }
+
   resetIdle() {
+    this._streamSessionId = null;
+    this._legacyMode = false;
+    this._finishRequested = false;
+    this._uploadQueue = [];
     this.setState(RecordingState.IDLE);
   }
 
@@ -146,7 +364,6 @@ export class RecordingClient {
     if (customDir) headers['X-Recording-Dir'] = customDir;
     if (this._hostToken) headers['X-Host-Token'] = this._hostToken;
 
-    // Upload simples com progresso via XMLHttpRequest
     const useChunked = blob.size > 8 * 1024 * 1024;
 
     try {
@@ -228,12 +445,16 @@ export class RecordingClient {
   }
 
   async stopAndUpload(stream, quality) {
-    const blob = await this.stop();
-    if (!blob) {
+    const result = await this.stop();
+    if (!result) {
       this.setState(RecordingState.IDLE);
       return null;
     }
+    if (result.streaming) {
+      const filename = formatRecordingFilename(new Date());
+      return this.finishStream(filename);
+    }
     const filename = formatRecordingFilename(new Date());
-    return this.upload(blob, filename);
+    return this.upload(result, filename);
   }
 }

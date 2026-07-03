@@ -4,6 +4,16 @@ import config from '../config/default.js';
 import { isValidRecordingFilename } from '../src/shared/recording-filename.js';
 import { logger } from './logger.js';
 
+export function resolveRecordingDir(customDir = '') {
+  const dir = customDir ? path.resolve(customDir) : config.recordingsDir;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return { ok: false, erro: `Pasta de gravações inacessível: ${err.message}` };
+  }
+  return { ok: true, dir: path.resolve(dir) };
+}
+
 export function saveRecording(buffer, filename, customDir = '') {
   const base = path.basename(String(filename));
   if (!isValidRecordingFilename(base)) {
@@ -13,15 +23,12 @@ export function saveRecording(buffer, filename, customDir = '') {
     return { ok: false, erro: 'Arquivo vazio' };
   }
 
-  const dir = customDir ? path.resolve(customDir) : config.recordingsDir;
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-  } catch (err) {
-    return { ok: false, erro: `Pasta de gravações inacessível: ${err.message}` };
-  }
+  const resolved = resolveRecordingDir(customDir);
+  if (!resolved.ok) return resolved;
+  const dir = resolved.dir;
 
   const fullPath = path.join(dir, base);
-  if (path.dirname(path.resolve(fullPath)) !== path.resolve(dir)) {
+  if (path.dirname(path.resolve(fullPath)) !== dir) {
     return { ok: false, erro: 'Caminho inválido' };
   }
 

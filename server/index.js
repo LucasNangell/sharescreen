@@ -13,6 +13,12 @@ import config, { getServerHost, getVideoQualityForClients } from '../config/defa
 import { listAgentClients } from './agent-bridge.js';
 import { saveRecording } from './recording-save.js';
 import { saveChunk, assembleUpload, pruneOldUploads } from './recording-chunk-store.js';
+import {
+  startSession as startRecordingStream,
+  appendChunk as appendRecordingStreamChunk,
+  finishSession as finishRecordingStream,
+  pruneStaleSessions as pruneStaleRecordingStreams
+} from './recording-stream-session.js';
 import { validateRecordingUpload, createViewerLinkToken } from './auth-dev.js';
 import {
   lookupClientByIp,
@@ -573,6 +579,46 @@ function createApp() {
     const result = saveRecording(assembled.buffer, filename, customDir);
     if (!result.ok) {
       res.status(500).json(result);
+      return;
+    }
+    res.json(result);
+  });
+
+  app.post('/api/gravacao/stream/start', (req, res) => {
+    if (!validateRecordingUpload(req)) {
+      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
+      return;
+    }
+    pruneStaleRecordingStreams();
+    const { customDir } = req.body || {};
+    const result = startRecordingStream({ customDir: customDir || '' });
+    res.status(result.ok ? 200 : 400).json(result);
+  });
+
+  app.post(
+    '/api/gravacao/stream/chunk',
+    express.raw({ type: 'application/octet-stream', limit: '32mb' }),
+    async (req, res) => {
+      if (!validateRecordingUpload(req)) {
+        res.status(403).json({ ok: false, erro: 'Token de host inválido' });
+        return;
+      }
+      const sessionId = req.headers['x-session-id'];
+      const chunkIndex = req.headers['x-chunk-index'];
+      const result = await appendRecordingStreamChunk(sessionId, chunkIndex, req.body);
+      res.status(result.ok ? 200 : 400).json(result);
+    }
+  );
+
+  app.post('/api/gravacao/stream/finish', async (req, res) => {
+    if (!validateRecordingUpload(req)) {
+      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
+      return;
+    }
+    const { sessionId, filename, incomplete } = req.body || {};
+    const result = await finishRecordingStream(sessionId, filename || '', { incomplete: !!incomplete });
+    if (!result.ok) {
+      res.status(result.erro?.includes('inválido') ? 400 : 500).json(result);
       return;
     }
     res.json(result);

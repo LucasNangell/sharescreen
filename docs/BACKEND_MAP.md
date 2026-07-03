@@ -22,8 +22,9 @@ Mapeamento do backend da aplicação. Estruturado em **Node.js** com **Express**
 | [user-resolve.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/user-resolve.js) | Resolve nomes DNS corporativos/de rede para endereços IP. | Ajustar métodos de obtenção de IP via hostname na rede interna (cmd/DNS query). |
 | [agent-bridge.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/agent-bridge.js) | Integração com banco de dados remoto/local usado por robôs python locais nos computadores dos clients. | Mudar o comportamento de verificação e chamada remota do robô Chrome (`auxiliar_system.db`). |
 | [client-ip.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/client-ip.js) | Helper para extração do IP real do cliente contornando proxies ou headers (`x-forwarded-for`). | Corrigir problemas de IPs de clientes incorretos ao passar por NGINX ou proxies de rede local. |
-| [recording-save.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/recording-save.js) | Salva arquivos WebM de gravação na pasta configurada (`recordingsDir`). | Alterar onde os arquivos de gravação finais são armazenados ou formato do arquivo. |
-| [recording-chunk-store.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/recording-chunk-store.js) | Gerencia arquivos temporários fragmentados (chunks) e a remontagem (concatenação) deles em um único WebM. | Mudar políticas de expiração de gravações incompletas ou lógica de concatenação. |
+| [recording-save.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/recording-save.js) | Salva arquivos WebM de gravação na pasta configurada (`recordingsDir`); exporta `resolveRecordingDir()`. | Alterar onde os arquivos de gravação finais são armazenados ou formato do arquivo. |
+| [recording-chunk-store.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/recording-chunk-store.js) | Gerencia arquivos temporários fragmentados (chunks) e a remontagem (concatenação) deles em um único WebM (upload legado pós-blob). | Mudar políticas de expiração de gravações incompletas ou lógica de concatenação. |
+| [recording-stream-session.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/recording-stream-session.js) | Sessões de gravação em streaming: append em disco (`.streaming/*.part`), finish completo ou `_incompleto.webm`. | Alterar política de gravações longas, poda de sessões ou persistência em tempo real. |
 
 ---
 
@@ -38,6 +39,11 @@ Mapeamento do backend da aplicação. Estruturado em **Node.js** com **Express**
 * `POST /api/lower-third` — Recebe o binário do vídeo WebM da lower third e salva no servidor associando ao cliente (requer token de host no header).
 * `GET /lt-videos/:filename` — Serve os arquivos de vídeo gravados em `data/lower-thirds/`.
 * `GET /api/info` — Informa o estado atual do servidor (transmissões, cohosts ativos, build ID).
+* `POST /api/gravacao` — Upload legado de gravação WebM completa (binário).
+* `POST /api/gravacao/chunk` + `POST /api/gravacao/complete` — Upload legado fragmentado pós-blob.
+* `POST /api/gravacao/stream/start` — Inicia sessão de gravação em streaming (`{ customDir? }` → `{ sessionId }`).
+* `POST /api/gravacao/stream/chunk` — Append de chunk WebM em disco (`X-Session-Id`, `X-Chunk-Index`).
+* `POST /api/gravacao/stream/finish` — Finaliza sessão (`{ sessionId, filename?, incomplete? }`); incompleto gera `*_incompleto.webm`.
 
 ### Endpoints Administrativos (Apenas quando `SHARESCREEN_DEV=1`)
 * `GET /api/admin/users` — Retorna a lista de todos os usuários no banco SQLite.

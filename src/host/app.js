@@ -461,9 +461,10 @@ const recorder = new RecordingClient({
   onProgress: (pct) => {
     if (els.uploadProgress) els.uploadProgress.style.width = `${pct}%`;
   },
-  onTimer: (sec) => {
+  onTimer: (sec, bytes) => {
     if (els.recordingTimer) {
-      els.recordingTimer.textContent = formatTimer(sec);
+      const sizeHint = bytes ? ` · ${formatRecordingBytes(bytes)} no servidor` : '';
+      els.recordingTimer.textContent = `${formatTimer(sec)}${sizeHint}`;
       els.recordingTimer.hidden = false;
     }
   }
@@ -567,6 +568,13 @@ function formatTimer(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatRecordingBytes(bytes) {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function log(msg, level = 'info') {
@@ -1522,8 +1530,9 @@ async function iniciarGravacao() {
       return;
     }
     const quality = mergeServerQuality(media.videoQuality, loadPresetId());
+    const customDir = localStorage.getItem(STORAGE_RECORDINGS_DIR) || '';
     recorder.setHostToken(hostToken);
-    recorder.start(stream, quality);
+    await recorder.start(stream, quality, { customDir });
     showToast('Gravacao iniciada', 'info');
   } catch (e) {
     stopRecordingCapture();
@@ -1533,13 +1542,9 @@ async function iniciarGravacao() {
 
 async function pararGravacao() {
   try {
-    const blob = await recorder.stop();
+    const stopResult = await recorder.stop();
     stopRecordingCapture();
-    if (!blob) {
-      showToast('Gravacao vazia', 'warn');
-      recorder.resetIdle();
-      return;
-    }
+
     const pattern = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
     const filename = formatRecordingFilename(new Date(), pattern);
     if (!isValidRecordingFilename(filename)) {
@@ -1548,7 +1553,30 @@ async function pararGravacao() {
       return;
     }
     const customDir = localStorage.getItem(STORAGE_RECORDINGS_DIR) || '';
-    const uploadResult = await recorder.upload(blob, filename, customDir);
+
+    if (stopResult?.streaming) {
+      if (!recorder.bytesPersisted) {
+        showToast('Gravacao vazia', 'warn');
+        recorder.resetIdle();
+        return;
+      }
+      const uploadResult = await recorder.finishStream(filename, customDir);
+      if (els.recordingFilename) {
+        els.recordingFilename.textContent = uploadResult.filename || filename;
+      }
+      showToast('Gravacao salva com sucesso', 'success');
+      setStatus(`Gravacao salva: ${uploadResult.filename || filename}`);
+      setTimeout(() => recorder.resetIdle(), 4000);
+      return;
+    }
+
+    if (!stopResult) {
+      showToast('Gravacao vazia', 'warn');
+      recorder.resetIdle();
+      return;
+    }
+
+    const uploadResult = await recorder.upload(stopResult, filename, customDir);
     if (els.recordingFilename) {
       els.recordingFilename.textContent = uploadResult.filename || filename;
     }
@@ -2343,6 +2371,13 @@ window.addEventListener('beforeunload', () => {
   hostAudioMonitor?.dispose();
   media?.dispose();
   signaling?.close();
+});
+
+window.addEventListener('pagehide', () => {
+  if (!recorder.isRecording() && !recorder.isStreaming()) return;
+  const pattern = localStorage.getItem(STORAGE_RECORDING_FILENAME_PATTERN) || '';
+  const filename = formatRecordingFilename(new Date(), pattern);
+  recorder.prepareIncompleteFinish(filename);
 });
 
 let currentPickerPath = '';
