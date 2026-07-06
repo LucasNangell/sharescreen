@@ -1,0 +1,17 @@
+---
+description: Contexto essencial e verificavel deste projeto ShareScreen
+alwaysApply: true
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# Contexto essencial
+
+- Aplicacao web de compartilhamento de tela/audio em LAN com host e client, servida por Node.js + Express + WebSocket e SFU mediasoup (`README.md`, `server/index.js`, `package.json`).
+- Runtime Node ESM com Node >=18 confirmado em `package.json` (`type: module`, `engines.node`).
+- Frontend fonte em `src/host`, `src/client`, modulos compartilhados em `src/shared`; bundles em `public/host` e `public/client` gerados por esbuild (`scripts/build-client.js`).
+- Entradas de execucao confirmadas: `npm run build`, `npm run build:prod`, `npm run check`, `npm run test:smoke`, `npm run cert`, `npm run start`, `npm run dev` (`package.json`).
+- Servidor principal em `server/index.js`, com rotas REST `/api/*`, assets estaticos `/host` e `/client`, e sinalizacao WebSocket acoplada por `attachSignaling`.
+- Configuracao operacional centralizada em `config/default.js` (portas HTTP/HTTPS, faixa RTP, STUN/TURN, tokens e runtime dev/prod).
+- Mudancas estruturais devem preservar separacao de camadas: `server/*` (API/sinalizacao/persistencia), `src/*` (UI/logica cliente), `public/*` (artefato gerado/estatico), `config/*` (parametros de runtime).
+- Nao tratar `public/*bundle*`, `public/shared/build-id.json` e `public/shared/host-style.css` como fonte de verdade; sao artefatos de build.

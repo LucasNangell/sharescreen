@@ -328,6 +328,25 @@ export class MediaClient {
     return this.hasVideoProducer();
   }
 
+  /** Verifica producer de vídeo do host; solicita keyframe se track live mas congelada aparente. */
+  async repairHostVideoIfNeeded() {
+    const producer = this.producers.video;
+    if (!producer || producer.closed) return { ok: false, reason: 'no-producer' };
+    const track = producer.track;
+    if (!track || track.readyState !== 'live') {
+      return { ok: false, reason: 'track-not-live', trackState: track?.readyState || 'none' };
+    }
+    try {
+      await producer.requestKeyFrame();
+    } catch (_) {}
+    return { ok: true };
+  }
+
+  getHostVideoTrackState() {
+    const track = this.producers.video?.track;
+    return track?.readyState || 'none';
+  }
+
   _stopLocalMicTracks(keepTrack = null) {
     const kept = [];
     for (const track of this.localMicTracks) {

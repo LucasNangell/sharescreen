@@ -1,0 +1,19 @@
+---
+description: Tratamento de artefatos gerados e arquivos derivados de build
+globs:
+  - "public/**/*.bundle.js"
+  - "public/**/*.bundle.js.map"
+  - "public/**/index.html"
+  - "public/shared/build-id.json"
+  - "public/shared/host-style.css"
+alwaysApply: false
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# Area especifica: codigo gerado
+
+- `public/client/*` e `public/host/*` sao artefatos compilados a partir de `src/*` via `npm run build` (`scripts/build-client.js`).
+- `public/shared/build-id.json` e cache guard em HTML sao atualizados automaticamente no build; nao usar edicao manual como passo primario.
+- Alteracoes desejadas nesses arquivos devem partir das fontes (`src/*`, estilos fonte e script de build) e depois regenerar artefatos.
+- Quando revisar diffs, priorizar validacao dos arquivos fonte correspondentes e tratar mudancas em bundle/map como efeito colateral esperado.

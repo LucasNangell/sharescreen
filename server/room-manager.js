@@ -89,7 +89,7 @@ export class Peer {
     role,
     displayName,
     agentHostname = '',
-    { isExternal = false, publishIntent = 'publisher' } = {}
+    { isExternal = false, publishIntent = 'publisher', userId = null, username = null, userRole = null } = {}
   ) {
     this.id = randomPeerId();
     this.ws = ws;
@@ -98,6 +98,9 @@ export class Peer {
     this.agentHostname = (agentHostname || '').trim().toUpperCase();
     this.isExternal = !!isExternal;
     this.publishIntent = publishIntent === 'viewer' ? 'viewer' : 'publisher';
+    this.userId = userId || null;
+    this.username = username || null;
+    this.userRole = userRole || null;
     this.mediaReadyAck = { video: false, microphone: false, system: false };
     this.status = 'conectado';
     this.sendTransport = null;
@@ -144,6 +147,8 @@ export class Peer {
       shortId: shortId(this.id),
       role: this.role,
       displayName: this.displayName,
+      userId: this.userId || null,
+      username: this.username || null,
       agentHostname: this.agentHostname || null,
       origin: this.isExternal ? 'external' : 'local',
       status: this.status,
@@ -189,6 +194,11 @@ export class RoomManager {
     this.meetBridgeLiveMode = false;
     this.roomVersion = 0;
     this._emittingRoomState = false;
+    this._roomStateDirty = false;
+    this.whiteboardActive = false;
+    /** @type {object[]} */
+    this.whiteboardElements = [];
+    this._whiteboardSourcePeerId = null;
   }
 
   getMediaReady(peer) {
@@ -223,6 +233,14 @@ export class RoomManager {
     return peer?.ws?.readyState === 1;
   }
 
+  markRoomStateDirty() {
+    if (this._emittingRoomState) {
+      this._roomStateDirty = true;
+      return;
+    }
+    this.notifyHostState();
+  }
+
   purgeStalePeers() {
     let changed = false;
     for (const [peerId, peer] of this.peers) {
@@ -243,7 +261,7 @@ export class RoomManager {
     }
     if (changed) {
       this.broadcastAudioSources();
-      this.notifyHostState();
+      this.markRoomStateDirty();
     }
   }
 
@@ -277,16 +295,90 @@ export class RoomManager {
       selected?.displayName && producerIds.video
         ? getLowerThirdForDisplayName(selected.displayName)
         : null;
+    const sourceKind =
+      this.whiteboardActive &&
+      this._whiteboardSourcePeerId &&
+      String(this.selectedPeerId) === String(this._whiteboardSourcePeerId)
+        ? 'whiteboard'
+        : null;
     return {
       selectedPeerId: this.selectedPeerId,
       producerId: producerIds.video,
       producerIds,
-      peerName: selected?.displayName ?? null,
+      peerName:
+        sourceKind === 'whiteboard'
+          ? 'Quadro branco'
+          : selected?.displayName ?? null,
       paused: this.transmissionPaused,
-      lowerThird,
+      lowerThird: sourceKind === 'whiteboard' ? null : lowerThird,
       interrompidaPor: this.interrompidaPor || null,
-      finalizadaPor: this.finalizadaPor || null
+      finalizadaPor: this.finalizadaPor || null,
+      sourceKind
     };
+  }
+
+  buildWhiteboardStatePayload() {
+    return {
+      active: this.whiteboardActive,
+      elements: this.whiteboardElements.slice()
+    };
+  }
+
+  startWhiteboard(peerId) {
+    this.whiteboardActive = true;
+    this._whiteboardSourcePeerId = peerId;
+    this.broadcastActiveProducer();
+    this.broadcastToRoom({
+      type: 'quadroBrancoEstado',
+      payload: this.buildWhiteboardStatePayload()
+    });
+    return { ok: true };
+  }
+
+  stopWhiteboard() {
+    this.whiteboardActive = false;
+    this._whiteboardSourcePeerId = null;
+    this.broadcastActiveProducer();
+    this.broadcastToRoom({
+      type: 'quadroBrancoEstado',
+      payload: this.buildWhiteboardStatePayload()
+    });
+    return { ok: true };
+  }
+
+  addWhiteboardElement(element) {
+    const MAX_ELEMENTS = 500;
+    if (this.whiteboardElements.length >= MAX_ELEMENTS) {
+      return { ok: false, erro: 'Limite de elementos do quadro branco atingido' };
+    }
+    const existing = this.whiteboardElements.findIndex((e) => e.id === element.id);
+    if (existing >= 0) {
+      this.whiteboardElements[existing] = element;
+    } else {
+      this.whiteboardElements.push(element);
+    }
+    this.broadcastToRoom({
+      type: 'quadroBrancoElemento',
+      payload: element
+    });
+    return { ok: true };
+  }
+
+  clearWhiteboard() {
+    this.whiteboardElements = [];
+    this.broadcastToRoom({
+      type: 'quadroBrancoLimpar',
+      payload: { ok: true }
+    });
+    return { ok: true };
+  }
+
+  sendWhiteboardStateToPeer(peer) {
+    if (!peer) return;
+    peer.send({
+      type: 'quadroBrancoEstado',
+      payload: this.buildWhiteboardStatePayload()
+    });
   }
 
   refreshTransmissionIfSelected(displayName) {
@@ -391,6 +483,7 @@ export class RoomManager {
       controleExibicao: [...this.displayControllerIds],
       meetBridgeLiveMode: this.meetBridgeLiveMode,
       mutedPeerIds: [...this.mutedPeerIds],
+      whiteboard: this.buildWhiteboardStatePayload(),
       rtpCapabilities: getRtpCapabilities()
     };
 
@@ -401,43 +494,75 @@ export class RoomManager {
     return payload;
   }
 
+  _emitRoomStateNow(reason = 'update') {
+    this._pruneDisplayControllers();
+    this.roomVersion += 1;
+
+    if (!config.useLegacyRoomSync) {
+      for (const peer of this.peers.values()) {
+        if (!this.isPeerSocketOpen(peer)) continue;
+        peer.send({
+          type: 'roomState',
+          payload: this.buildRoomState(peer, reason)
+        });
+      }
+    }
+
+    const hostPayload = this.getHostState();
+    // #region agent log
+    debugSessionLog('H4', 'room-manager:emitRoomState', reason, {
+      version: this.roomVersion,
+      clients: (hostPayload.clients || []).map((c) => ({
+        id: c.id?.slice(0, 8),
+        name: c.displayName,
+        publishIntent: c.publishIntent,
+        selectable: c.selectable,
+        mediaReadyVideo: c.mediaReady?.video,
+        hasVideo: c.hasVideo,
+        isProducing: c.isProducing,
+        producerVideo: c.producerIds?.video?.slice(0, 8) || null
+      }))
+    });
+    try {
+      const debug3a = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'debug-3a36be.log');
+      fs.appendFileSync(
+        debug3a,
+        `${JSON.stringify({
+          sessionId: '3a36be',
+          location: 'room-manager:_emitRoomStateNow',
+          message: 'estado broadcast',
+          data: {
+            reason,
+            version: this.roomVersion,
+            clientCount: (hostPayload.clients || []).length,
+            clientNames: (hostPayload.clients || []).map((c) => c.displayName),
+            hostRecipients: this.getHostAndCoHostPeers().map((h) => h.id.slice(0, 8)),
+            hypothesisId: 'D'
+          },
+          timestamp: Date.now()
+        })}\n`
+      );
+    } catch (_) {}
+    // #endregion
+    for (const host of this.getHostAndCoHostPeers()) {
+      host.send({ type: 'estado', payload: hostPayload });
+    }
+    this.notifyDisplayControllers();
+  }
+
   emitRoomState(reason = 'update') {
-    if (this._emittingRoomState) return;
+    if (this._emittingRoomState) {
+      this._roomStateDirty = true;
+      return;
+    }
     this._emittingRoomState = true;
     try {
-      this._pruneDisplayControllers();
-      this.roomVersion += 1;
-
-      if (!config.useLegacyRoomSync) {
-        for (const peer of this.peers.values()) {
-          if (!this.isPeerSocketOpen(peer)) continue;
-          peer.send({
-            type: 'roomState',
-            payload: this.buildRoomState(peer, reason)
-          });
-        }
-      }
-
-      const hostPayload = this.getHostState();
-      // #region agent log
-      debugSessionLog('H4', 'room-manager:emitRoomState', reason, {
-        version: this.roomVersion,
-        clients: (hostPayload.clients || []).map((c) => ({
-          id: c.id?.slice(0, 8),
-          name: c.displayName,
-          publishIntent: c.publishIntent,
-          selectable: c.selectable,
-          mediaReadyVideo: c.mediaReady?.video,
-          hasVideo: c.hasVideo,
-          isProducing: c.isProducing,
-          producerVideo: c.producerIds?.video?.slice(0, 8) || null
-        }))
-      });
-      // #endregion
-      for (const host of this.getHostAndCoHostPeers()) {
-        host.send({ type: 'estado', payload: hostPayload });
-      }
-      this.notifyDisplayControllers();
+      let nextReason = reason;
+      do {
+        this._roomStateDirty = false;
+        this._emitRoomStateNow(nextReason);
+        nextReason = 'coalesced';
+      } while (this._roomStateDirty);
     } finally {
       this._emittingRoomState = false;
     }
@@ -564,6 +689,7 @@ export class RoomManager {
 
     const selected = this.getSelectedPeer();
     return {
+      version: this.roomVersion,
       clients,
       selecionado: selected
         ? {
@@ -615,6 +741,7 @@ export class RoomManager {
         : null;
 
     const snapshot = {
+      version: this.roomVersion,
       snapshotAt: Date.now(),
       host: host
         ? {
@@ -637,7 +764,8 @@ export class RoomManager {
       controleExibicao: [...this.displayControllerIds],
       meetBridgeLiveMode: this.meetBridgeLiveMode,
       rtpCapabilities: getRtpCapabilities(),
-      mutedPeerIds: [...this.mutedPeerIds]
+      mutedPeerIds: [...this.mutedPeerIds],
+      whiteboard: this.buildWhiteboardStatePayload()
     };
 
     if (viewingPeer?.role === 'client') {
@@ -667,7 +795,7 @@ export class RoomManager {
     peer.send({ type: 'estadoSala', payload: snapshot });
   }
 
-  addPeer(ws, role, displayName, agentHostname = '', { isExternal = false, publishIntent = 'publisher' } = {}) {
+  addPeer(ws, role, displayName, agentHostname = '', { isExternal = false, publishIntent = 'publisher', userId = null, username = null, userRole = null } = {}) {
     this.purgeStalePeers();
     if (role === 'client' && this.getClientCount() >= config.maxClients) {
       throw new Error(`Limite de ${config.maxClients} clients atingido`);
@@ -756,7 +884,13 @@ export class RoomManager {
       this.broadcastAudioSources();
     }
 
-    const peer = new Peer(ws, role, displayName, agentHostname, { isExternal, publishIntent });
+    const peer = new Peer(ws, role, displayName, agentHostname, {
+      isExternal,
+      publishIntent,
+      userId,
+      username,
+      userRole
+    });
     peer.ws = ws;
     if (role === 'client') {
       peer.clientIp = getClientIpFromWs(ws);

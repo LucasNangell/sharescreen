@@ -103,6 +103,7 @@
 }
 
 .field input[type='text'],
+.field input[type='password'],
 .field select {
   width: 100%;
   padding: 0.6rem 0.75rem;

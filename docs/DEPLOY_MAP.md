@@ -77,6 +77,8 @@ Os arquivos de configuração do servidor NGINX para hospedar a aplicação sob 
 * [https-sharescreen.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/https-sharescreen.conf) — Configurações padrão de Proxy Pass para as portas 3443 e 3080.
 * [sharescreen-static-locations.conf](file:///e:/Projetos/Trabalho/Screen%20Share/nginx/sharescreen-static-locations.conf) — Mapeamento das pastas de arquivos estáticos públicas e de vídeos.
 
+**Login em produção:** rotas `/api/auth/*` (e `/api/user-settings`, `/api/audio-filter`) precisam ser encaminhadas ao Node **antes** do catch-all `location /api` do Controle OBS. Sem isso, o login falha com erro de JSON inválido (resposta HTML do OBS).
+
 ### TURN Server (Coturn)
 * Configuração padrão no arquivo: [turnserver.conf](file:///e:/Projetos/Trabalho/Screen%20Share/turn/turnserver.conf).
 * Para iniciar o servidor TURN local no Windows em paralelo com a aplicação, execute o arquivo: [start-turn.bat](file:///e:/Projetos/Trabalho/Screen%20Share/scripts/start-turn.bat).

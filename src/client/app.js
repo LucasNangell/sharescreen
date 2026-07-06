@@ -26,10 +26,12 @@ import { ClientSession, SessionPhase, requestRoomStateWithRetry, joinPayloadExtr
 import { MediaPublisher } from './media-publisher.js';
 import { PublisherConnection } from './publisher-connection.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
-import { createLiveAnnotation } from '../shared/live-annotation.js';
+import { createDrawingSurface } from '../shared/drawing-surface.js';
+import { createAnnotationToolbar } from '../shared/annotation-toolbar.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
 import { verifyServerBuild } from '../shared/build-verify.js';
 import { debugClientSessionLog } from '../shared/debug-session-client.js';
+import { requireAuthSession, authDisplayName, bindLogoutControl } from '../shared/auth-client.js';
 
 const STORAGE_NAME = 'sharescreen_client_name';
 const STORAGE_MACHINE = 'sharescreen_agent_hostname';
@@ -76,10 +78,13 @@ const els = {
   watchingLabel: $('watching-label'),
   erro: $('erro-box'),
   btnClientMic: $('btn-client-mic'),
-  btnDraw: $('btn-draw-toggle'),
   drawCanvas: $('live-annotation-canvas'),
-  btnRect: $('btn-rect-toggle'),
-  drawStack: $('preview-draw-stack'),
+  annotationToolbar: $('annotation-toolbar'),
+  annotationToolbarToggle: $('annotation-toolbar-toggle'),
+  annotationToolbarPanel: $('annotation-toolbar-panel'),
+  annotationColor: $('annotation-color'),
+  annotationWidth: $('annotation-width'),
+  annotationClear: $('annotation-clear'),
   btnSettings: $('btn-settings'),
   settingsModal: $('settings-modal'),
   settingsNomeInput: $('settings-nome-input'),
@@ -90,6 +95,12 @@ const els = {
   settingsBtnRefreshMics: $('settings-btn-refresh-mics'),
   btnSettingsSave: $('btn-settings-save'),
   btnSettingsClose: $('btn-settings-close'),
+  settingsAccountWrap: $('settings-account-wrap'),
+  settingsAuthUserLabel: $('settings-auth-user-label'),
+  btnSettingsLogout: $('btn-settings-logout'),
+  clientSidebarAccountWrap: $('client-sidebar-account-wrap'),
+  clientSidebarAuthLabel: $('client-sidebar-auth-label'),
+  btnClientSidebarLogout: $('btn-client-sidebar-logout'),
   btnFullscreen: $('btn-fullscreen'),
   btnFsSources: $('btn-fs-sources'),
   fsSourceMenu: $('fs-source-menu'),
@@ -109,11 +120,41 @@ let signaling = null;
 let media = null;
 let peerId = null;
 let displayName = readQueryParam('nome') || localStorage.getItem(STORAGE_NAME) || '';
+let authUser = null;
+
+function setClientShellVisible(visible) {
+  const main = document.querySelector('.client-main');
+  if (main) main.hidden = !visible;
+}
+
+function applyAuthIdentityToClient(user) {
+  if (!user) return;
+  displayName = authDisplayName(user);
+  if (!displayName) return;
+  localStorage.setItem(STORAGE_NAME, displayName);
+  if (els.nomeInput) {
+    els.nomeInput.value = displayName;
+    els.nomeInput.readOnly = true;
+  }
+  const nameField = els.nomeInput?.closest('.field');
+  if (nameField) nameField.hidden = true;
+  if (els.onboardIntro) {
+    els.onboardIntro.textContent = `Conectado como ${displayName}. Selecione a tela quando o navegador solicitar.`;
+  }
+  const identifyStep = els.onboardStepsIdentify?.querySelector('li');
+  if (identifyStep) {
+    identifyStep.textContent = 'Sua identidade vem do login — selecione a tela no próximo passo.';
+  }
+}
 let agentHostname = readQueryParam('maquina') || localStorage.getItem(STORAGE_MACHINE) || '';
 let pendingTransmission = null;
 let pendingAudioSources = null;
 let pendingRoomSnapshot = null;
 let pendingMicrophoneFilterPrefs = null;
+let drawingSurface = null;
+let annotationToolbar = null;
+let clientWhiteboardActive = false;
+let txSync = null;
 let sessionStarted = false;
 let sessionReady = false;
 let viewerOnly = false;
@@ -241,7 +282,7 @@ function shouldShowClientLocalPreview(tx) {
   return isClientSelectedSource(normalized);
 }
 
-function applyClientLocalPreview(tx = txSync.lastActiveTransmission) {
+function applyClientLocalPreview(tx = txSync?.lastActiveTransmission) {
   if (!shouldShowClientLocalPreview(tx)) return;
 
   const stream = getClientLocalPreviewStream();
@@ -255,13 +296,36 @@ function applyClientLocalPreview(tx = txSync.lastActiveTransmission) {
     els.video.srcObject = stream;
   }
   els.video.play?.().catch(() => {});
-  liveAnnotation?.resize();
+  drawingSurface?.resize();
+}
+
+function isWhiteboardTransmission(tx) {
+  return tx?.sourceKind === 'whiteboard';
+}
+
+function getClientDrawingMode() {
+  return isWhiteboardTransmission(txSync?.lastActiveTransmission) ? 'persistent' : 'ephemeral';
+}
+
+function applyClientWhiteboardState(payload, tx = txSync?.lastActiveTransmission) {
+  if (!payload) return;
+  clientWhiteboardActive = !!payload.active;
+  if (payload.active || isWhiteboardTransmission(tx)) {
+    drawingSurface?.setPersistentElements(payload.elements || []);
+  }
+  annotationToolbar?.syncClearVisibility();
+}
+
+function handleClientWhiteboardElement(element) {
+  if (isWhiteboardTransmission(txSync?.lastActiveTransmission)) {
+    drawingSurface?.receiveElement(element);
+  }
 }
 
 function clientHasPreview() {
   if (!sessionReady) return false;
-  if (shouldShowClientLocalPreview(txSync.lastActiveTransmission)) return true;
-  const tx = txSync.lastActiveTransmission;
+  if (shouldShowClientLocalPreview(txSync?.lastActiveTransmission)) return true;
+  const tx = txSync?.lastActiveTransmission;
   if (tx && hasActiveVideo(tx) && !tx.paused) return true;
   const vt = els.video?.srcObject?.getVideoTracks?.()?.[0];
   return vt?.readyState === 'live';
@@ -272,7 +336,10 @@ function clientHasDrawSurface() {
 }
 
 function updateClientDrawUi() {
-  liveAnnotation?.updateButtonVisibility(clientHasDrawSurface());
+  annotationToolbar?.setVisible(clientHasDrawSurface());
+  annotationToolbar?.syncClearVisibility();
+  drawingSurface?.syncDrawUi();
+  drawingSurface?.resize();
 }
 
 function onClientTransmissionVideoUpdated() {
@@ -280,17 +347,35 @@ function onClientTransmissionVideoUpdated() {
   updateClientDrawUi();
 }
 
-const liveAnnotation = createLiveAnnotation({
+annotationToolbar = createAnnotationToolbar({
+  rootEl: els.annotationToolbar,
+  toggleEl: els.annotationToolbarToggle,
+  panelEl: els.annotationToolbarPanel,
+  colorEl: els.annotationColor,
+  widthEl: els.annotationWidth,
+  clearEl: els.annotationClear,
+  getCanClear: () => false,
+  onToolChange: () => {
+    drawingSurface?.syncDrawUi();
+  }
+});
+
+drawingSurface = createDrawingSurface({
   previewArea: els.previewArea,
   videoEl: els.video,
   canvasEl: els.drawCanvas,
-  btnDraw: els.btnDraw,
-  btnRect: els.btnRect,
-  drawStack: els.drawStack,
   getPeerId: () => peerId,
   getPeerName: () => displayName || getNome(),
+  getTool: () => annotationToolbar?.getTool(),
+  getColor: () => annotationToolbar?.getColor(),
+  getWidth: () => annotationToolbar?.getWidth(),
+  getMode: () => getClientDrawingMode(),
   onSegment: (payload) => {
     if (signaling?.connected) signaling.send('anotacaoSegmento', payload);
+  },
+  onElementCommit: (element) => {
+    if (signaling?.connected) signaling.send('quadroBrancoElemento', element);
+    handleClientWhiteboardElement(element);
   }
 });
 
@@ -307,7 +392,7 @@ function updateClientStates(mode, _tx, opts = {}) {
   if (els.stateFinalized) els.stateFinalized.hidden = hideAllOverlays || mode !== 'finalized';
 }
 
-const txSync = new TransmissionSync({
+txSync = new TransmissionSync({
   getMedia: () => media,
   getVideoEl: () => els.video,
   getPeerId: () => peerId,
@@ -345,13 +430,24 @@ function updateClientStreamBadge(tx) {
     updateStreamSourceBadge(els.streamSourceBadge, displayName || getNome(), true);
     return;
   }
-  updateStreamSourceBadge(els.streamSourceBadge, normalized.peerName, true);
+  const badgeName =
+    normalized.sourceKind === 'whiteboard' ? 'Quadro branco' : normalized.peerName;
+  updateStreamSourceBadge(els.streamSourceBadge, badgeName, true);
 }
 
 function applyLtOverlayForTransmission(tx) {
   updateClientStreamBadge(tx);
-  hideLtOverlay();
+  if (tx?.sourceKind !== 'whiteboard') {
+    hideLtOverlay();
+  } else {
+    hideLtOverlay();
+  }
   applyClientLocalPreview(tx);
+  if (isWhiteboardTransmission(tx)) {
+    drawingSurface?.syncDrawUi();
+  } else {
+    drawingSurface?.clearPersistentOverlay();
+  }
   updateClientDrawUi();
 }
 
@@ -471,7 +567,23 @@ function getSettingsPrefsFromModal() {
   };
 }
 
+function updateSettingsAccountUi() {
+  bindLogoutControl({
+    wrapEl: els.settingsAccountWrap,
+    labelEl: els.settingsAuthUserLabel,
+    buttonEl: els.btnSettingsLogout,
+    user: authUser
+  });
+  bindLogoutControl({
+    wrapEl: els.clientSidebarAccountWrap,
+    labelEl: els.clientSidebarAuthLabel,
+    buttonEl: els.btnClientSidebarLogout,
+    user: authUser
+  });
+}
+
 async function openSettingsModal() {
+  updateSettingsAccountUi();
   const prefs = loadCapturePrefs();
   applyCapturePrefsToUi(prefs);
   if (els.settingsNomeInput) els.settingsNomeInput.value = displayName || getNome();
@@ -959,7 +1071,7 @@ function showIdentifyStep() {
   if (els.onboardStepsIdentify) els.onboardStepsIdentify.hidden = false;
   if (els.onboardStepsAudio) els.onboardStepsAudio.hidden = true;
   if (els.btnSalvarNome) els.btnSalvarNome.textContent = 'Selecionar tela para compartilhar';
-  if (els.onboardIntro) {
+  if (els.onboardIntro && !authUser) {
     els.onboardIntro.textContent =
       'Informe o nome deste computador e selecione a tela quando o navegador solicitar.';
   }
@@ -1282,7 +1394,7 @@ async function resolveClientNameFromServer() {
   const cached = (localStorage.getItem(STORAGE_NAME) || displayName || '').trim();
   let serverNome = null;
   try {
-    const reg = await fetch('/api/registro-cliente').then((r) => r.json());
+    const reg = await fetch('/api/registro-cliente', { credentials: 'same-origin' }).then((r) => r.json());
     serverNome = reg?.nome ? String(reg.nome).trim() : null;
   } catch (_) {}
 
@@ -1294,6 +1406,7 @@ async function resolveClientNameFromServer() {
       try {
         await fetch('/api/registro-cliente', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nome: cached, computerName: agentHostname })
         });
@@ -1335,18 +1448,21 @@ async function initOnboarding() {
   resetClientPageState();
   await teardownClientSession({ keepDisplayStream: false });
 
+  setClientShellVisible(false);
+  hideOverlay();
+
   if (!window.isSecureContext && els.insecureWarning) {
     els.insecureWarning.hidden = false;
   }
 
-  try {
-    const info = await fetch('/api/info').then((r) => r.json());
-    if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
-      els.pinWrap.hidden = false;
-    }
-  } catch (_) {}
-
   if (hasExternalAccessToken) {
+    setClientShellVisible(true);
+    try {
+      const info = await fetch('/api/info').then((r) => r.json());
+      if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
+        els.pinWrap.hidden = false;
+      }
+    } catch (_) {}
     const nomeUrl = readQueryParam('nome');
     displayName = nomeUrl || displayName || '';
     if (displayName && els.nomeInput) {
@@ -1363,6 +1479,7 @@ async function initOnboarding() {
   }
 
   if (autoViewerEntry) {
+    setClientShellVisible(true);
     configureExternalViewerUi();
     viewerOnly = true;
     if (els.chkViewerOnly) els.chkViewerOnly.checked = true;
@@ -1386,24 +1503,29 @@ async function initOnboarding() {
     }
   }
 
-  if (displayName && els.nomeInput) {
-    els.nomeInput.value = displayName;
+  try {
+    authUser = await requireAuthSession({
+      onLoginRequired: () => setClientShellVisible(false),
+      onAuthenticated: () => setClientShellVisible(true)
+    });
+    applyAuthIdentityToClient(authUser);
+    updateSettingsAccountUi();
+  } catch (e) {
+    showErro(e.message || 'Falha na autenticação');
+    return;
   }
 
-  if (!hasExternalAccessToken && !autoViewerEntry) {
-    const resolved = await resolveClientNameFromServer();
-    if (resolved) {
-      displayName = resolved;
-      localStorage.setItem(STORAGE_NAME, resolved);
-      if (els.nomeInput) els.nomeInput.value = resolved;
-      showIdentifyStep();
-      setStatus('Nome identificado — clique abaixo para compartilhar a tela');
-      return;
+  setClientShellVisible(true);
+
+  try {
+    const info = await fetch('/api/info').then((r) => r.json());
+    if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
+      els.pinWrap.hidden = false;
     }
-  }
+  } catch (_) {}
 
   showIdentifyStep();
-  if (!displayName) els.nomeInput?.focus();
+  setStatus(`Olá, ${displayName} — selecione a tela para compartilhar`);
 }
 
 async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = false } = {}) {
@@ -1411,8 +1533,7 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
 
   const nome = getNome();
   if (!nome) {
-    showToast('Informe um nome para este computador', 'error');
-    els.nomeInput?.focus();
+    showToast('Faça login para continuar', 'error');
     return;
   }
   displayName = nome;
@@ -1671,6 +1792,10 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
 
   if (parsed.audioSources?.length) {
     lastAudioSources = parsed.audioSources;
+  }
+
+  if (snapshot.whiteboard) {
+    applyClientWhiteboardState(snapshot.whiteboard, parsed.transmission);
   }
 
   debugClientLog('H1', '[ROOM_STATE] snapshot recebido', {
@@ -2148,7 +2273,19 @@ async function handleServerMessage(msg) {
     return;
   }
   if (msg.type === 'anotacaoSegmento') {
-    liveAnnotation?.receive(msg.payload);
+    drawingSurface?.receive(msg.payload);
+    return;
+  }
+  if (msg.type === 'quadroBrancoEstado') {
+    applyClientWhiteboardState(msg.payload);
+    return;
+  }
+  if (msg.type === 'quadroBrancoElemento') {
+    handleClientWhiteboardElement(msg.payload);
+    return;
+  }
+  if (msg.type === 'quadroBrancoLimpar') {
+    drawingSurface?.clearPersistentOverlay();
     return;
   }
   if (msg.type === 'fontesAudio') {

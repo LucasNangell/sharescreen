@@ -34,8 +34,8 @@ Os arquivos em [src/shared/](file:///e:/Projetos/Trabalho/Screen%20Share/src/sha
 * **Monitoramento de Áudio:** [host-audio-monitor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/host-audio-monitor.js) e [audio-level-meter.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/audio-level-meter.js) — Medidores VU no painel do host. Sync incremental de canais (`syncFromSources`, `syncPeerSources`), `pinnedPeerIds` para preservar áudio do host no client, `recoverOutputIfSilent()` e `countLiveChannels()`, filas separadas de consumo em `media-client.js` (`_runVideoMediaOp` / `_runAudioMediaOp`). Host e client deduplicam sync por `audioSourcesSignature` (`lastAppliedAudioSig`), debounce de `fontesAudio` (~80ms) e `repairAllAudioIfNeeded` / `repairHostRemoteAudioIfNeeded` com watchdog 5s no client.
 * **Filtro Chroma Key (Lower Thirds):** [lt-chroma.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-chroma.js) — Algoritmo em canvas 2D que remove a cor verde (ou outra chroma configurada) do vídeo de Lower Thirds frame a frame.
 * **Modais e Layout de Overlays:** [lt-modal.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-modal.js) e [lt-overlay.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-overlay.js) — Exibição e ajuste de posicionamento de lower thirds.
-* **Anotações live (desenho efêmero):** [live-annotation.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/live-annotation.js) — Canvas sobre `#preview-area`, stack `#preview-draw-stack` com `#btn-rect-toggle` (retângulo) acima de `#btn-draw-toggle` (lápis), coordenadas normalizadas, fade 3s, sync via WebSocket `anotacaoSegmento` (`shape`: `stroke` | `rect`).
-* **Popout Studio (modo OBS):** [studio-state.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-state.js) — cenas nomeadas (até 4 fontes), layouts (`full`, `split-h`, `split-v`, `pip-br`, `pip-bl`), persistência em `sessionStorage`. [studio-compositor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-compositor.js) — compositor canvas multi-fonte para preview/transição. Integração em [app.js (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/src/host/app.js) (`openControlsPopout`, template `#studio-popout-shell` em [index.html (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/public/host/index.html)). [media-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/media-client.js): `consumePreviewVideo`, `publishSyntheticVideoStream` (cenas multi-fonte no ar via producer do host).
+* **Anotações e quadro branco:** [drawing-surface.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/drawing-surface.js) — canvas sobre `#preview-area` com toolbar colapsável `#annotation-toolbar` (lápis, reta, retângulo, elipse, seta, texto, cor, espessura). Modo efêmero (fade 3s) em vídeo normal via `anotacaoSegmento`; modo persistente no quadro branco via `quadroBrancoElemento`. [drawing-primitives.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/drawing-primitives.js) — renderização compartilhada. [annotation-toolbar.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/annotation-toolbar.js) — UI colapsável canto inferior esquerdo. [whiteboard-engine.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/whiteboard-engine.js) — canvas branco 1920×1080 + `captureStream` publicado pelo host (`#btn-quadro-branco`).
+* **Popout Studio (modo OBS):** [studio-state.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-state.js) — cenas nomeadas (até 4 fontes), layouts (`full`, `split-h`, `split-v`, `pip-br`, `pip-bl`), `crop`/`frame` normalizados por slot, persistência em `sessionStorage`. [studio-compositor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-compositor.js) — compositor canvas multi-fonte com recorte 9-param e posicionamento. [studio-transform-editor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-transform-editor.js) — overlay interativo de crop/transform no Preview (Modo Estúdio ON). Integração em [app.js (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/src/host/app.js) (`openControlsPopout`, template `#studio-popout-shell` em [index.html (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/public/host/index.html)). Compositor de Program (go-live) roda na janela principal do host para evitar throttling do RAF no popout. [media-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/media-client.js): `consumePreviewVideo`, `publishSyntheticVideoStream`, `repairHostVideoIfNeeded` (watchdog de vídeo do host).
 * **Gravação:** [recording-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-client.js) — Grava via `MediaRecorder` e envia chunks em tempo real para `/api/gravacao/stream/*` (sem acumular na RAM); fallback legado em memória se streaming indisponível. [recording-compositor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-compositor.js) compõe o vídeo gravado com badge em canvas, e [recording-audio-mixer.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/recording-audio-mixer.js) monta a trilha de áudio da gravação a partir das `consumer.track` WebRTC (paridade com o áudio ouvido pelos clients). O host pode definir opcionalmente um client como áudio padrão da gravação (`sharescreen_rec_default_audio_client` no localStorage) para gravar só essa fonte e evitar eco. Em `pagehide`, gravações ativas são finalizadas como `_incompleto.webm` no servidor.
 * **Ponte Meet (anti-eco ao vivo):** preset/botão no host envia `definirModoPonteMeet`; clients em `src/client/app.js` filtram fontes `system` via `excludeSourceTypes` em `audio-sources.js` enquanto `meetBridgeLiveMode` estiver ativo (evita loopback do Meet nos clients LAN).
 * **Controle de UI:** [ui-state.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/ui-state.js), [toast.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/toast.js), [source-cards.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/source-cards.js).
@@ -87,32 +87,37 @@ Passos:
 3. Executa um laço `requestAnimationFrame` que desenha cada frame do vídeo em um `<canvas>`.
 4. O algoritmo em [lt-chroma.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/lt-chroma.js) varre a imagem do canvas pixel a pixel e substitui a cor verde por transparência (alfa = 0).
 
-### Fluxo 4: Anotações live sobre a transmissão
+### Fluxo 4: Anotações e quadro branco
 Arquivos envolvidos:
-* [live-annotation.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/live-annotation.js)
+* [drawing-surface.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/drawing-surface.js)
+* [annotation-toolbar.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/annotation-toolbar.js)
+* [whiteboard-engine.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/whiteboard-engine.js)
 * [app.js (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/src/host/app.js)
 * [app.js (Client)](file:///e:/Projetos/Trabalho/Screen%20Share/src/client/app.js)
 * [signaling.js](file:///e:/Projetos/Trabalho/Screen%20Share/server/signaling.js)
 
 Passos:
-1. Participante ativa `#btn-draw-toggle`; canvas passa a capturar pointer events.
-2. Traços são desenhados localmente e enviados como `anotacaoSegmento` (pontos normalizados 0–1).
-3. Servidor faz rebroadcast para todos os peers (`broadcastToRoom`); cada um renderiza e aplica fade após 3s.
-4. Client que transmite: preview local quando é a fonte selecionada ou não há transmissão ativa na sala; caso contrário consome o vídeo remoto como antes.
+1. Participante expande `#annotation-toolbar`, escolhe ferramenta/cor e desenha no canvas overlay.
+2. Em transmissão de vídeo normal: traços via `anotacaoSegmento` (coordenadas 0–1), fade 3s em todos os peers.
+3. Host ativa **Quadro branco** (`#btn-quadro-branco`): `WhiteboardEngine` → `publishSyntheticVideoStream` → `selecionar(hostPeerId)`; `transmissaoAtiva.sourceKind = 'whiteboard'`.
+4. No quadro branco: elementos persistentes via `quadroBrancoElemento` (estado na sala, máx. 500); host renderiza no canvas transmitido; overlay nos clients para feedback imediato.
+5. Host/co-host pode limpar com `#annotation-clear` → `quadroBrancoLimpar`.
 
 ### Fluxo 5: Popout Studio Mode (Host)
 Arquivos envolvidos:
 * [app.js (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/src/host/app.js)
 * [studio-state.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-state.js)
 * [studio-compositor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-compositor.js)
+* [studio-transform-editor.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/studio-transform-editor.js)
 * [media-client.js](file:///e:/Projetos/Trabalho/Screen%20Share/src/shared/media-client.js)
 * [index.html (Host)](file:///e:/Projetos/Trabalho/Screen%20Share/public/host/index.html) — template `#studio-popout-shell`
 
 Passos:
-1. Host clica `#btn-popout-controls` → sidebar reparentada para janela popout (comportamento legado preservado com Modo Estúdio desligado).
-2. Com **Modo Estúdio** ativo: painéis Program (espelho de `#preview-video`) e Preview (cena preparada); lista de cenas em `sessionStorage`.
-3. Clique em participante na sidebar adiciona fonte à cena em edição (não vai ao ar até **Transição**).
-4. Cena com 1 fonte: `selecionarClient` via `selecionar()` existente. Cena multi-fonte: compositor canvas → `publishSyntheticVideoStream` + `selecionar(hostPeerId)`.
+1. Host clica `#btn-popout-controls` → popout com layout grid (previews/cenas à esquerda, controles full-height à direita). Modo Estúdio OFF preserva fluxo legado simplificado.
+2. Com **Modo Estúdio** ativo: painéis Program (espelho de `#preview-video`) e Preview (cena preparada); editor de crop/transform por slot (`#studio-transform-overlay`); lista de cenas em `sessionStorage`.
+3. Clique em participante adiciona fonte à cena em edição (não vai ao ar até **Transição**). Selecionar slot na lista permite arrastar/redimensionar frame ou recortar (botão Recorte / Alt).
+4. Cena com 1 fonte sem crop/transform: `selecionarClient` via `selecionar()`. Cena com crop, frame editado ou multi-fonte: compositor canvas na janela principal → `publishSyntheticVideoStream` + `selecionar(hostPeerId)`.
+5. Watchdog de vídeo do host (`repairHostVideoIfNeeded`, intervalo 5s) detecta track morta e alerta recompartilhar.
 
 ---
 

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import Database from 'better-sqlite3';
 import { logger } from './logger.js';
 
@@ -88,8 +89,34 @@ function applySchema(database) {
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (subject_kind, subject_name)
       );
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        display_name TEXT NOT NULL DEFAULT '',
+        role TEXT NOT NULL DEFAULT 'user',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS user_settings (
+        user_id TEXT NOT NULL,
+        namespace TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, namespace, key)
+      );
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        revoked_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
     `);
   migrateClientSchema(database);
+  migrateAuthSchema(database);
   database.exec(`CREATE INDEX IF NOT EXISTS idx_clients_computer ON clients(computer_name)`);
 }
 
@@ -132,6 +159,22 @@ function migrateClientSchema(database) {
     database.exec(`ALTER TABLE clients ADD COLUMN computer_name TEXT NOT NULL DEFAULT ''`);
     database.exec(`CREATE INDEX IF NOT EXISTS idx_clients_computer ON clients(computer_name)`);
   }
+}
+
+function migrateAuthSchema(database) {
+  const audioCols = database.prepare('PRAGMA table_info(audio_filter_presets)').all();
+  if (!audioCols.some((c) => c.name === 'user_id')) {
+    database.exec(`ALTER TABLE audio_filter_presets ADD COLUMN user_id TEXT`);
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_audio_filter_user ON audio_filter_presets(subject_kind, user_id)`
+    );
+  }
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)`);
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at)`);
+}
+
+function userScopedAudioName(userId) {
+  return `__uid__:${String(userId || '').trim()}`;
 }
 
 export function getLowerThirdsDir() {
@@ -398,14 +441,34 @@ function normalizeAudioFilterKind(kind) {
   return AUDIO_FILTER_KINDS.has(k) ? k : '';
 }
 
-export function getAudioFilterPreset(kind, name) {
+export function getAudioFilterPreset(kind, name, userId = null) {
   const subjectKind = normalizeAudioFilterKind(kind);
   const trimmed = String(name || '').trim();
-  if (!subjectKind || !trimmed) return null;
+  const uid = String(userId || '').trim();
+  if (!subjectKind) return null;
   try {
+    if (uid) {
+      const byUser = getDb()
+        .prepare(
+          `SELECT subject_kind, subject_name, prefs_json, updated_at, user_id
+         FROM audio_filter_presets
+         WHERE subject_kind = ? AND user_id = ?`
+        )
+        .get(subjectKind, uid);
+      if (byUser) {
+        return {
+          kind: byUser.subject_kind,
+          name: trimmed || byUser.subject_name,
+          userId: byUser.user_id,
+          prefs: JSON.parse(byUser.prefs_json),
+          updatedAt: byUser.updated_at
+        };
+      }
+    }
+    if (!trimmed) return null;
     const row = getDb()
       .prepare(
-        `SELECT subject_kind, subject_name, prefs_json, updated_at
+        `SELECT subject_kind, subject_name, prefs_json, updated_at, user_id
        FROM audio_filter_presets
        WHERE subject_kind = ? AND subject_name = ? COLLATE NOCASE`
       )
@@ -414,6 +477,7 @@ export function getAudioFilterPreset(kind, name) {
     return {
       kind: row.subject_kind,
       name: row.subject_name,
+      userId: row.user_id || null,
       prefs: JSON.parse(row.prefs_json),
       updatedAt: row.updated_at
     };
@@ -423,28 +487,32 @@ export function getAudioFilterPreset(kind, name) {
   }
 }
 
-export function saveAudioFilterPreset(kind, name, prefs) {
+export function saveAudioFilterPreset(kind, name, prefs, userId = null) {
   const subjectKind = normalizeAudioFilterKind(kind);
   const trimmed = String(name || '').trim();
-  if (!subjectKind || !trimmed) return { ok: false, erro: 'Tipo ou nome inválido' };
+  const uid = String(userId || '').trim();
+  if (!subjectKind) return { ok: false, erro: 'Tipo inválido' };
+  if (!uid && !trimmed) return { ok: false, erro: 'Tipo ou nome inválido' };
   if (!prefs || typeof prefs !== 'object') return { ok: false, erro: 'Prefs inválidos' };
 
   const now = Date.now();
   const prefsJson = JSON.stringify(prefs);
+  const subjectName = uid ? userScopedAudioName(uid) : trimmed;
   const writeResult = runDbWrite('saveAudioFilterPreset', () => {
     getDb()
       .prepare(
-        `INSERT INTO audio_filter_presets (subject_kind, subject_name, prefs_json, updated_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO audio_filter_presets (subject_kind, subject_name, prefs_json, updated_at, user_id)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(subject_kind, subject_name) DO UPDATE SET
            prefs_json = excluded.prefs_json,
-           updated_at = excluded.updated_at`
+           updated_at = excluded.updated_at,
+           user_id = excluded.user_id`
       )
-      .run(subjectKind, trimmed, prefsJson, now);
+      .run(subjectKind, subjectName, prefsJson, now, uid || null);
     return { ok: true };
   });
   if (writeResult?.readonly) return { ok: false, erro: writeResult.erro };
-  return { ok: true, preset: getAudioFilterPreset(subjectKind, trimmed) };
+  return { ok: true, preset: getAudioFilterPreset(subjectKind, trimmed, uid || null) };
 }
 
 function deleteAudioFilterPreset(kind, name) {
@@ -478,3 +546,218 @@ export function renameAudioFilterPreset(kind, oldName, newName) {
   logger.info('Preset de áudio renomeado', { kind: subjectKind, from: oldTrimmed, to: newTrimmed });
   return { ok: true };
 }
+
+// --- Auth users / sessions / settings ---
+
+function rowToUser(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    password_hash: row.password_hash,
+    display_name: row.display_name || row.username,
+    role: row.role || 'user',
+    is_active: row.is_active !== 0,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+export function countUsers() {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM users').get().n;
+}
+
+export function findUserByUsername(username) {
+  const trimmed = String(username || '').trim();
+  if (!trimmed) return null;
+  const row = getDb()
+    .prepare(
+      `SELECT id, username, password_hash, display_name, role, is_active, created_at, updated_at
+       FROM users WHERE username = ? COLLATE NOCASE`
+    )
+    .get(trimmed);
+  return rowToUser(row);
+}
+
+export function findUserById(userId) {
+  const id = String(userId || '').trim();
+  if (!id) return null;
+  const row = getDb()
+    .prepare(
+      `SELECT id, username, password_hash, display_name, role, is_active, created_at, updated_at
+       FROM users WHERE id = ?`
+    )
+    .get(id);
+  return rowToUser(row);
+}
+
+export function createUser({ username, passwordHash, role = 'user', displayName = '' }) {
+  const trimmed = String(username || '').trim();
+  if (!trimmed || trimmed.length > 64) return { ok: false, erro: 'Usuário inválido' };
+  if (!passwordHash) return { ok: false, erro: 'Senha obrigatória' };
+  if (findUserByUsername(trimmed)) return { ok: false, erro: 'Usuário já existe' };
+  const now = Date.now();
+  const id = randomUUID();
+
+  const writeResult = runDbWrite('createUser', () => {
+    getDb()
+      .prepare(
+        `INSERT INTO users (id, username, password_hash, display_name, role, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?)`
+      )
+      .run(
+        id,
+        trimmed,
+        passwordHash,
+        String(displayName || trimmed).trim(),
+        String(role || 'user').trim(),
+        now,
+        now
+      );
+    return { ok: true };
+  });
+  if (writeResult?.readonly) return { ok: false, erro: writeResult.erro };
+  return { ok: true, user: findUserById(id) };
+}
+
+export function updateUserPasswordHashByUsername(username, passwordHash) {
+  const trimmed = String(username || '').trim();
+  const hash = String(passwordHash || '').trim();
+  if (!trimmed || !hash) return { ok: false, erro: 'Usuário ou hash inválido' };
+  const now = Date.now();
+  const writeResult = runDbWrite('updateUserPasswordHashByUsername', () => {
+    const result = getDb()
+      .prepare(
+        `UPDATE users
+         SET password_hash = ?, updated_at = ?
+         WHERE username = ? COLLATE NOCASE`
+      )
+      .run(hash, now, trimmed);
+    return { ok: true, changes: result.changes };
+  });
+  if (writeResult?.readonly) return { ok: false, erro: writeResult.erro };
+  if (!writeResult?.changes) return { ok: false, erro: 'Usuário não encontrado' };
+  return { ok: true, user: findUserByUsername(trimmed) };
+}
+
+export function createSession(userId, ttlMs) {
+  const uid = String(userId || '').trim();
+  if (!uid) throw new Error('userId obrigatório');
+  const now = Date.now();
+  const id = randomUUID();
+  const expiresAt = now + Math.max(60_000, Number(ttlMs) || 7 * 24 * 60 * 60 * 1000);
+  getDb()
+    .prepare(
+      `INSERT INTO user_sessions (id, user_id, expires_at, revoked_at, created_at)
+       VALUES (?, ?, ?, NULL, ?)`
+    )
+    .run(id, uid, expiresAt, now);
+  return { id, userId: uid, expiresAt };
+}
+
+export function getSession(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  pruneExpiredSessions();
+  const row = getDb()
+    .prepare(
+      `SELECT id, user_id, expires_at, revoked_at, created_at
+       FROM user_sessions WHERE id = ?`
+    )
+    .get(id);
+  if (!row || row.revoked_at || row.expires_at <= Date.now()) return null;
+  return { id: row.id, userId: row.user_id, expiresAt: row.expires_at };
+}
+
+export function revokeSession(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return;
+  const now = Date.now();
+  runDbWrite('revokeSession', () => {
+    getDb()
+      .prepare('UPDATE user_sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL')
+      .run(now, id);
+    return { ok: true };
+  });
+}
+
+export function pruneExpiredSessions() {
+  const now = Date.now();
+  try {
+    getDb()
+      .prepare('DELETE FROM user_sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL')
+      .run(now);
+  } catch (_) {}
+}
+
+export function getUserSetting(userId, namespace, key) {
+  const uid = String(userId || '').trim();
+  const ns = String(namespace || '').trim();
+  const k = String(key || '').trim();
+  if (!uid || !ns || !k) return null;
+  const row = getDb()
+    .prepare(
+      `SELECT value_json, updated_at FROM user_settings
+       WHERE user_id = ? AND namespace = ? AND key = ?`
+    )
+    .get(uid, ns, k);
+  if (!row) return null;
+  try {
+    return { value: JSON.parse(row.value_json), updatedAt: row.updated_at };
+  } catch {
+    return null;
+  }
+}
+
+export function setUserSetting(userId, namespace, key, value) {
+  const uid = String(userId || '').trim();
+  const ns = String(namespace || '').trim();
+  const k = String(key || '').trim();
+  if (!uid || !ns || !k) return { ok: false, erro: 'Parâmetros inválidos' };
+  const now = Date.now();
+  const writeResult = runDbWrite('setUserSetting', () => {
+    getDb()
+      .prepare(
+        `INSERT INTO user_settings (user_id, namespace, key, value_json, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, namespace, key) DO UPDATE SET
+           value_json = excluded.value_json,
+           updated_at = excluded.updated_at`
+      )
+      .run(uid, ns, k, JSON.stringify(value), now);
+    return { ok: true };
+  });
+  if (writeResult?.readonly) return { ok: false, erro: writeResult.erro };
+  return { ok: true, setting: getUserSetting(uid, ns, k) };
+}
+
+export function listUserSettings(userId, namespace = '') {
+  const uid = String(userId || '').trim();
+  if (!uid) return [];
+  const ns = String(namespace || '').trim();
+  const rows = ns
+    ? getDb()
+        .prepare(
+          `SELECT namespace, key, value_json, updated_at FROM user_settings
+           WHERE user_id = ? AND namespace = ?`
+        )
+        .all(uid, ns)
+    : getDb()
+        .prepare(
+          `SELECT namespace, key, value_json, updated_at FROM user_settings WHERE user_id = ?`
+        )
+        .all(uid);
+  return rows.map((row) => {
+    let value = null;
+    try {
+      value = JSON.parse(row.value_json);
+    } catch (_) {}
+    return {
+      namespace: row.namespace,
+      key: row.key,
+      value,
+      updatedAt: row.updated_at
+    };
+  });
+}
+

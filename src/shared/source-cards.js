@@ -17,7 +17,17 @@ function isConnectedPeer(c) {
   return !!c?.id && c?.status !== 'desconectado';
 }
 
-export function getSourceCardState(c) {
+export function getSourceCardState(c, options = {}) {
+  if (options.forStudioSlot) {
+    const peerId = String(c?.id || '');
+    const inScene = options.sceneSlotPeerIds?.has(peerId);
+    return {
+      kind: inScene ? 'sharing' : 'available',
+      description: inScene ? 'Fonte na cena em edição' : 'Clique para adicionar à cena',
+      statusText: inScene ? 'Na cena' : 'Adicionar à cena',
+      blocked: false
+    };
+  }
   if (!hasVideoAvailable(c)) {
     if (isConnectedPeer(c)) {
       return {
@@ -54,24 +64,24 @@ export function formatSourceDisplayName(c) {
   return c.displayName || c.id || '';
 }
 
-function appendRoleBadge(nameWrap, c) {
+function appendRoleBadge(nameWrap, c, doc = document) {
   if (c.isCoHost) {
-    const badge = document.createElement('span');
+    const badge = doc.createElement('span');
     badge.className = 'source-role-badge source-role-badge--cohost';
     badge.textContent = 'co-host';
     nameWrap.append(badge);
     return;
   }
   if (c.ehHost) {
-    const badge = document.createElement('span');
+    const badge = doc.createElement('span');
     badge.className = 'source-role-badge source-role-badge--host';
     badge.textContent = 'host';
     nameWrap.append(badge);
   }
 }
 
-export function createSourceStatusBar(cardState, onActivate) {
-  const bar = document.createElement('button');
+export function createSourceStatusBar(cardState, onActivate, doc = document) {
+  const bar = doc.createElement('button');
   bar.type = 'button';
   bar.className = `source-status-bar source-status-bar--${cardState.kind}`;
   bar.textContent = cardState.statusText;
@@ -91,8 +101,9 @@ export function createSourceStatusBar(cardState, onActivate) {
  * @param {{ decorateBody?: (body: HTMLElement, c: object) => void, decorateRow?: (row: HTMLElement, c: object) => void }} [options]
  */
 export function buildDisplaySourceCard(c, onSelect, options = {}) {
-  const cardState = getSourceCardState(c);
-  const li = document.createElement('li');
+  const doc = options.ownerDocument || document;
+  const cardState = getSourceCardState(c, options);
+  const li = doc.createElement('li');
   li.className = 'card card-selectable source-card';
   if (cardState.kind === 'sharing') {
     if (!options.noSharingHighlight) {
@@ -104,26 +115,26 @@ export function buildDisplaySourceCard(c, onSelect, options = {}) {
   }
   if (cardState.kind === 'available') li.classList.add('available');
 
-  const body = document.createElement('div');
+  const body = doc.createElement('div');
   body.className = 'source-card-body';
   options.decorateBody?.(body, c);
 
-  const nameWrap = document.createElement('div');
+  const nameWrap = doc.createElement('div');
   nameWrap.className = 'source-name-wrap';
-  const name = document.createElement('div');
+  const name = doc.createElement('div');
   name.className = 'source-name';
   name.textContent = formatSourceDisplayName(c);
   nameWrap.append(name);
-  appendRoleBadge(nameWrap, c);
+  appendRoleBadge(nameWrap, c, doc);
   body.append(nameWrap);
 
-  const row = document.createElement('div');
+  const row = doc.createElement('div');
   row.className = 'source-card-row';
   row.append(body);
   options.decorateRow?.(row, c);
 
   const activate = () => onSelect(c.id);
-  const statusBar = createSourceStatusBar(cardState, activate);
+  const statusBar = createSourceStatusBar(cardState, activate, doc);
 
   li.append(row, statusBar);
   if (!cardState.blocked) {

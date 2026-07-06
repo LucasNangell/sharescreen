@@ -277,8 +277,46 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-03T21-04-55-10tg1c";
+var BUILD_ID="2026-07-06T18-56-20-tq6x30";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -292,7 +330,7 @@ try{
     sessionStorage.clear();
     document.cookie.split(';').forEach(function(c){
       var n=(c.split('=')[0]||'').trim();
-      if(!n)return;
+      if(!n||n==='ss_session')return;
       document.cookie=n+'=; Max-Age=0; path=/';
       document.cookie=n+'=; Max-Age=0; path=/; domain='+location.hostname;
     });
@@ -326,13 +364,31 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-03T21-04-55-10tg1c" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-03T21-04-55-10tg1c" />
-  <link rel="stylesheet" href="style.css?v=2026-07-03T21-04-55-10tg1c" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-03T21-04-55-10tg1c" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-06T18-56-20-tq6x30" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-07-06T18-56-20-tq6x30" />
+  <link rel="stylesheet" href="style.css?v=2026-07-06T18-56-20-tq6x30" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-06T18-56-20-tq6x30" />
 </head>
 <body class="app-client">
-  <div id="overlay" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
+  <div id="login-modal" class="modal-backdrop" hidden>
+    <div class="modal-panel" role="dialog" aria-labelledby="login-title">
+      <h1 id="login-title">Entrar no ShareScreen</h1>
+      <p>Use seu usuário e senha. Qualquer usuário cadastrado pode usar o painel host ou o client.</p>
+      <p class="hint-text">Painel host: <a href="/host/">/host</a> · Client: <a href="/client/">/client</a></p>
+      <div id="login-error" class="hint-text" style="color:var(--color-danger,#c62828)" hidden></div>
+      <div class="field">
+        <label for="login-username">Usuário</label>
+        <input id="login-username" type="text" maxlength="64" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="login-password">Senha</label>
+        <input id="login-password" type="password" maxlength="128" autocomplete="current-password" />
+      </div>
+      <button type="button" id="btn-login-submit" class="btn btn-primary" style="width:100%;margin-top:1rem">Entrar</button>
+    </div>
+  </div>
+
+  <div id="overlay" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="modal-panel">
       <h1 id="onboard-title">Bem-vindo ao ShareScreen</h1>
       <p id="onboard-intro">Informe o nome deste computador e selecione a tela quando o navegador solicitar.</p>
@@ -456,20 +512,24 @@ try{
         <canvas id="lt-overlay-canvas"></canvas>
       </div>
       <canvas id="live-annotation-canvas" class="live-annotation-canvas" aria-hidden="true"></canvas>
-      <div id="preview-draw-stack" class="preview-draw-stack" hidden>
-        <button type="button" id="btn-rect-toggle" class="preview-draw-toggle"
-          aria-label="Desenhar retangulo" aria-pressed="false" title="Desenhar retangulo">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <rect x="4" y="6" width="16" height="12" rx="1"/>
-          </svg>
-        </button>
-        <button type="button" id="btn-draw-toggle" class="preview-draw-toggle"
-          aria-label="Desenho livre" aria-pressed="false" title="Desenho livre">
+      <div id="annotation-toolbar" class="annotation-toolbar is-collapsed" hidden>
+        <button type="button" id="annotation-toolbar-toggle" class="annotation-toolbar-toggle"
+          aria-label="Ferramentas de desenho" aria-expanded="false" title="Ferramentas de desenho">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 20h9"/>
             <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
           </svg>
         </button>
+        <div id="annotation-toolbar-panel" class="annotation-toolbar-panel" hidden></div>
+        <div class="annotation-toolbar-options">
+          <input type="color" id="annotation-color" value="#e53935" aria-label="Cor do desenho" title="Cor" />
+          <input type="range" id="annotation-width" min="1" max="12" value="3" aria-label="Espessura" title="Espessura" />
+          <button type="button" id="annotation-clear" class="annotation-clear-btn" hidden title="Limpar quadro" aria-label="Limpar quadro">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -490,8 +550,14 @@ try{
           <h2 class="section-title">Transmissão</h2>
           <div class="transmission-layout">
             <div class="transmission-left">
-              <div id="transmission-card-container" class="transmission-card-container">
-                <div class="transmission-card-empty">Nenhuma transmissão ativa</div>
+              <div class="transmission-card-row">
+                <div id="transmission-card-container" class="transmission-card-container">
+                  <div class="transmission-card-empty">Nenhuma transmissão ativa</div>
+                </div>
+
+                <div class="transmission-right-vu" id="controles-audio" hidden>
+                  <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Volume" class="vertical-slider" title="Volume da transmissão" />
+                </div>
               </div>
 
               <div class="transmission-controls-row">
@@ -522,10 +588,6 @@ try{
                   </svg>
                 </button>
               </div>
-            </div>
-
-            <div class="transmission-right-vu" id="controles-audio" hidden>
-              <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Volume" class="vertical-slider" title="Volume da transmissão" />
             </div>
           </div>
 
@@ -627,6 +689,11 @@ try{
                 </div>
               </div>
             </details>
+
+            <div id="client-sidebar-account-wrap" class="settings-account" hidden>
+              <p id="client-sidebar-auth-label" class="settings-account-label"></p>
+              <button type="button" id="btn-client-sidebar-logout" class="btn btn-ghost btn-sm">Sair da conta</button>
+            </div>
           </div>
         </details>
       </div>
@@ -655,6 +722,10 @@ try{
         <label for="settings-mic-select">Microfone</label>
         <select id="settings-mic-select"></select>
         <button type="button" id="settings-btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar lista</button>
+      </div>
+      <div id="settings-account-wrap" class="settings-account" hidden>
+        <p id="settings-auth-user-label" class="settings-account-label"></p>
+        <button type="button" id="btn-settings-logout" class="btn btn-ghost btn-sm">Sair da conta</button>
       </div>
       <div class="onboard-actions">
         <button type="button" id="btn-settings-save" class="btn btn-primary">Salvar</button>
@@ -736,6 +807,6 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-03T21-04-55-10tg1c"></script>
+  <script src="app.bundle.js?v=2026-07-06T18-56-20-tq6x30"></script>
 </body>
 </html>

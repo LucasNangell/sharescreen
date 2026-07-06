@@ -2,25 +2,134 @@
  * Normaliza payload de transmissaoAtiva (compatível com versão só vídeo).
  */
 export function normalizeTransmission(payload = {}) {
-  const producerIds = payload.producerIds || {
-    video: payload.producerId ?? null,
+  const p = payload ?? {};
+  const producerIds = p.producerIds || {
+    video: p.producerId ?? null,
     audio: null
   };
   return {
-    selectedPeerId: payload.selectedPeerId ?? null,
+    selectedPeerId: p.selectedPeerId ?? null,
     producerId: producerIds.video,
     producerIds,
-    peerName: payload.peerName ?? null,
-    paused: !!payload.paused,
-    lowerThird: payload.lowerThird ?? null,
-    interrompidaPor: payload.interrompidaPor ?? null,
-    finalizadaPor: payload.finalizadaPor ?? null
+    peerName: p.peerName ?? null,
+    paused: !!p.paused,
+    lowerThird: p.lowerThird ?? null,
+    interrompidaPor: p.interrompidaPor ?? null,
+    finalizadaPor: p.finalizadaPor ?? null,
+    sourceKind: p.sourceKind ?? null
   };
 }
 
 export function hasActiveVideo(payload) {
+  if (payload == null) return false;
   const { producerIds } = normalizeTransmission(payload);
   return !!producerIds.video;
+}
+
+function roomClientEntryScore(c) {
+  let score = 0;
+  if (c?.displayName) score += 2;
+  if (c?.mediaReady?.video) score += 4;
+  if (c?.producerIds?.video || c?.producerId) score += 4;
+  if (c?.hasVideo || c?.isProducing) score += 2;
+  if (c?.selectable) score += 1;
+  return score;
+}
+
+/** Mescla duas entradas do mesmo peer, preferindo a mais completa. */
+export function mergeRoomClientEntry(a, b) {
+  if (!a) return b ? { ...b } : null;
+  if (!b) return { ...a };
+  const primary = roomClientEntryScore(a) >= roomClientEntryScore(b) ? a : b;
+  const secondary = primary === a ? b : a;
+  return {
+    ...secondary,
+    ...primary,
+    producerIds: { ...(secondary.producerIds || {}), ...(primary.producerIds || {}) },
+    mediaReady: { ...(secondary.mediaReady || {}), ...(primary.mediaReady || {}) },
+    permissions: { ...(secondary.permissions || {}), ...(primary.permissions || {}) }
+  };
+}
+
+/** Une listas de participantes por id sem duplicar entradas. */
+export function mergeRoomClients(existing = [], incoming = []) {
+  const byId = new Map();
+  for (const c of existing) {
+    if (c?.id) byId.set(String(c.id), { ...c });
+  }
+  for (const c of incoming) {
+    if (!c?.id) continue;
+    const key = String(c.id);
+    const prev = byId.get(key);
+    byId.set(key, prev ? mergeRoomClientEntry(prev, c) : { ...c });
+  }
+  return [...byId.values()];
+}
+
+/** Monta lista de participantes/fontes a partir de clients, peers ou videoProducers. */
+export function resolveRoomClients(snapshot = {}, parsed = null) {
+  const p = parsed || parseRoomSnapshot(snapshot);
+  const byId = new Map();
+
+  const addClient = (c) => {
+    if (!c?.id) return;
+    const key = String(c.id);
+    const existing = byId.get(key);
+    byId.set(key, existing ? mergeRoomClientEntry(existing, c) : { ...c });
+  };
+
+  for (const c of snapshot.clients || []) addClient(c);
+  for (const c of snapshot.peers || []) addClient(c);
+  if (!byId.size) {
+    for (const c of p.peers || []) addClient(c);
+  }
+
+  for (const vp of snapshot.videoProducers || []) {
+    const id = vp.peerId || vp.id;
+    if (!id) continue;
+    const key = String(id);
+    const existing = byId.get(key);
+    if (existing) {
+      if (!existing.producerIds?.video && vp.producerId) {
+        addClient({
+          ...existing,
+          producerIds: { ...(existing.producerIds || {}), video: vp.producerId },
+          producerId: existing.producerId || vp.producerId,
+          hasVideo: !!(existing.hasVideo || vp.producerId),
+          isProducing: !!(existing.isProducing || vp.producerId)
+        });
+      }
+    } else {
+      addClient({
+        id,
+        displayName: vp.name || 'Fonte',
+        producerIds: { video: vp.producerId },
+        producerId: vp.producerId,
+        hasVideo: !!vp.producerId,
+        isProducing: !!vp.producerId,
+        status: 'transmitindo'
+      });
+    }
+  }
+
+  const tx = p.transmission || normalizeTransmission(snapshot.transmission || {});
+  if (hasActiveVideo(tx) && tx.selectedPeerId) {
+    const key = String(tx.selectedPeerId);
+    if (!byId.has(key)) {
+      addClient({
+        id: tx.selectedPeerId,
+        displayName: tx.peerName || 'Fonte',
+        producerIds: tx.producerIds,
+        producerId: tx.producerId,
+        hasVideo: true,
+        isProducing: true,
+        selecionado: true,
+        status: 'transmitindo'
+      });
+    }
+  }
+
+  return [...byId.values()];
 }
 
 /** Extrai transmissão e fontes de áudio de roomState, estadoSala ou payload legado. */
@@ -116,7 +225,7 @@ export function enrichRoomSourcesState(estado = {}, transmission) {
   const selectedId = tx.selectedPeerId;
   const videoId = tx.producerIds?.video;
 
-  const clients = (estado.clients || []).map((c) => {
+  let clients = (estado.clients || []).map((c) => {
     if (selectedId && String(c.id) === String(selectedId)) {
       return mergeSourceWithTransmission(c, tx, { isSelected: true });
     }
@@ -141,6 +250,9 @@ export function enrichRoomSourcesState(estado = {}, transmission) {
           selecionado: true,
           pausado: tx.paused
         };
+    if (!match) {
+      clients = [...clients, selecionado];
+    }
   } else if (selecionado) {
     selecionado = mergeSourceWithTransmission(selecionado, tx, { isSelected: true });
   }

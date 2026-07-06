@@ -5,6 +5,7 @@ import { logger } from './logger.js';
 import config, { getVideoQualityForClients } from '../config/default.js';
 import { dispatchOpenClient, listAgentClients } from './agent-bridge.js';
 import { validateJoinAuth, getSessionHostToken } from './auth-dev.js';
+import { validateWsSession } from './auth-session.js';
 import { debugLog } from './debug-log.js';
 import { registerClientByName, saveAudioFilterPreset, renameAudioFilterPreset } from './client-db.js';
 import { getClientIpFromWs } from './client-ip.js';
@@ -13,6 +14,21 @@ import { debugSessionLog } from './debug-session-log.js';
 function transmissionHasActiveVideo(payload = {}) {
   const producerIds = payload.producerIds || {};
   return !!(producerIds.video || payload.producerId);
+}
+
+function assertJoinSession(ws, payload = {}) {
+  const { viewerToken, hostToken } = payload;
+  if (viewerToken) return null;
+  const configuredHost = (config.hostToken || '').trim();
+  const sessionHost = (getSessionHostToken() || '').trim();
+  if (hostToken && (hostToken === configuredHost || hostToken === sessionHost)) {
+    return null;
+  }
+  const user = validateWsSession(ws._clientReq);
+  if (!user) {
+    throw new Error('Faça login para entrar na sala');
+  }
+  return user;
 }
 
 function parseMessage(raw) {
@@ -24,19 +40,34 @@ function parseMessage(raw) {
 }
 
 const annotationRateByPeer = new Map();
+const whiteboardRateByPeer = new Map();
 const ANNOTATION_MAX_MSG_PER_SEC = 20;
+const WHITEBOARD_MAX_MSG_PER_SEC = 30;
 const ANNOTATION_MAX_POINTS = 30;
+const VALID_DRAW_SHAPES = ['stroke', 'line', 'rect', 'ellipse', 'arrow', 'text'];
 
-function annotationRateAllowed(peerId) {
+function rateAllowed(map, peerId, maxPerSec) {
   const now = Date.now();
-  let bucket = annotationRateByPeer.get(peerId);
+  let bucket = map.get(peerId);
   if (!bucket || now - bucket.windowStart >= 1000) {
     bucket = { windowStart: now, count: 0 };
-    annotationRateByPeer.set(peerId, bucket);
+    map.set(peerId, bucket);
   }
-  if (bucket.count >= ANNOTATION_MAX_MSG_PER_SEC) return false;
+  if (bucket.count >= maxPerSec) return false;
   bucket.count += 1;
   return true;
+}
+
+function annotationRateAllowed(peerId) {
+  return rateAllowed(annotationRateByPeer, peerId, ANNOTATION_MAX_MSG_PER_SEC);
+}
+
+function whiteboardRateAllowed(peerId) {
+  return rateAllowed(whiteboardRateByPeer, peerId, WHITEBOARD_MAX_MSG_PER_SEC);
+}
+
+function normalizeDrawShape(shape) {
+  return VALID_DRAW_SHAPES.includes(shape) ? shape : 'stroke';
 }
 
 function validateAnnotationSegment(payload, senderPeerId) {
@@ -51,6 +82,11 @@ function validateAnnotationSegment(payload, senderPeerId) {
     if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return null;
     normalized.push({ x: p.x, y: p.y });
   }
+  const shape = normalizeDrawShape(payload.shape);
+  const text =
+    shape === 'text' && typeof payload.text === 'string'
+      ? payload.text.slice(0, 500)
+      : undefined;
   return {
     strokeId: strokeId.trim(),
     peerId: String(peerId),
@@ -58,8 +94,47 @@ function validateAnnotationSegment(payload, senderPeerId) {
     points: normalized,
     color: typeof color === 'string' ? color.slice(0, 32) : '#e53935',
     width: typeof width === 'number' && width > 0 && width <= 20 ? width : 3,
-    shape: payload.shape === 'rect' ? 'rect' : 'stroke',
+    shape,
+    text,
+    fontSize:
+      typeof payload.fontSize === 'number' && payload.fontSize > 0 && payload.fontSize <= 1
+        ? payload.fontSize
+        : undefined,
     final: !!final
+  };
+}
+
+function validateWhiteboardElement(payload, senderPeerId) {
+  if (!payload || typeof payload !== 'object') return null;
+  const { id, peerId, points } = payload;
+  if (typeof id !== 'string' || !id.trim()) return null;
+  if (String(peerId) !== String(senderPeerId)) return null;
+  if (!Array.isArray(points) || points.length === 0 || points.length > ANNOTATION_MAX_POINTS) return null;
+  const normalized = [];
+  for (const p of points) {
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+    if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return null;
+    normalized.push({ x: p.x, y: p.y });
+  }
+  const type = normalizeDrawShape(payload.type || payload.shape);
+  const text =
+    type === 'text' && typeof payload.text === 'string'
+      ? payload.text.slice(0, 500)
+      : undefined;
+  if (type === 'text' && !text) return null;
+  return {
+    id: id.trim(),
+    type,
+    peerId: String(peerId),
+    peerName: typeof payload.peerName === 'string' ? payload.peerName.slice(0, 120) : '',
+    points: normalized,
+    color: typeof payload.color === 'string' ? payload.color.slice(0, 32) : '#e53935',
+    width: typeof payload.width === 'number' && payload.width > 0 && payload.width <= 20 ? payload.width : 3,
+    text,
+    fontSize:
+      typeof payload.fontSize === 'number' && payload.fontSize > 0 && payload.fontSize <= 1
+        ? payload.fontSize
+        : undefined
   };
 }
 
@@ -140,6 +215,7 @@ function sendPeerJoinSnapshot(enviar, peer = null) {
   if (transmissionHasActiveVideo(transmission)) {
     enviar({ type: 'transmissaoAtiva', payload: transmission });
   }
+  room.sendWhiteboardStateToPeer(peer);
 }
 
 async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
@@ -155,6 +231,7 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       if (!nome || typeof nome !== 'string' || nome.length > 64) {
         throw new Error('Nome inválido (máx. 64 caracteres)');
       }
+      const sessionUser = assertJoinSession(ws, { viewerToken, hostToken });
 
       const existingPeer = getPeer();
       if (existingPeer && existingPeer.ws === ws) {
@@ -163,6 +240,11 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         }
         room.cleanupPeerMedia(existingPeer);
         existingPeer.displayName = nome.trim() || existingPeer.displayName;
+        if (sessionUser) {
+          existingPeer.userId = sessionUser.id;
+          existingPeer.username = sessionUser.username;
+          existingPeer.userRole = sessionUser.role;
+        }
         if (maquina && papel === 'client') {
           existingPeer.agentHostname = String(maquina).trim().toUpperCase();
         }
@@ -196,7 +278,10 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         viewerToken || msg.payload?.publishIntent === 'viewer' ? 'viewer' : 'publisher';
       const newPeer = room.addPeer(ws, papel, nome, maquina, {
         isExternal: !!viewerToken,
-        publishIntent
+        publishIntent,
+        userId: sessionUser?.id || null,
+        username: sessionUser?.username || null,
+        userRole: sessionUser?.role || null
       });
       setPeer(newPeer);
       if (papel === 'client') {
@@ -401,8 +486,8 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         break;
       }
       target.send({ type: 'filtroAudioAtualizado', payload: { prefs: prefs || {} } });
-      if (target.displayName && prefs) {
-        saveAudioFilterPreset('client', target.displayName, prefs);
+      if (prefs) {
+        saveAudioFilterPreset('client', target.displayName, prefs, target.userId || null);
       }
       enviar({ type: 'filtroAudioResultado', payload: { ok: true, peerId } });
       break;
@@ -520,6 +605,38 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         { type: 'anotacaoSegmento', payload: segment },
         peer.id
       );
+      break;
+    }
+
+    case 'quadroBrancoIniciar': {
+      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode iniciar o quadro branco');
+      const result = room.startWhiteboard(peer.id);
+      enviar({ type: 'quadroBrancoIniciado', payload: result });
+      break;
+    }
+
+    case 'quadroBrancoParar': {
+      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode parar o quadro branco');
+      const result = room.stopWhiteboard();
+      enviar({ type: 'quadroBrancoParado', payload: result });
+      break;
+    }
+
+    case 'quadroBrancoElemento': {
+      if (!peer) throw new Error('Não autenticado');
+      if (!room.whiteboardActive) break;
+      if (!whiteboardRateAllowed(peer.id)) break;
+      const element = validateWhiteboardElement(msg.payload, peer.id);
+      if (!element) break;
+      const result = room.addWhiteboardElement(element);
+      if (!result.ok) enviar({ type: 'erro', payload: { message: result.erro } });
+      break;
+    }
+
+    case 'quadroBrancoLimpar': {
+      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode limpar o quadro branco');
+      const result = room.clearWhiteboard();
+      enviar({ type: 'quadroBrancoLimpo', payload: result });
       break;
     }
 

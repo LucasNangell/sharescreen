@@ -18,7 +18,7 @@ try{
     sessionStorage.clear();
     document.cookie.split(';').forEach(function(c){
       var n=(c.split('=')[0]||'').trim();
-      if(!n)return;
+      if(!n||n==='ss_session')return;
       document.cookie=n+'=; Max-Age=0; path=/';
       document.cookie=n+'=; Max-Age=0; path=/; domain='+location.hostname;
     });

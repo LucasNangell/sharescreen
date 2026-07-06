@@ -1,0 +1,20 @@
+---
+description: Regras para frontend host/client e modulos compartilhados
+globs:
+  - "src/host/**/*.js"
+  - "src/client/**/*.js"
+  - "src/shared/**/*.js"
+  - "public/host/**/*"
+  - "public/client/**/*"
+alwaysApply: false
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# Area especifica: frontend
+
+- Pontos de entrada do bundle sao `src/host/app.js` e `src/client/app.js`; manter compatibilidade com build esbuild definido em `scripts/build-client.js`.
+- Modulos reutilizaveis entre host/client ficam em `src/shared`; prefira adicionar logica comum ali, evitando duplicacao entre apps.
+- Artefatos `public/host/*` e `public/client/*` sao saida do build; quando houver alteracao de fonte, regenerar via `npm run build` em vez de editar bundle manualmente.
+- Cache guard e `build-id` sao injetados no build (`scripts/build-client.js`); mudancas de versionamento de assets devem respeitar esse fluxo.
+- Rotas de entrega no servidor esperam HTML em `/host` e `/client` (`server/index.js`), portanto manter estrutura de arquivos publica consistente.

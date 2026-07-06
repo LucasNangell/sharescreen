@@ -1,0 +1,19 @@
+---
+description: Persistencia local SQLite e dados auxiliares do ShareScreen
+globs:
+  - "server/client-db.js"
+  - "server/auth-session.js"
+  - "server/password.js"
+  - "data/**/*"
+  - "users.json"
+alwaysApply: false
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# Area especifica: persistencia
+
+- Persistencia local utiliza `better-sqlite3` (`package.json`) e modulos de acesso em `server/client-db.js`; manter operacoes sincronas e validacoes de entrada nesses limites.
+- Fluxos de autenticacao/sessao tocam armazenamento de usuarios e sessoes (`server/auth-session.js`, `server/password.js`); qualquer mudanca deve preservar semantica de login/logout e cookies.
+- Arquivos `data/*.db*` e `users.json` contem estado do ambiente; evitar alteracoes manuais em dados durante ajustes de codigo sem necessidade explicita.
+- Ao introduzir novos campos persistidos, manter compatibilidade com seed inicial (`seedUsersFromJsonFile`/`seedUsersIfEmpty` em `server/index.js`).

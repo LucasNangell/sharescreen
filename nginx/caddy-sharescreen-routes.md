@@ -21,6 +21,9 @@ Headers obrigatórios em **todas** as rotas ShareScreen:
 | `/api/link-externo` | `/api/link-externo` | + header `X-Host-Token` |
 | `/api/info` | `/api/info` | |
 | `/api/registro-cliente` | `/api/registro-cliente` | **Antes do catch-all `/api` OBS** |
+| `/api/auth*` | `/api/auth*` | Login/sessão (`/login`, `/logout`, `/me`) |
+| `/api/user-settings*` | `/api/user-settings*` | Preferências por usuário autenticado |
+| `/api/audio-filter*` | `/api/audio-filter*` | Presets de áudio do host |
 | `/api/lower-third*` | `/api/lower-third*` | body até 256MB |
 | `/lt-videos/*` | `/lt-videos/*` | Vídeos Lower Third |
 
@@ -30,7 +33,7 @@ Ordem: rotas ShareScreen **antes** de `handle /api/*` → Controle OBS (4040).
 
 - `/host`, `/client` → 404
 - `/meet/*` → só com `?token=`
-- `/shared/*`, `/vendor/*`, `/ws`, `/api/info`, `/lt-videos/*`
+- `/shared/*`, `/vendor/*`, `/ws`, `/api/info`, `/api/auth*`, `/lt-videos/*`
 - Demais `/api/*` → 404 (OBS bloqueado)
 
 ## Problemas corrigidos nesta migração

@@ -1,36 +1,28 @@
-const DEFAULT_COLOR = '#e53935';
-const DEFAULT_WIDTH = 3;
+import {
+  drawElement,
+  getVideoContentRect,
+  DEFAULT_DRAW_COLOR,
+  DEFAULT_DRAW_WIDTH,
+  DEFAULT_FONT_SIZE,
+  isTwoPointShape,
+  normalizeShape
+} from './drawing-primitives.js';
+
 const FADE_DELAY_MS = 3000;
 const FADE_DURATION_MS = 400;
 const SEND_THROTTLE_MS = 32;
 
-/**
- * Calcula o retângulo do vídeo renderizado com object-fit: contain.
- */
-export function getVideoContentRect(videoEl, containerEl) {
-  const container = containerEl || videoEl?.parentElement;
-  if (!container) return { x: 0, y: 0, width: 0, height: 0 };
-
-  const cw = container.clientWidth;
-  const ch = container.clientHeight;
-  if (!cw || !ch) return { x: 0, y: 0, width: cw, height: ch };
-
-  const vw = videoEl?.videoWidth || cw;
-  const vh = videoEl?.videoHeight || ch;
-  if (!vw || !vh) return { x: 0, y: 0, width: cw, height: ch };
-
-  const scale = Math.min(cw / vw, ch / vh);
-  const width = vw * scale;
-  const height = vh * scale;
-  const x = (cw - width) / 2;
-  const y = (ch - height) / 2;
-  return { x, y, width, height };
-}
-
-function clientToNormalized(clientX, clientY, videoEl, containerEl) {
+function clientToNormalized(clientX, clientY, videoEl, containerEl, useFullArea) {
   const container = containerEl || videoEl?.parentElement;
   if (!container) return null;
   const rect = container.getBoundingClientRect();
+  if (useFullArea) {
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return null;
+    return { x: localX / rect.width, y: localY / rect.height };
+  }
   const content = getVideoContentRect(videoEl, container);
   const localX = clientX - rect.left - content.x;
   const localY = clientY - rect.top - content.y;
@@ -39,27 +31,22 @@ function clientToNormalized(clientX, clientY, videoEl, containerEl) {
   return { x: localX / content.width, y: localY / content.height };
 }
 
-function normalizedToCanvas(x, y, contentRect) {
-  return {
-    x: contentRect.x + x * contentRect.width,
-    y: contentRect.y + y * contentRect.height
-  };
-}
+export { getVideoContentRect };
 
-export function createLiveAnnotation({
+export function createDrawingSurface({
   previewArea,
   videoEl,
   canvasEl,
-  btnDraw,
-  btnRect,
-  drawStack,
   getPeerId,
   getPeerName,
+  getTool,
+  getColor,
+  getWidth,
+  getMode,
   onSegment,
+  onElementCommit,
   onModeChange
 }) {
-  /** @type {null | 'stroke' | 'rect'} */
-  let toolMode = null;
   let drawing = false;
   let strokeId = null;
   let strokeSeq = 0;
@@ -67,18 +54,43 @@ export function createLiveAnnotation({
   let pendingPoints = [];
   let lastSendAt = 0;
   let resizeObserver = null;
+  let textInputEl = null;
 
-  /** @type {Map<string, { shape: string, points: {x:number,y:number}[], color: string, width: number, opacity: number, fadeTimer?: number, removeTimer?: number }>} */
+  /** @type {Map<string, object>} */
   const strokes = new Map();
 
   const ctx = canvasEl?.getContext('2d');
 
+  function isPersistent() {
+    return getMode?.() === 'persistent';
+  }
+
+  function useFullArea() {
+    return isPersistent();
+  }
+
   function getContentRect() {
+    if (useFullArea() && previewArea) {
+      return {
+        x: 0,
+        y: 0,
+        width: previewArea.clientWidth,
+        height: previewArea.clientHeight
+      };
+    }
     return getVideoContentRect(videoEl, previewArea);
   }
 
   function isToolActive() {
-    return toolMode !== null;
+    return !!getTool?.();
+  }
+
+  function currentColor() {
+    return getColor?.() || DEFAULT_DRAW_COLOR;
+  }
+
+  function currentWidth() {
+    return getWidth?.() || DEFAULT_DRAW_WIDTH;
   }
 
   function resizeCanvas() {
@@ -97,43 +109,14 @@ export function createLiveAnnotation({
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
     const content = getContentRect();
     for (const stroke of strokes.values()) {
-      drawShape(stroke, content);
+      drawElement(ctx, stroke, content);
     }
-  }
-
-  function drawShape(stroke, content) {
-    if (!ctx || stroke.points.length < 1) return;
-    ctx.save();
-    ctx.globalAlpha = stroke.opacity;
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    if (stroke.shape === 'rect' && stroke.points.length >= 2) {
-      const p1 = normalizedToCanvas(stroke.points[0].x, stroke.points[0].y, content);
-      const p2 = normalizedToCanvas(stroke.points[1].x, stroke.points[1].y, content);
-      const x = Math.min(p1.x, p2.x);
-      const y = Math.min(p1.y, p2.y);
-      const w = Math.abs(p2.x - p1.x);
-      const h = Math.abs(p2.y - p1.y);
-      ctx.strokeRect(x, y, w, h);
-    } else if (stroke.points.length >= 2) {
-      ctx.beginPath();
-      const first = normalizedToCanvas(stroke.points[0].x, stroke.points[0].y, content);
-      ctx.moveTo(first.x, first.y);
-      for (let i = 1; i < stroke.points.length; i++) {
-        const p = normalizedToCanvas(stroke.points[i].x, stroke.points[i].y, content);
-        ctx.lineTo(p.x, p.y);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
   }
 
   function appendPoints(stroke, points) {
     if (!points?.length) return;
-    if (stroke.shape === 'rect') return;
+    const shape = normalizeShape(stroke.type || stroke.shape);
+    if (isTwoPointShape(shape)) return;
     for (const p of points) {
       const last = stroke.points[stroke.points.length - 1];
       if (last && last.x === p.x && last.y === p.y) continue;
@@ -142,6 +125,7 @@ export function createLiveAnnotation({
   }
 
   function scheduleFade(strokeIdKey) {
+    if (isPersistent()) return;
     const stroke = strokes.get(strokeIdKey);
     if (!stroke) return;
     if (stroke.fadeTimer) clearTimeout(stroke.fadeTimer);
@@ -168,52 +152,108 @@ export function createLiveAnnotation({
     }, FADE_DELAY_MS);
   }
 
+  function buildElementFromStroke(stroke, id) {
+    return {
+      id,
+      type: normalizeShape(stroke.type || stroke.shape),
+      points: stroke.points.map((p) => ({ x: p.x, y: p.y })),
+      color: stroke.color,
+      width: stroke.width,
+      text: stroke.text || undefined,
+      fontSize: stroke.fontSize || undefined,
+      peerId: getPeerId?.() || '',
+      peerName: getPeerName?.() || ''
+    };
+  }
+
   function receiveSegment(payload) {
     if (!payload?.strokeId || !Array.isArray(payload.points)) return;
     const {
       strokeId: id,
       points,
-      color = DEFAULT_COLOR,
-      width = DEFAULT_WIDTH,
+      color = DEFAULT_DRAW_COLOR,
+      width = DEFAULT_DRAW_WIDTH,
       final = false,
-      shape = 'stroke'
+      shape = 'stroke',
+      text,
+      fontSize
     } = payload;
+    const type = normalizeShape(shape);
     let stroke = strokes.get(id);
     if (!stroke) {
-      stroke = { shape, points: [], color, width, opacity: 1 };
+      stroke = { type, points: [], color, width, opacity: 1, text, fontSize };
       strokes.set(id, stroke);
     }
-    stroke.shape = shape === 'rect' ? 'rect' : 'stroke';
-    if (stroke.shape === 'rect') {
+    stroke.type = type;
+    stroke.color = color;
+    stroke.width = width;
+    if (text) stroke.text = text;
+    if (fontSize) stroke.fontSize = fontSize;
+
+    if (type === 'text' && text) {
+      stroke.points = points.slice(0, 1).map((p) => ({ x: p.x, y: p.y }));
+      stroke.text = text;
+      if (fontSize) stroke.fontSize = fontSize;
+    } else if (isTwoPointShape(type)) {
       stroke.points = points.slice(0, 2).map((p) => ({ x: p.x, y: p.y }));
     } else {
       appendPoints(stroke, points);
     }
     redrawAll();
-    if (final) scheduleFade(id);
+    if (final && !isPersistent()) scheduleFade(id);
   }
 
-  function sendSegment({ final = false, points = null } = {}) {
+  function receiveElement(element) {
+    if (!element?.id) return;
+    const stroke = {
+      type: normalizeShape(element.type),
+      points: (element.points || []).map((p) => ({ x: p.x, y: p.y })),
+      color: element.color || DEFAULT_DRAW_COLOR,
+      width: element.width || DEFAULT_DRAW_WIDTH,
+      opacity: 1,
+      text: element.text,
+      fontSize: element.fontSize
+    };
+    strokes.set(element.id, stroke);
+    redrawAll();
+  }
+
+  function setPersistentElements(elements) {
+    strokes.clear();
+    for (const el of elements || []) {
+      receiveElement(el);
+    }
+  }
+
+  function clearPersistentOverlay() {
+    strokes.clear();
+    redrawAll();
+  }
+
+  function sendSegment({ final = false, points = null, text = null, fontSize = null } = {}) {
     if (!onSegment || !strokeId) return;
     const stroke = strokes.get(strokeId);
+    const type = normalizeShape(stroke?.type);
     const batch =
       points ||
-      (stroke?.shape === 'rect' && stroke.points.length >= 2
+      (isTwoPointShape(type) && stroke.points.length >= 2
         ? stroke.points.slice(0, 2)
         : pendingPoints.length
           ? pendingPoints.splice(0)
           : lastPoint
             ? [lastPoint]
             : []);
-    if (!batch.length) return;
+    if (!batch.length && !text) return;
     onSegment({
       strokeId,
       peerId: getPeerId?.() || '',
       peerName: getPeerName?.() || '',
       points: batch.map((p) => ({ x: p.x, y: p.y })),
-      color: DEFAULT_COLOR,
-      width: DEFAULT_WIDTH,
-      shape: stroke?.shape === 'rect' ? 'rect' : 'stroke',
+      color: stroke?.color || currentColor(),
+      width: stroke?.width || currentWidth(),
+      shape: type,
+      text: text || stroke?.text || undefined,
+      fontSize: fontSize || stroke?.fontSize || undefined,
       final
     });
   }
@@ -224,8 +264,9 @@ export function createLiveAnnotation({
     if (!force && now - lastSendAt < SEND_THROTTLE_MS) return;
     lastSendAt = now;
     const stroke = strokes.get(strokeId);
+    const type = normalizeShape(stroke?.type);
     const batch =
-      stroke?.shape === 'rect' && stroke.points.length >= 2
+      isTwoPointShape(type) && stroke.points.length >= 2
         ? stroke.points.slice(0, 2)
         : pendingPoints.splice(0, pendingPoints.length);
     if (!batch.length) return;
@@ -234,36 +275,133 @@ export function createLiveAnnotation({
       peerId: getPeerId?.() || '',
       peerName: getPeerName?.() || '',
       points: batch.map((p) => ({ x: p.x, y: p.y })),
-      color: DEFAULT_COLOR,
-      width: DEFAULT_WIDTH,
-      shape: stroke?.shape === 'rect' ? 'rect' : 'stroke',
+      color: stroke?.color || currentColor(),
+      width: stroke?.width || currentWidth(),
+      shape: type,
       final: false
     });
   }
 
+  function removeTextInput() {
+    if (textInputEl) {
+      textInputEl.remove();
+      textInputEl = null;
+    }
+  }
+
+  function commitTextAt(clientX, clientY) {
+    const norm = clientToNormalized(clientX, clientY, videoEl, previewArea, useFullArea());
+    if (!norm) return;
+    removeTextInput();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'drawing-text-input';
+    input.placeholder = 'Digite o texto…';
+    input.maxLength = 500;
+    const container = previewArea || canvasEl?.parentElement;
+    const rect = container.getBoundingClientRect();
+    const content = getContentRect();
+    const anchor = {
+      x: rect.left + content.x + norm.x * content.width,
+      y: rect.top + content.y + norm.y * content.height
+    };
+    input.style.left = `${anchor.x}px`;
+    input.style.top = `${anchor.y}px`;
+    document.body.appendChild(input);
+    textInputEl = input;
+    input.focus();
+
+    const commit = () => {
+      const text = input.value.trim();
+      removeTextInput();
+      if (!text) return;
+      strokeSeq += 1;
+      const id = `${getPeerId?.() || 'local'}-${Date.now()}-${strokeSeq}`;
+      const element = {
+        id,
+        type: 'text',
+        points: [norm],
+        color: currentColor(),
+        width: currentWidth(),
+        text,
+        fontSize: DEFAULT_FONT_SIZE,
+        opacity: 1
+      };
+      strokes.set(id, { ...element, opacity: 1 });
+      redrawAll();
+
+      if (isPersistent()) {
+        onElementCommit?.(buildElementFromStroke(element, id));
+      } else {
+        onSegment?.({
+          strokeId: id,
+          peerId: getPeerId?.() || '',
+          peerName: getPeerName?.() || '',
+          points: [{ x: norm.x, y: norm.y }],
+          color: element.color,
+          width: element.width,
+          shape: 'text',
+          text,
+          fontSize: DEFAULT_FONT_SIZE,
+          final: true
+        });
+        scheduleFade(id);
+      }
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Escape') {
+        removeTextInput();
+      }
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (textInputEl === input) commit();
+      }, 100);
+    });
+  }
+
   function beginShape(clientX, clientY) {
-    const norm = clientToNormalized(clientX, clientY, videoEl, previewArea);
+    const tool = getTool?.();
+    if (!tool) return;
+    if (tool === 'text') {
+      commitTextAt(clientX, clientY);
+      return;
+    }
+
+    const norm = clientToNormalized(clientX, clientY, videoEl, previewArea, useFullArea());
     if (!norm) return;
     drawing = true;
     strokeSeq += 1;
     strokeId = `${getPeerId?.() || 'local'}-${Date.now()}-${strokeSeq}`;
     lastPoint = norm;
     pendingPoints = [norm];
-    const shape = toolMode === 'rect' ? 'rect' : 'stroke';
-    const points = shape === 'rect' ? [norm, { ...norm }] : [norm];
-    const stroke = { shape, points, color: DEFAULT_COLOR, width: DEFAULT_WIDTH, opacity: 1 };
+    const type = normalizeShape(tool);
+    const points = isTwoPointShape(type) ? [norm, { ...norm }] : [norm];
+    const stroke = {
+      type,
+      points,
+      color: currentColor(),
+      width: currentWidth(),
+      opacity: 1
+    };
     strokes.set(strokeId, stroke);
     redrawAll();
   }
 
   function extendShape(clientX, clientY) {
     if (!drawing || !strokeId) return;
-    const norm = clientToNormalized(clientX, clientY, videoEl, previewArea);
+    const norm = clientToNormalized(clientX, clientY, videoEl, previewArea, useFullArea());
     if (!norm) return;
     const stroke = strokes.get(strokeId);
     if (!stroke) return;
+    const type = normalizeShape(stroke.type);
 
-    if (stroke.shape === 'rect') {
+    if (isTwoPointShape(type)) {
       stroke.points = [{ ...stroke.points[0] }, { ...norm }];
       pendingPoints = stroke.points.map((p) => ({ ...p }));
     } else {
@@ -279,15 +417,22 @@ export function createLiveAnnotation({
     if (!drawing || !strokeId) return;
     drawing = false;
     const id = strokeId;
+    const stroke = strokes.get(id);
     flushSend(true);
     sendSegment({ final: true });
+
+    if (isPersistent() && stroke) {
+      onElementCommit?.(buildElementFromStroke(stroke, id));
+    } else {
+      scheduleFade(id);
+    }
+
     pendingPoints = [];
-    scheduleFade(id);
     strokeId = null;
     lastPoint = null;
   }
 
-  function syncToolUi() {
+  function syncDrawUi() {
     const active = isToolActive();
     if (canvasEl) {
       canvasEl.classList.toggle('is-draw-active', active);
@@ -296,58 +441,7 @@ export function createLiveAnnotation({
     if (previewArea) {
       previewArea.classList.toggle('is-draw-mode', active);
     }
-    if (btnDraw) {
-      btnDraw.classList.toggle('is-active', toolMode === 'stroke');
-      btnDraw.setAttribute('aria-pressed', String(toolMode === 'stroke'));
-      btnDraw.title = toolMode === 'stroke' ? 'Desativar lapis' : 'Desenho livre';
-    }
-    if (btnRect) {
-      btnRect.classList.toggle('is-active', toolMode === 'rect');
-      btnRect.setAttribute('aria-pressed', String(toolMode === 'rect'));
-      btnRect.title = toolMode === 'rect' ? 'Desativar retangulo' : 'Desenhar retangulo';
-    }
-    onModeChange?.(active, toolMode);
-  }
-
-  function setToolMode(mode) {
-    const next = toolMode === mode ? null : mode;
-    if (drawing) endShape();
-    toolMode = next;
-    syncToolUi();
-    return toolMode;
-  }
-
-  function setActive(next) {
-    if (!next) {
-      if (drawing) endShape();
-      toolMode = null;
-      syncToolUi();
-      return false;
-    }
-    if (!toolMode) toolMode = 'stroke';
-    syncToolUi();
-    return true;
-  }
-
-  function toggle() {
-    return setToolMode(toolMode === 'stroke' ? null : 'stroke');
-  }
-
-  function toggleRect() {
-    return setToolMode(toolMode === 'rect' ? null : 'rect');
-  }
-
-  function isActive() {
-    return isToolActive();
-  }
-
-  function updateButtonVisibility(visible) {
-    if (drawStack) {
-      drawStack.hidden = !visible;
-      return;
-    }
-    if (btnDraw) btnDraw.hidden = !visible;
-    if (btnRect) btnRect.hidden = !visible;
+    onModeChange?.(active, getTool?.());
   }
 
   function onPointerDown(e) {
@@ -380,16 +474,6 @@ export function createLiveAnnotation({
     if (drawing && e.buttons === 0) endShape();
   });
 
-  btnDraw?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggle();
-  });
-
-  btnRect?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleRect();
-  });
-
   if (previewArea && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(previewArea);
@@ -398,16 +482,15 @@ export function createLiveAnnotation({
   resizeCanvas();
 
   return {
-    toggle,
-    toggleRect,
-    setToolMode,
-    setActive,
-    isActive,
+    syncDrawUi,
     receive: receiveSegment,
-    updateButtonVisibility,
+    receiveElement,
+    setPersistentElements,
+    clearPersistentOverlay,
     resize: resizeCanvas,
+    isDrawing: () => drawing,
     dispose() {
-      setActive(false);
+      removeTextInput();
       resizeObserver?.disconnect();
       window.removeEventListener('resize', resizeCanvas);
       canvasEl?.removeEventListener('pointerdown', onPointerDown);

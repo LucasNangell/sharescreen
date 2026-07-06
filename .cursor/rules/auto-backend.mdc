@@ -1,0 +1,17 @@
+---
+description: Regras para backend Node, APIs e sinalizacao realtime
+globs:
+  - "server/**/*.js"
+  - "config/**/*.js"
+alwaysApply: false
+---
+
+<!-- generated-by: bootstrap-project-rules -->
+
+# Area especifica: backend
+
+- Entrada principal do backend e `server/index.js`; preservar inicializacao (`bootstrap-dev`, auth, mediasoup, sinalizacao e rotas HTTP/HTTPS).
+- APIs usam Express com payloads JSON e raw binario em endpoints de gravacao/lower-third; ao alterar contratos, manter validacoes e limites (`server/index.js`).
+- Sinalizacao em tempo real e WebRTC dependem de `attachSignaling` e configuracoes de ICE/portas em `config/default.js`; evitar alteracoes parciais que quebrem compatibilidade host/client.
+- Seguranca de sessao e autorizacao passam por `auth-session.js` e middlewares `requireAuth*`; manter checagens nesses fluxos para rotas sensiveis.
+- Ajustes de runtime (host, portas, STUN/TURN, trust proxy, tokens) devem ficar em variaveis de ambiente e `config/default.js`, nao hardcoded em handlers.

@@ -1,6 +1,6 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
 import { MediaClient } from '../shared/media-client.js';
-import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded, enrichRoomSourcesState } from '../shared/transmission.js';
+import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded, enrichRoomSourcesState, resolveRoomClients, mergeRoomClients } from '../shared/transmission.js';
 import { loadCapturePrefs, saveCapturePrefs, setupMicrophonePicker, installAudioUnlock } from '../shared/audio-manager.js';
 import { RecordingClient, RecordingState } from '../shared/recording-client.js';
 import { RecordingCompositor } from '../shared/recording-compositor.js';
@@ -29,9 +29,15 @@ import {
 import { sortDisplaySources } from '../shared/display-sources.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
-import { createLiveAnnotation } from '../shared/live-annotation.js';
-import { createStudioState } from '../shared/studio-state.js';
-import { StudioCompositor } from '../shared/studio-compositor.js';
+import { createDrawingSurface } from '../shared/drawing-surface.js';
+import { createAnnotationToolbar } from '../shared/annotation-toolbar.js';
+import { WhiteboardEngine } from '../shared/whiteboard-engine.js';
+import { createStudioState, slotNeedsTransform } from '../shared/studio-state.js';
+import { StudioCompositor, resolveCompositorDimensions } from '../shared/studio-compositor.js';
+import { createStudioTransformEditor } from '../shared/studio-transform-editor.js';
+import { requireAuthSession, fetchCurrentUser, authDisplayName, bindLogoutControl } from '../shared/auth-client.js';
+
+const STUDIO_COMPOSITOR_IN_MAIN = true;
 
 const STORAGE_HOST_NAME = 'sharescreen_host_name';
 const STORAGE_RECORDINGS_DIR = 'sharescreen_recordings_dir';
@@ -115,10 +121,14 @@ const els = {
   hostMicGainSlider: $('host-mic-gain-slider'),
   hostMicGainVal: $('host-mic-gain-val'),
   btnHostMic: $('btn-host-mic'),
-  btnDraw: $('btn-draw-toggle'),
   drawCanvas: $('live-annotation-canvas'),
-  btnRect: $('btn-rect-toggle'),
-  drawStack: $('preview-draw-stack'),
+  annotationToolbar: $('annotation-toolbar'),
+  annotationToolbarToggle: $('annotation-toolbar-toggle'),
+  annotationToolbarPanel: $('annotation-toolbar-panel'),
+  annotationColor: $('annotation-color'),
+  annotationWidth: $('annotation-width'),
+  annotationClear: $('annotation-clear'),
+  btnQuadroBranco: $('btn-quadro-branco'),
   statusBar: $('status-bar'),
   qualityPreset: $('quality-preset'),
   qualityHint: $('quality-hint'),
@@ -173,6 +183,7 @@ let meetBridgeLiveMode = false;
 let pendingRoomSnapshot = null;
 let lastAppliedSnapshotKey = '';
 let lastAppliedActiveVideoKey = '';
+let lastAppliedRoomVersion = 0;
 let lastActiveTransmission = null;
 let pendingHostAudioSync = null;
 const peerDisplayNameById = new Map();
@@ -184,15 +195,28 @@ let studioProgramCompositor = null;
 let studioPreviewVideoEls = [];
 let studioProgramMirrorId = null;
 let studioUiRefreshTimer = null;
+let studioTransformEditor = null;
+let studioCropMode = false;
+let studioPreviewApplyTimer = null;
+let studioLastPreviewKey = '';
+let studioProgramCanvasHost = null;
+let hostVideoWatchdogId = null;
+let whiteboardEngine = null;
+let whiteboardActiveLocal = false;
+let lastTransmissionSourceKind = null;
+let drawingSurface = null;
+let annotationToolbar = null;
 
 const HOST_MIC_GAIN_STORAGE_KEY = 'sharescreen_host_mic_gain';
 
-async function fetchAudioFilterPresetApi(kind, name) {
+async function fetchAudioFilterPresetApi(kind, name, userId = null) {
   const trimmed = String(name || '').trim();
-  if (!trimmed) return null;
+  if (!trimmed && !userId) return null;
   try {
+    const params = userId ? `?userId=${encodeURIComponent(userId)}` : '';
     const res = await fetch(
-      `/api/audio-filter/${encodeURIComponent(kind)}/${encodeURIComponent(trimmed)}`
+      `/api/audio-filter/${encodeURIComponent(kind)}/${encodeURIComponent(trimmed || '_')}${params}`,
+      { credentials: 'same-origin' }
     );
     const data = await res.json();
     return data?.preset || null;
@@ -201,17 +225,23 @@ async function fetchAudioFilterPresetApi(kind, name) {
   }
 }
 
-async function saveAudioFilterPresetApi(kind, name, prefs) {
+async function saveAudioFilterPresetApi(kind, name, prefs, userId = null) {
   const trimmed = String(name || '').trim();
-  if (!trimmed || !hostToken) return { ok: false };
+  if (!trimmed && !userId) return { ok: false };
   try {
     const res = await fetch('/api/audio-filter', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/json',
         ...(hostToken ? { 'X-Host-Token': hostToken } : {})
       },
-      body: JSON.stringify({ kind, name: trimmed, prefs: normalizeMicrophoneFilterPrefs(prefs) })
+      body: JSON.stringify({
+        kind,
+        name: trimmed,
+        prefs: normalizeMicrophoneFilterPrefs(prefs),
+        userId: userId || authUser?.id || null
+      })
     });
     return await res.json();
   } catch {
@@ -335,7 +365,7 @@ async function applyHostMicPublishGain(value) {
   });
   await media.setMicrophoneFilterPrefs(prefs);
   if (hostDisplayName) {
-    saveAudioFiltersPresetDebounced(hostDisplayName, prefs, 'host');
+    saveAudioFiltersPresetDebounced(hostDisplayName, prefs, 'host', authUser?.id);
   }
 }
 
@@ -346,7 +376,7 @@ async function loadHostMicPresetFromStorage() {
   }
   let prefs = null;
   if (hostDisplayName) {
-    const apiPreset = await fetchAudioFilterPresetApi('host', hostDisplayName);
+    const apiPreset = await fetchAudioFilterPresetApi('host', hostDisplayName, authUser?.id);
     if (apiPreset?.prefs) {
       prefs = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
     }
@@ -361,7 +391,7 @@ async function loadHostMicPresetFromStorage() {
       peakingGain: 2
     });
     if (hostDisplayName && hasActiveMicrophoneFilter(prefs)) {
-      saveAudioFilterPresetApi('host', hostDisplayName, prefs).catch(() => {});
+      saveAudioFilterPresetApi('host', hostDisplayName, prefs, authUser?.id).catch(() => {});
     }
   }
   if (prefs.gain != null) saveHostMicPublishGain(prefs.gain);
@@ -372,36 +402,70 @@ let localHostVuStop = null;
 let isCoHostInstance = readQueryParam('cohost') === 'true';
 if (readQueryParam('nome')) localStorage.setItem(STORAGE_HOST_NAME, readQueryParam('nome'));
 
-function promptHostEntry(roomPinRequired) {
+function setHostShellVisible(visible) {
+  if (els.appMain) {
+    els.appMain.hidden = !visible;
+    if (visible) els.appMain.classList.add('sidebar-open');
+  }
+  if (els.sidebar) els.sidebar.hidden = !visible;
+  if (els.techDrawer) els.techDrawer.hidden = !visible;
+}
+
+function promptRoomPinIfRequired(roomPinRequired) {
+  if (!roomPinRequired) return Promise.resolve();
+
   return new Promise((resolve) => {
-    if (els.hostNameInput && hostDisplayName) {
-      els.hostNameInput.value = hostDisplayName;
-    }
-    if (els.hostPinWrap) {
-      els.hostPinWrap.hidden = !roomPinRequired;
-    }
-    if (els.hostEntryModal) {
-      els.hostEntryModal.hidden = false;
+    const nameField = els.hostNameInput?.closest('.field');
+    if (nameField) nameField.hidden = true;
+    if (els.hostPinWrap) els.hostPinWrap.hidden = false;
+    if (els.hostEntryModal) els.hostEntryModal.hidden = false;
+    if (els.btnHostEntrySubmit) {
+      els.btnHostEntrySubmit.textContent = 'Continuar';
     }
 
     const submit = () => {
-      const name = els.hostNameInput?.value.trim() || '';
-      if (!name) {
-        showToast('Informe seu nome para aparecer no painel', 'warn');
-        els.hostNameInput?.focus();
+      roomPin = els.pinInput?.value.trim() || '';
+      if (!roomPin) {
+        showToast('Informe o PIN da sala', 'warn');
+        els.pinInput?.focus();
         return;
       }
-      if (roomPinRequired) {
-        roomPin = els.pinInput?.value.trim() || '';
-        if (!roomPin) {
-          showToast('Informe o PIN da sala', 'warn');
-          els.pinInput?.focus();
-          return;
-        }
-      }
-      hostDisplayName = name;
-      localStorage.setItem(STORAGE_HOST_NAME, name);
       if (els.hostEntryModal) els.hostEntryModal.hidden = true;
+      resolve();
+    };
+
+    els.btnHostEntrySubmit.onclick = submit;
+    els.pinInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+    els.pinInput?.focus();
+  });
+}
+
+function promptHostScreenShare() {
+  return new Promise((resolve) => {
+    const title = document.getElementById('host-entry-title');
+    const desc = els.hostEntryModal?.querySelector('.modal-panel > p');
+    const nameField = els.hostNameInput?.closest('.field');
+    if (nameField) nameField.hidden = true;
+    if (els.hostPinWrap) els.hostPinWrap.hidden = true;
+    if (title) title.textContent = 'Compartilhar tela';
+    if (desc) {
+      desc.textContent = `Olá, ${hostDisplayName}. Selecione a tela que deseja transmitir neste painel.`;
+    }
+    if (els.btnHostEntrySubmit) els.btnHostEntrySubmit.textContent = 'Selecionar tela';
+    if (els.hostEntryModal) els.hostEntryModal.hidden = false;
+
+    const submit = async () => {
+      if (els.hostEntryModal) els.hostEntryModal.hidden = true;
+      try {
+        await iniciarCompartilhamentoHost();
+      } catch (e) {
+        errors.handle(e, 'compartilhar');
+      }
       resolve();
     };
 
@@ -412,18 +476,13 @@ function promptHostEntry(roomPinRequired) {
         submit();
       }
     });
-    els.pinInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        submit();
-      }
-    });
-    els.hostNameInput?.focus();
+    els.btnHostEntrySubmit?.focus();
   });
 }
 
 let roomPin = '';
 let hostToken = '';
+let authUser = null;
 let hostDisplayName = readQueryParam('nome') || localStorage.getItem(STORAGE_HOST_NAME) || '';
 let statsTimer = null;
 const HOST_TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -434,6 +493,40 @@ let hostLockTimer = null;
 let hostSessionJoined = false;
 
 function debugHostLog(_hypothesisId, _message, _data = {}) {}
+
+function debugPopoutLog(hypothesisId, location, message, data = {}) {
+  // #region agent log
+  fetch('/api/client-debug', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'c3e9ac',
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now()
+    })
+  }).catch(() => {});
+  // #endregion
+}
+
+function debug3a36beLog(hypothesisId, location, message, data = {}) {
+  // #region agent log
+  fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '3a36be' },
+    body: JSON.stringify({
+      sessionId: '3a36be',
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now()
+    })
+  }).catch(() => {});
+  // #endregion
+}
 
 function readHostLock() {
   try {
@@ -683,15 +776,111 @@ function updatePreviewOverlays() {
   els.previewInfo.hidden = true;
 
   const showBadge = hasPreview && sel && !paused;
-  updateStreamSourceBadge(els.streamSourceBadge, sel?.displayName, showBadge);
+  const badgeName =
+    isWhiteboardTransmission(lastActiveTransmission) ? 'Quadro branco' : sel?.displayName;
+  updateStreamSourceBadge(els.streamSourceBadge, badgeName, showBadge);
   if (sel && hasPreview && els.previewSourceName) {
-    els.previewSourceName.textContent = sel.displayName || 'Fonte';
+    els.previewSourceName.textContent = badgeName || 'Fonte';
     if (els.previewQuality) {
       els.previewQuality.textContent = getPreset(loadPresetId()).label;
     }
   }
-  liveAnnotation?.updateButtonVisibility(hostReady && hasPreview);
-  liveAnnotation?.resize();
+  updateDrawUi();
+}
+
+function isWhiteboardTransmission(tx) {
+  return tx?.sourceKind === 'whiteboard';
+}
+
+function getDrawingMode() {
+  return isWhiteboardTransmission(lastActiveTransmission) ? 'persistent' : 'ephemeral';
+}
+
+function canClearWhiteboard() {
+  return isWhiteboardTransmission(lastActiveTransmission) && canHostCommand();
+}
+
+function updateQuadroBrancoUi() {
+  if (els.btnQuadroBranco) {
+    els.btnQuadroBranco.classList.toggle(
+      'is-active',
+      whiteboardActiveLocal || isWhiteboardTransmission(lastActiveTransmission)
+    );
+  }
+  annotationToolbar?.syncClearVisibility();
+}
+
+function applyWhiteboardState(payload) {
+  if (!payload) return;
+  const elements = payload.elements || [];
+  whiteboardEngine?.setElements(elements);
+  if (payload.active || isWhiteboardTransmission(lastActiveTransmission)) {
+    drawingSurface?.setPersistentElements(elements);
+  }
+  whiteboardActiveLocal = !!payload.active;
+  updateQuadroBrancoUi();
+}
+
+function handleWhiteboardElement(element) {
+  whiteboardEngine?.addElement(element);
+  if (isWhiteboardTransmission(lastActiveTransmission)) {
+    drawingSurface?.receiveElement(element);
+  }
+}
+
+async function stopWhiteboardTransmission({ notifyServer = false } = {}) {
+  const wasActive = whiteboardActiveLocal;
+  if (notifyServer && signaling?.connected && wasActive) {
+    signaling.send('quadroBrancoParar');
+  }
+  if (whiteboardEngine) {
+    whiteboardEngine.stop();
+    whiteboardEngine = null;
+  }
+  if (media?.isSyntheticVideoActive?.() && wasActive) {
+    await media.stopSyntheticVideo({ notifyServer: false });
+  }
+  whiteboardActiveLocal = false;
+  drawingSurface?.clearPersistentOverlay();
+  updateQuadroBrancoUi();
+}
+
+async function iniciarQuadroBranco() {
+  if (!canHostCommand()) {
+    showToast('Aguarde o painel conectar ao servidor', 'warn');
+    return;
+  }
+  try {
+    if (studioProgramCompositor) {
+      studioProgramCompositor.stop();
+      studioProgramCompositor = null;
+    }
+    if (studioPreviewCompositor) {
+      studioPreviewCompositor.stop();
+      studioPreviewCompositor = null;
+    }
+    await stopWhiteboardTransmission({ notifyServer: false });
+    await media.ensureSendTransport();
+    whiteboardEngine = WhiteboardEngine.start({ width: 1920, height: 1080, fps: 30 });
+    await media.publishSyntheticVideoStream(whiteboardEngine.stream);
+    whiteboardActiveLocal = true;
+    signaling.send('quadroBrancoIniciar');
+    await selecionar(hostPeerId);
+    updateQuadroBrancoUi();
+    showToast('Quadro branco ativo', 'success');
+    startHostVideoWatchdog();
+  } catch (e) {
+    await stopWhiteboardTransmission({ notifyServer: false });
+    errors.handle(e, 'quadroBranco');
+  }
+}
+
+function updateDrawUi() {
+  const hasPreview = ui._flags.hasPreview;
+  annotationToolbar?.setVisible(hostReady && hasPreview);
+  annotationToolbar?.syncClearVisibility();
+  drawingSurface?.syncDrawUi();
+  drawingSurface?.resize();
 }
 
 function formatClientName(c) {
@@ -702,13 +891,139 @@ function sortClientsForDisplay(clients) {
   return sortDisplaySources(clients);
 }
 
-function buildSourceCard(c, onSelect, isTransmissionSection = false) {
+function getHostVideoStreamForStudio() {
+  const local = media?.localScreenStream;
+  const localTrack = local?.getVideoTracks?.()?.[0];
+  if (localTrack?.readyState === 'live') return local;
+
+  const producerTrack = media?.producers?.video?.track;
+  if (producerTrack?.readyState === 'live') {
+    return new MediaStream([producerTrack]);
+  }
+
+  if (media?._syntheticStream) {
+    const synTrack = media._syntheticStream.getVideoTracks?.()?.[0];
+    if (synTrack?.readyState === 'live') return media._syntheticStream;
+  }
+
+  if (whiteboardEngine?.stream) {
+    const wbTrack = whiteboardEngine.stream.getVideoTracks?.()?.[0];
+    if (wbTrack?.readyState === 'live') return whiteboardEngine.stream;
+  }
+
+  if (studioProgramCompositor?.stream) {
+    const compTrack = studioProgramCompositor.stream.getVideoTracks?.()?.[0];
+    if (compTrack?.readyState === 'live') return studioProgramCompositor.stream;
+  }
+
+  return null;
+}
+
+function getStudioCompositorSize(sources) {
+  return resolveCompositorDimensions(sources, { maxWidth: 1920, maxHeight: 1080 });
+}
+
+function sceneNeedsCompositor(scene, slots = null) {
+  const list = slots || scene?.slots || [];
+  if (list.length > 1) return true;
+  return list.some((slot) => slotNeedsTransform(slot));
+}
+
+function getStudioPreviewKey(scene) {
+  if (!scene) return '';
+  return scene.slots
+    .map((s) => `${s.peerId}:${s.producerId}:${JSON.stringify(s.crop)}:${JSON.stringify(s.frame)}:${s.frameEdited}`)
+    .join('|');
+}
+
+function ensureStudioProgramCanvasHost() {
+  if (studioProgramCanvasHost?.isConnected) return studioProgramCanvasHost;
+  let el = document.getElementById('studio-program-compositor-canvas');
+  if (!el) {
+    el = document.createElement('canvas');
+    el.id = 'studio-program-compositor-canvas';
+    el.style.cssText =
+      'position:fixed;left:-9999px;top:0;width:1920px;height:1080px;opacity:0;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  studioProgramCanvasHost = el;
+  return el;
+}
+
+function disposeStudioProgramCanvasHost() {
+  if (studioProgramCanvasHost?.parentNode) {
+    studioProgramCanvasHost.parentNode.removeChild(studioProgramCanvasHost);
+  }
+  studioProgramCanvasHost = null;
+}
+
+function startHostVideoWatchdog() {
+  if (hostVideoWatchdogId) return;
+  hostVideoWatchdogId = setInterval(async () => {
+    if (!hostPeerId || !ui._flags.isSharing) return;
+    const selectedId = estado.selecionado?.id || lastActiveTransmission?.selectedPeerId;
+    if (String(selectedId) !== String(hostPeerId)) return;
+    const trackState = media?.getHostVideoTrackState?.() || 'none';
+    if (trackState === 'live') {
+      await media?.repairHostVideoIfNeeded?.().catch(() => {});
+      return;
+    }
+    if (trackState !== 'live' && media?.producers?.video && !media.producers.video.closed) {
+      showToast('Transmissão do host interrompida — recompartilhe a tela', 'warn');
+      ui.set({ isSharing: false, hasPreview: false });
+      updatePreviewOverlays();
+    }
+  }, 5000);
+}
+
+function stopHostVideoWatchdog() {
+  if (hostVideoWatchdogId) {
+    clearInterval(hostVideoWatchdogId);
+    hostVideoWatchdogId = null;
+  }
+}
+
+async function waitForVideoDimensions(videoEl, timeoutMs = 2500) {
+  if (!videoEl) return;
+  if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) return;
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    const done = () => {
+      clearTimeout(timer);
+      videoEl.removeEventListener('loadeddata', done);
+      videoEl.removeEventListener('resize', done);
+      resolve();
+    };
+    videoEl.addEventListener('loadeddata', done);
+    videoEl.addEventListener('resize', done);
+  });
+}
+
+function getListaOwnerDocument() {
+  return els.lista?.ownerDocument || document;
+}
+
+function buildStudioParticipantCard(c, onSelect) {
+  const editing = studio.getEditingScene();
+  const sceneSlotPeerIds = new Set((editing?.slots || []).map((s) => String(s.peerId)));
+  return buildSourceCard(c, onSelect, false, {
+    forStudioSlot: true,
+    sceneSlotPeerIds,
+    ownerDocument: getListaOwnerDocument()
+  });
+}
+
+function buildSourceCard(c, onSelect, isTransmissionSection = false, studioOptions = null) {
+  const ownerDocument = studioOptions?.ownerDocument || getListaOwnerDocument();
   const card = buildDisplaySourceCard(c, onSelect, {
-    noSharingHighlight: !isTransmissionSection,
+    forStudioSlot: studioOptions?.forStudioSlot,
+    sceneSlotPeerIds: studioOptions?.sceneSlotPeerIds,
+    noSharingHighlight: studioOptions?.forStudioSlot || !isTransmissionSection,
+    ownerDocument,
     decorateBody: (body, source) => {
       if (source.hasAudio) {
         const isMuted = mutedClients.has(source.id);
-        const muteBtn = document.createElement('button');
+        const muteBtn = ownerDocument.createElement('button');
         muteBtn.type = 'button';
         muteBtn.className = `source-mute-btn${isMuted ? ' is-muted' : ''}`;
         muteBtn.setAttribute('aria-label', isMuted ? 'Ativar audio do client' : 'Silenciar audio do client');
@@ -730,7 +1045,7 @@ function buildSourceCard(c, onSelect, isTransmissionSection = false) {
         source.displayName &&
         defaultRecName.toLowerCase() === String(source.displayName).toLowerCase()
       ) {
-        const badge = document.createElement('span');
+        const badge = ownerDocument.createElement('span');
         badge.className = 'source-role-badge source-role-badge--rec-audio';
         badge.textContent = 'áudio gravação';
         badge.title = 'Áudio padrão da gravação';
@@ -738,10 +1053,10 @@ function buildSourceCard(c, onSelect, isTransmissionSection = false) {
         if (nameWrap) nameWrap.append(badge);
       }
       if (!source.hasAudio) return;
-      const vuColumn = document.createElement('div');
+      const vuColumn = ownerDocument.createElement('div');
       vuColumn.className = 'source-vu-column';
       vuColumn.title = 'Nivel de audio';
-      const vuFill = document.createElement('div');
+      const vuFill = ownerDocument.createElement('div');
       vuFill.className = 'source-vu-fill';
       vuColumn.append(vuFill);
       row.append(vuColumn);
@@ -1180,27 +1495,79 @@ function toggleFsSourceMenu() {
 
 function updateTransmissionCard() {
   if (!els.transmissionCardContainer) return;
+  const cardDoc = els.transmissionCardContainer.ownerDocument || document;
   els.transmissionCardContainer.innerHTML = '';
   const sel = estado.selecionado;
   if (sel && sel.isProducing) {
-    // Pass isTransmissionSection = true so the card gets the green highlight
-    const card = buildSourceCard(sel, () => {}, true);
+    const card = buildSourceCard(sel, () => {}, true, { ownerDocument: cardDoc });
     els.transmissionCardContainer.appendChild(card);
   } else {
-    const empty = document.createElement('div');
+    const empty = cardDoc.createElement('div');
     empty.className = 'transmission-card-empty';
     empty.textContent = 'Nenhuma transmissao ativa';
     els.transmissionCardContainer.appendChild(empty);
   }
 }
 
+function shouldUseStudioParticipantCards() {
+  return isSidebarPoppedOut() && studio.isStudioModeEnabled() && popoutControlsExpanded;
+}
+
+function getParticipantSelectHandler() {
+  if (shouldUseStudioParticipantCards()) {
+    return (peerId) => handleStudioAddParticipant(peerId);
+  }
+  return (peerId) => selecionar(peerId);
+}
+
 function renderLista() {
-  if (!els.lista) return;
+  if (!els.lista) {
+    debugPopoutLog('E', 'host/app.js:renderLista', 'els.lista missing', {});
+    return;
+  }
+  const docked = ensureSidebarDockedInMain();
+  const listDoc = getListaOwnerDocument();
+  const sidebar = els.sidebar;
+  debugPopoutLog('A,B,E', 'host/app.js:renderLista', 'start', {
+    clientCount: estado.clients?.length ?? 0,
+    clientNames: (estado.clients || []).map((c) => c.displayName),
+    poppedOut: isSidebarPoppedOut(),
+    dockedByEnsure: docked,
+    sidebarInMain: isSidebarInMainDocument(),
+    sidebarHidden: !!sidebar?.hidden,
+    listaDocIsMain: listDoc === document,
+    listaConnected: els.lista.isConnected,
+    listaParentId: els.lista.parentElement?.id || null
+  });
   els.lista.innerHTML = '';
   cardVuElements.clear();
 
-  if (!estado.clients.length) {
-    const li = document.createElement('li');
+  const participants = getSidebarParticipants();
+  // #region agent log
+  debugClientSessionLog('H2', 'host:renderLista', 'render participants', {
+    totalClients: estado.clients?.length ?? 0,
+    remoteCount: participants.length,
+    remoteNames: participants.map((c) => c.displayName),
+    listaConnected: els.lista.isConnected,
+    sectionH: els.lista.closest('.participants-section')?.offsetHeight ?? 0,
+    listaH: els.lista.offsetHeight,
+    hypothesisId: 'C'
+  });
+  debug3a36beLog('C', 'host:renderLista', 'render participants', {
+    totalClients: estado.clients?.length ?? 0,
+    participantCount: participants.length,
+    participantNames: participants.map((c) => c.displayName),
+    hasListaEl: !!els.lista,
+    listaConnected: els.lista?.isConnected ?? false,
+    participantsSectionFound: !!els.lista?.closest('.participants-section'),
+    sectionH: els.lista?.closest('.participants-section')?.offsetHeight ?? 0,
+    listaH: els.lista?.offsetHeight ?? 0,
+    sidebarCollapsed: els.sidebar?.classList.contains('is-collapsed') ?? false
+  });
+  // #endregion
+
+  if (!participants.length) {
+    const li = listDoc.createElement('li');
     li.className = 'hint-text';
     li.textContent = 'Nenhuma fonte conectada';
     els.lista.appendChild(li);
@@ -1212,9 +1579,23 @@ function renderLista() {
     return;
   }
 
-  for (const c of sortClientsForDisplay(estado.clients)) {
-    // Render for Participants section (no sharing green highlight)
-    els.lista.appendChild(buildSourceCard(c, (peerId) => selecionar(peerId), false));
+  const onSelect = getParticipantSelectHandler();
+  const cardKinds = [];
+  for (const c of sortClientsForDisplay(participants)) {
+    const card = shouldUseStudioParticipantCards()
+      ? buildStudioParticipantCard(c, onSelect)
+      : buildSourceCard(c, onSelect, false);
+    cardKinds.push({
+      name: c.displayName,
+      kind: card.classList.contains('sharing')
+        ? 'sharing'
+        : card.classList.contains('available')
+          ? 'available'
+          : card.classList.contains('spectator')
+            ? 'spectator'
+            : 'other'
+    });
+    els.lista.appendChild(card);
   }
 
   if (els.selecionado) {
@@ -1237,11 +1618,32 @@ function renderLista() {
   updatePreviewOverlays();
   if (isSidebarPoppedOut()) {
     studio.syncSlotProducerIds(estado.clients);
-    renderStudioParticipantsList();
-    renderStudioTransmissionCard();
     syncStudioProgramMirror();
-    syncStudioPopoutChrome();
   }
+  debugPopoutLog('A,E', 'host/app.js:renderLista', 'done', {
+    listaChildCount: els.lista.childElementCount,
+    cardKinds,
+    poppedOut: isSidebarPoppedOut(),
+    sidebarInMain: isSidebarInMainDocument(),
+    sidebarOwnerIsMain: sidebar?.ownerDocument === document
+  });
+  requestAnimationFrame(() => {
+    const participantsSection = els.lista?.closest('.participants-section');
+    const listaRect = els.lista?.getBoundingClientRect();
+    const sectionRect = participantsSection?.getBoundingClientRect();
+    debugPopoutLog('F', 'host/app.js:renderLista', 'layout', {
+      listaOffsetHeight: els.lista?.offsetHeight ?? 0,
+      listaClientHeight: els.lista?.clientHeight ?? 0,
+      listaRectH: listaRect ? Math.round(listaRect.height) : 0,
+      sectionOffsetHeight: participantsSection?.offsetHeight ?? 0,
+      sectionRectH: sectionRect ? Math.round(sectionRect.height) : 0,
+      sidebarInnerH: sidebar?.querySelector('.sidebar-inner')?.offsetHeight ?? 0,
+      cards: [...(els.lista?.children || [])].map((li) => ({
+        h: Math.round(li.getBoundingClientRect().height),
+        text: (li.querySelector('.source-name')?.textContent || li.textContent || '').slice(0, 32)
+      }))
+    });
+  });
 }
 
 async function selecionar(peerId) {
@@ -1274,7 +1676,13 @@ async function runTransmission(raw, gen = transmissionGeneration) {
   if (gen !== transmissionGeneration) return;
 
   const tx = normalizeTransmission(raw);
+  const prevKind = lastTransmissionSourceKind;
+  lastTransmissionSourceKind = tx.sourceKind || null;
   lastActiveTransmission = tx;
+
+  if (prevKind === 'whiteboard' && tx.sourceKind !== 'whiteboard') {
+    stopWhiteboardTransmission({ notifyServer: false }).catch(() => {});
+  }
 
   // Sync state selected
   if (tx.selectedPeerId) {
@@ -1326,7 +1734,9 @@ async function runTransmission(raw, gen = transmissionGeneration) {
     } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
       await media?.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true });
       let previewStream = null;
-      if (media?.isSyntheticVideoActive?.() && studioProgramCompositor?.stream) {
+      if (isWhiteboardTransmission(tx) && whiteboardEngine?.stream) {
+        previewStream = whiteboardEngine.stream;
+      } else if (media?.isSyntheticVideoActive?.() && studioProgramCompositor?.stream) {
         previewStream = studioProgramCompositor.stream;
       } else if (media?.isSyntheticVideoActive?.() && media._syntheticStream) {
         previewStream = media._syntheticStream;
@@ -1343,7 +1753,12 @@ async function runTransmission(raw, gen = transmissionGeneration) {
       applyLtOverlayForTransmission(tx);
       ui.set({ hasPreview: true, isSharing: true });
       updatePreviewOverlays();
-      setStatus(media?.isSyntheticVideoActive?.() ? 'Exibindo cena composta' : 'Exibindo sua tela');
+      const statusMsg = isWhiteboardTransmission(tx)
+        ? 'Exibindo quadro branco'
+        : media?.isSyntheticVideoActive?.()
+          ? 'Exibindo cena composta'
+          : 'Exibindo sua tela';
+      setStatus(statusMsg);
     } else {
       if (gen !== transmissionGeneration) return;
 
@@ -1422,16 +1837,145 @@ function shouldHostApplyActiveVideo(tx) {
   return keyChanged || needsConsume;
 }
 
-async function applyRoomSnapshot(snapshot, { force = false } = {}) {
+function resolveTransmissionForEnrich(snapshot, parsed) {
+  const snapTx = parsed?.transmission;
+  if (snapTx && hasActiveVideo(snapTx)) return snapTx;
+  if (lastActiveTransmission && hasActiveVideo(lastActiveTransmission)) return lastActiveTransmission;
+  return snapTx || null;
+}
+
+function snapshotVersion(snapshot, parsed = null) {
+  const p = parsed || parseRoomSnapshot(snapshot || {});
+  return snapshot?.version || p.version || 0;
+}
+
+function isHostPeer(c) {
+  return !!(c?.ehHost || c?.role === 'host' || (hostPeerId && String(c?.id) === String(hostPeerId)));
+}
+
+function getSidebarParticipants() {
+  return estado.clients || [];
+}
+
+function applyParticipantState(snapshot, { source = 'unknown' } = {}) {
+  if (!snapshot) return false;
+
+  const parsed = parseRoomSnapshot(snapshot);
+  const version = snapshotVersion(snapshot, parsed);
+  if (version && version < lastAppliedRoomVersion) {
+    debugHostLog('H3', '[HOST_LIST] snapshot ignorado (versao antiga)', {
+      source,
+      version,
+      lastAppliedRoomVersion
+    });
+    // #region agent log
+    debugClientSessionLog('H3', 'host:applyParticipantState', 'rejected stale version', {
+      source,
+      version,
+      lastAppliedRoomVersion,
+      hypothesisId: 'B'
+    });
+    // #endregion
+    return false;
+  }
+
+  const existing = estado.clients || [];
+  let roomClients = resolveRoomClients(snapshot, parsed);
+  if (version > lastAppliedRoomVersion) {
+    if (roomClients.length < existing.length) {
+      roomClients = mergeRoomClients(existing, roomClients);
+    }
+  } else if (version && version === lastAppliedRoomVersion && existing.length) {
+    roomClients = mergeRoomClients(existing, roomClients);
+  } else if (!version && lastAppliedRoomVersion > 0 && existing.length && roomClients.length < existing.length) {
+    // #region agent log
+    debug3a36beLog('B', 'host:applyParticipantState', 'versionless snapshot would shrink clients — merging', {
+      source,
+      lastAppliedRoomVersion,
+      existingCount: existing.length,
+      incomingCount: roomClients.length,
+      existingNames: existing.map((c) => c.displayName),
+      incomingNames: roomClients.map((c) => c.displayName)
+    });
+    // #endregion
+    roomClients = mergeRoomClients(existing, roomClients);
+  }
+
+  if (version) {
+    lastAppliedRoomVersion = Math.max(lastAppliedRoomVersion, version);
+    const pendingVersion = pendingRoomSnapshot ? snapshotVersion(pendingRoomSnapshot) : 0;
+    if (!pendingRoomSnapshot || version >= pendingVersion) {
+      pendingRoomSnapshot = null;
+    }
+  } else if (!hostReady || joinInProgress) {
+    pendingRoomSnapshot = snapshot;
+  }
+
+  const transmission = resolveTransmissionForEnrich(snapshot, parsed);
+  // #region agent log
+  debugClientSessionLog('H1', 'host:applyParticipantState', 'participants applied', {
+    source,
+    version,
+    clientCount: roomClients.length,
+    clientNames: roomClients.map((c) => c.displayName),
+    remoteCount: roomClients.filter((c) => !isHostPeer(c)).length,
+    hasTransmission: !!transmission,
+    hypothesisId: 'A'
+  });
+  debug3a36beLog('A', 'host:applyParticipantState', 'participants applied', {
+    source,
+    version,
+    lastAppliedRoomVersion,
+    clientCount: roomClients.length,
+    clientNames: roomClients.map((c) => c.displayName),
+    remoteCount: roomClients.filter((c) => !isHostPeer(c)).length,
+    hostPeerId: hostPeerId?.slice(0, 8) || null
+  });
+  // #endregion
+  trackClientDisplayNameChanges(roomClients);
+  estado = enrichRoomSourcesState(
+    {
+      clients: roomClients,
+      selecionado: snapshot.selecionado
+        ? { ...snapshot.selecionado, selecionado: true }
+        : estado.selecionado,
+      controleExibicao: snapshot.controleExibicao ?? estado.controleExibicao ?? []
+    },
+    transmission
+  );
+
+  const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
+  if (me) isCoHostInstance = !!me.isCoHost;
+
+  debugHostLog('H3', '[HOST_LIST] participantes aplicados', {
+    source,
+    version,
+    totalClients: estado.clients.length,
+    names: estado.clients.map((c) => c.displayName)
+  });
+  debugPopoutLog('B', 'host/app.js:applyParticipantState', 'participants applied', {
+    source,
+    version,
+    roomClientCount: estado.clients.length,
+    roomClientNames: estado.clients.map((c) => c.displayName)
+  });
+  renderLista();
+  return true;
+}
+
+async function applyRoomSnapshot(snapshot, { includeMedia = true } = {}) {
   if (!snapshot) return;
 
   const parsed = parseRoomSnapshot(snapshot);
+  const version = snapshotVersion(snapshot, parsed);
+  const applied = applyParticipantState(snapshot, { source: 'roomSnapshot' });
+  if (!applied && version && version < lastAppliedRoomVersion) return;
 
   if (snapshot.meetBridgeLiveMode !== undefined) {
     applyMeetBridgeLiveModeFromRoom(snapshot.meetBridgeLiveMode);
   }
 
-  if (parsed.mutedPeerIds) {
+  if (parsed.mutedPeerIds?.length) {
     mutedClients.clear();
     for (const id of parsed.mutedPeerIds) {
       mutedClients.add(String(id));
@@ -1439,29 +1983,21 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     applyClientAudioMute();
   }
 
+  if (snapshot.whiteboard) {
+    applyWhiteboardState(snapshot.whiteboard);
+  }
+
   const mediaKey = roomSnapshotMediaKey(snapshot);
   const activeKey = activeVideoTransmissionKey(parsed.transmission);
 
   debugHostLog('H1', '[ROOM_STATE] snapshot recebido', {
+    version,
     activeKey,
     producerVideo: parsed.transmission?.producerIds?.video?.slice(0, 8) || null,
-    clients: (snapshot.clients || parsed.peers || []).length
+    clients: estado.clients.length
   });
 
   if (!hostReady || joinInProgress) {
-    trackClientDisplayNameChanges(snapshot.clients || parsed.peers || []);
-    pendingRoomSnapshot = snapshot;
-    if (snapshot.clients?.length || parsed.peers?.length) {
-      estado = enrichRoomSourcesState(
-        {
-          clients: snapshot.clients || parsed.peers || [],
-          selecionado: snapshot.selecionado || null,
-          controleExibicao: snapshot.controleExibicao || []
-        },
-        parsed.transmission
-      );
-      renderLista();
-    }
     if (parsed.audioSources?.length) {
       lastAudioSources = parsed.audioSources;
       pendingHostAudioSync = parsed.audioSources;
@@ -1469,28 +2005,14 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     return;
   }
 
-  trackClientDisplayNameChanges(snapshot.clients || parsed.peers || []);
-  estado = enrichRoomSourcesState(
-    {
-      clients: snapshot.clients || parsed.peers || [],
-      selecionado: snapshot.selecionado
-        ? { ...snapshot.selecionado, selecionado: true }
-        : null,
-      controleExibicao: snapshot.controleExibicao || []
-    },
-    parsed.transmission
-  );
-  const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
-  if (me) isCoHostInstance = !!me.isCoHost;
-
   if (parsed.audioSources?.length) {
     lastAudioSources = parsed.audioSources;
   }
 
-  renderLista();
+  if (!includeMedia) return;
 
-  const applyVideo = force || shouldHostApplyActiveVideo(parsed.transmission);
-  if (!applyVideo && !force && mediaKey && mediaKey === lastAppliedSnapshotKey) return;
+  const applyVideo = shouldHostApplyActiveVideo(parsed.transmission);
+  if (!applyVideo && mediaKey && mediaKey === lastAppliedSnapshotKey) return;
   lastAppliedSnapshotKey = mediaKey;
   lastAppliedActiveVideoKey = activeKey;
   applyTransmission(parsed.transmission);
@@ -1499,11 +2021,16 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   );
 }
 
-async function flushPendingRoomSnapshot() {
-  if (!pendingRoomSnapshot || !hostReady) return;
-  const snap = pendingRoomSnapshot;
-  pendingRoomSnapshot = null;
-  await applyRoomSnapshot(snap, { force: true });
+async function requestRoomStateSync() {
+  if (!signaling?.connected) return;
+  try {
+    const snapshotPromise = signaling.onceType('roomState', () => true, 5000);
+    signaling.send('solicitarEstado', {});
+    const snapshot = await snapshotPromise;
+    await applyRoomSnapshot(snapshot, { includeMedia: true });
+  } catch (e) {
+    debugHostLog('H1', '[ROOM_STATE] solicitarEstado timeout ou falha', { error: e.message });
+  }
 }
 
 async function iniciarCompartilhamentoHost() {
@@ -1525,6 +2052,7 @@ async function iniciarCompartilhamentoHost() {
       showToast('Marque Microfone no painel e conceda permissao ao navegador', 'warn');
     }
     showToast('Tela compartilhada neste painel', 'success');
+    startHostVideoWatchdog();
   } catch (e) {
     errors.handle(e, 'compartilhar');
     updateHostMicUi();
@@ -1764,11 +2292,11 @@ function handleMessage(msg) {
       }))
     });
     // #endregion
-    applyRoomSnapshot(msg.payload, { force: true }).catch((e) => errors.handle(e, 'room-state'));
+    applyRoomSnapshot(msg.payload, { includeMedia: true }).catch((e) => errors.handle(e, 'room-state'));
     return;
   }
   if (msg.type === 'estadoSala') {
-    applyRoomSnapshot(msg.payload).catch((e) => errors.handle(e, 'estado-sala'));
+    applyRoomSnapshot(msg.payload, { includeMedia: true }).catch((e) => errors.handle(e, 'estado-sala'));
     return;
   }
   if (msg.type === 'modoPonteMeetDefinido') {
@@ -1788,13 +2316,28 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'anotacaoSegmento') {
-    liveAnnotation?.receive(msg.payload);
+    drawingSurface?.receive(msg.payload);
+    return;
+  }
+  if (msg.type === 'quadroBrancoEstado') {
+    applyWhiteboardState(msg.payload);
+    return;
+  }
+  if (msg.type === 'quadroBrancoElemento') {
+    handleWhiteboardElement(msg.payload);
+    return;
+  }
+  if (msg.type === 'quadroBrancoLimpar') {
+    whiteboardEngine?.clear();
+    drawingSurface?.clearPersistentOverlay();
     return;
   }
   if (msg.type === 'estado') {
+    const version = msg.payload?.version || 0;
     // #region agent log
     debugClientSessionLog('H5', 'host:handleMessage', 'estado', {
-      clients: (msg.payload?.clients || []).map((c) => ({
+      version,
+      clients: resolveRoomClients(msg.payload || {}).map((c) => ({
         id: c.id?.slice(0, 8),
         name: c.displayName,
         selectable: c.selectable,
@@ -1804,40 +2347,23 @@ function handleMessage(msg) {
         producerVideo: c.producerIds?.video?.slice(0, 8) || null
       }))
     });
-    // #endregion
-    estado = enrichRoomSourcesState(
-      {
-        clients: msg.payload.clients || [],
-        selecionado: msg.payload.selecionado
-          ? { ...msg.payload.selecionado, selecionado: true }
-          : null,
-        controleExibicao: msg.payload.controleExibicao || []
-      },
-      lastActiveTransmission
-    );
-    const me = estado.clients.find((c) => String(c.id) === String(hostPeerId));
-    if (me) {
-      isCoHostInstance = !!me.isCoHost;
-    }
-    const videoProducers = (estado.clients || [])
-      .filter((c) => c.hasVideo || c.isProducing || c.producerIds?.video)
-      .map((c) => ({
-        peerId: c.id?.slice(0, 8),
-        producerId: c.producerIds?.video?.slice(0, 8) || c.producerId?.slice(0, 8) || null,
-        name: c.displayName
-      }));
-    debugHostLog('H3', '[HOST_LIST] estado recebido', {
-      totalClients: estado.clients.length,
-      videoProducers
+    debug3a36beLog('D', 'host:handleMessage', 'estado received', {
+      version,
+      clientNames: resolveRoomClients(msg.payload || {}).map((c) => c.displayName),
+      lastAppliedRoomVersion
     });
+    // #endregion
+    if (!applyParticipantState(msg.payload || {}, { source: 'estado' })) {
+      return;
+    }
     if (msg.payload?.meetBridgeLiveMode !== undefined) {
       applyMeetBridgeLiveModeFromRoom(msg.payload.meetBridgeLiveMode);
     }
     mergeLastAudioSourcesFromEstado(msg.payload || {});
-    renderLista();
     syncHostAudioMonitor(msg.payload?.audioSources?.length ? msg.payload.audioSources : null).catch((e) =>
       errors.handle(e, 'audio-monitor')
     );
+    return;
   }
   if (msg.type === 'demovidoCoHost') {
     if (isCoHostInstance) {
@@ -1966,6 +2492,7 @@ async function joinHost({ autoShare = true } = {}) {
   hostPeerId = null;
   lastAppliedSnapshotKey = '';
   lastAppliedActiveVideoKey = '';
+  lastAppliedRoomVersion = 0;
   pendingRoomSnapshot = null;
   signaling?.markAuthenticated(false);
   updateHostMicUi();
@@ -2043,8 +2570,7 @@ async function joinHost({ autoShare = true } = {}) {
         errors.handle(e, 'mic-join');
       }
     }
-    signaling.send('solicitarEstado', {});
-    await flushPendingRoomSnapshot();
+    await requestRoomStateSync();
     await flushPendingHostAudioSync();
     syncHostAudioMonitor().catch((e) => errors.handle(e, 'audio-monitor'));
     signaling.send('definirQualidade', { presetId: loadPresetId() });
@@ -2074,6 +2600,8 @@ async function bootstrap() {
     showToast('Use HTTPS para captura de tela confiavel', 'warn');
   }
 
+  setHostShellVisible(false);
+
   hostTabBlocked = !tryAcquireHostLock();
   if (hostTabBlocked) {
     debugHostLog('A', 'duplicate host tab blocked', { lock: readHostLock() });
@@ -2101,12 +2629,29 @@ async function bootstrap() {
     }
   } else {
     try {
+      authUser = await requireAuthSession({
+        onLoginRequired: () => setHostShellVisible(false),
+        onAuthenticated: () => setHostShellVisible(true)
+      });
+      hostDisplayName = authDisplayName(authUser);
+      if (hostDisplayName) {
+        localStorage.setItem(STORAGE_HOST_NAME, hostDisplayName);
+        if (els.hostNameInput) els.hostNameInput.value = hostDisplayName;
+      }
+    } catch (e) {
+      showToast(e.message || 'Falha na autenticação', 'error');
+      return;
+    }
+    try {
       const info = await fetch('/api/info').then((r) => r.json());
-      await promptHostEntry(!!info.roomPinRequired);
+      await promptRoomPinIfRequired(!!info.roomPinRequired);
     } catch (_) {
-      await promptHostEntry(false);
+      await promptRoomPinIfRequired(false);
     }
   }
+
+  updateHostSettingsAccountUi();
+  setHostShellVisible(true);
 
   signaling = new SignalingClient(wsUrl(), {
     onLog: (m, l) => log(m, l),
@@ -2130,8 +2675,11 @@ async function bootstrap() {
       try {
         const isReconnect = hostSessionJoined;
         debugHostLog('B', 'ws onOpen', { isReconnect });
-        await joinHost({ autoShare: !isReconnect });
+        await joinHost({ autoShare: isReconnect });
         hostSessionJoined = true;
+        if (!isReconnect && !isCoHostInstance) {
+          await promptHostScreenShare();
+        }
         if (isReconnect) {
           setStatus('Reconectado ao painel host');
           showToast('Reconectado ao servidor', 'info');
@@ -2154,6 +2702,7 @@ async function bootstrap() {
       joinInProgress = false;
       hostPeerId = null;
       hostReady = false;
+      lastAppliedRoomVersion = 0;
       signaling?.markAuthenticated(false);
       signaling?.clearPending();
 
@@ -2269,9 +2818,15 @@ els.btnSidebarCollapse?.addEventListener('click', toggleSidebarCollapsed);
 
 let controlsPopoutWindow = null;
 let controlsPopoutWatchId = null;
+let sidebarPopoutTransition = false;
 let sidebarWasCollapsed = false;
 let sidebarHiddenForPopout = false;
 let studioPopoutRoot = null;
+let popoutControlsExpanded = false;
+const POPOUT_WIDTH_BASIC = 286;
+const POPOUT_WIDTH_EXPANDED = 960;
+const POPOUT_EXPAND_ICON =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
 
 function scheduleStudioUiRefresh() {
   if (studioUiRefreshTimer) clearTimeout(studioUiRefreshTimer);
@@ -2288,6 +2843,8 @@ function getStudioUiFromPopout(win) {
   return {
     root,
     modeToggle: root.querySelector('#studio-mode-toggle'),
+    popoutModeLabel: root.querySelector('#studio-popout-mode-label'),
+    btnExpandControls: root.querySelector('#studio-btn-expand-controls'),
     btnTransition: root.querySelector('#studio-btn-transition'),
     programVideo: root.querySelector('#studio-program-video'),
     programEmpty: root.querySelector('#studio-program-empty'),
@@ -2302,14 +2859,55 @@ function getStudioUiFromPopout(win) {
     btnNew: root.querySelector('#studio-btn-new-scene'),
     btnDup: root.querySelector('#studio-btn-dup-scene'),
     btnDel: root.querySelector('#studio-btn-del-scene'),
-    participantsList: root.querySelector('#studio-participants-list'),
-    transmissionCard: root.querySelector('#studio-transmission-card'),
-    sourcesHint: root.querySelector('#studio-sources-hint'),
-    btnStop: root.querySelector('#studio-btn-stop'),
-    btnPause: root.querySelector('#studio-btn-pause'),
-    btnRecord: root.querySelector('#studio-btn-record'),
-    btnMute: root.querySelector('#studio-btn-mute')
+    transformOverlay: root.querySelector('#studio-transform-overlay'),
+    btnCropMode: root.querySelector('#studio-btn-crop-mode'),
+    btnResetSlot: root.querySelector('#studio-btn-reset-slot')
   };
+}
+
+function syncPopoutLayoutExpanded(expanded) {
+  if (!controlsPopoutWindow || controlsPopoutWindow.closed) return;
+  try {
+    const doc = controlsPopoutWindow.document;
+    const layout = doc.getElementById('popout-layout');
+    layout?.classList.toggle('is-expanded', expanded);
+    layout?.classList.toggle('is-basic', !expanded);
+    controlsPopoutWindow.resizeTo(
+      expanded ? POPOUT_WIDTH_EXPANDED : POPOUT_WIDTH_BASIC,
+      controlsPopoutWindow.outerHeight || 720
+    );
+  } catch (_) {}
+}
+
+function setPopoutControlsExpanded(expanded) {
+  const next = !!expanded;
+  const changed = next !== popoutControlsExpanded;
+  popoutControlsExpanded = next;
+  syncPopoutLayoutExpanded(popoutControlsExpanded);
+  if (studioUi?.root) {
+    studioUi.root.classList.toggle('is-expanded', popoutControlsExpanded);
+    studioUi.root.classList.toggle('is-basic', !popoutControlsExpanded);
+    if (studioUi.btnExpandControls) {
+      studioUi.btnExpandControls.textContent = popoutControlsExpanded
+        ? 'Ocultar controles avançados'
+        : 'Expandir controles';
+      studioUi.btnExpandControls.setAttribute('aria-expanded', String(popoutControlsExpanded));
+    }
+    if (studioUi.popoutModeLabel) {
+      studioUi.popoutModeLabel.textContent = popoutControlsExpanded ? 'Expandido' : 'Padrão';
+    }
+  }
+  syncPopoutExpandButtonInSidebar();
+  if (controlsPopoutWindow && !controlsPopoutWindow.closed) {
+    try {
+      controlsPopoutWindow.document.title = popoutControlsExpanded && studio.isStudioModeEnabled()
+        ? 'Studio — ShareScreen'
+        : 'Controles — ShareScreen';
+    } catch (_) {}
+  }
+  if (changed && isSidebarPoppedOut()) {
+    renderLista();
+  }
 }
 
 function resolveClientProducerId(client) {
@@ -2354,6 +2952,7 @@ function stopStudioProgramCompositor() {
     studioProgramCompositor.stop();
     studioProgramCompositor = null;
   }
+  disposeStudioProgramCanvasHost();
 }
 
 function syncStudioProgramMirror() {
@@ -2381,20 +2980,21 @@ async function buildStudioPreviewSources(scene) {
   for (const slot of scene.slots) {
     const client = getClientByPeerId(slot.peerId);
     const producerId = slot.producerId || resolveClientProducerId(client);
+    const slotPayload = { slot };
 
     if (hostPeerId && String(slot.peerId) === String(hostPeerId)) {
-      const localStream = media?.localScreenStream;
-      const track = localStream?.getVideoTracks?.()?.[0];
+      const hostStream = getHostVideoStreamForStudio();
+      const track = hostStream?.getVideoTracks?.()?.[0];
       if (track?.readyState === 'live') {
-        sources.push({ stream: localStream });
+        sources.push({ stream: hostStream, ...slotPayload });
         continue;
       }
-      sources.push({ stream: null });
+      sources.push({ stream: null, ...slotPayload });
       continue;
     }
 
     if (!producerId) {
-      sources.push({ stream: null });
+      sources.push({ stream: null, ...slotPayload });
       continue;
     }
 
@@ -2402,7 +3002,8 @@ async function buildStudioPreviewSources(scene) {
     video.muted = true;
     video.playsInline = true;
     video.className = 'studio-preview-hidden-video';
-    video.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
+    video.style.cssText =
+      'position:fixed;left:-9999px;top:0;width:1920px;height:1080px;opacity:0;pointer-events:none';
     document.body.appendChild(video);
     studioPreviewVideoEls.push(video);
 
@@ -2410,9 +3011,10 @@ async function buildStudioPreviewSources(scene) {
       await media.consumePreviewVideo(producerId, video, {
         ownProducerIds: { video: ownProducerId }
       });
-      sources.push({ videoEl: video });
+      await waitForVideoDimensions(video);
+      sources.push({ videoEl: video, ...slotPayload });
     } catch (_) {
-      sources.push({ stream: null });
+      sources.push({ stream: null, ...slotPayload });
     }
   }
 
@@ -2424,15 +3026,26 @@ async function applyStudioPreview(sceneId) {
   const scene = sceneId ? studio.getScene(sceneId) : studio.getPreviewScene();
   if (!scene || !scene.slots.length) {
     stopStudioPreviewCompositor();
+    studioLastPreviewKey = '';
     if (studioUi.previewVideo) {
       studioUi.previewVideo.hidden = true;
       studioUi.previewVideo.srcObject = null;
     }
     if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
     if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
+    if (studioUi.transformOverlay) studioUi.transformOverlay.hidden = true;
     if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+    studioTransformEditor?.refresh?.();
     return;
   }
+
+  studio.applyLayoutFramesToScene(scene.id);
+  const previewKey = `${scene.id}:${scene.layout}:${getStudioPreviewKey(scene)}`;
+  if (previewKey === studioLastPreviewKey && studioPreviewCompositor) {
+    studioTransformEditor?.refresh?.();
+    return;
+  }
+  studioLastPreviewKey = previewKey;
 
   stopStudioPreviewCompositor();
   const sources = await buildStudioPreviewSources(scene);
@@ -2440,23 +3053,26 @@ async function applyStudioPreview(sceneId) {
   if (!validCount) {
     if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
     if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
+    if (studioUi.transformOverlay) studioUi.transformOverlay.hidden = true;
     if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
+    studioTransformEditor?.refresh?.();
     return;
   }
 
-  const frame = studioUi.previewCanvas?.parentElement;
-  const w = frame?.clientWidth ? Math.max(320, frame.clientWidth) : 640;
-  const h = Math.round((w * 9) / 16);
+  const dims = getStudioCompositorSize(sources);
+  const useCompositor = sceneNeedsCompositor(scene);
 
-  if (scene.slots.length === 1 && sources[0]?.videoEl) {
+  if (!useCompositor && scene.slots.length === 1 && sources[0]?.videoEl) {
     const stream = sources[0].videoEl.srcObject;
     if (studioUi.previewVideo && stream) {
       studioUi.previewVideo.srcObject = stream;
       studioUi.previewVideo.hidden = false;
       studioUi.previewCanvas.hidden = true;
       studioUi.previewEmpty.hidden = true;
+      if (studioUi.transformOverlay) studioUi.transformOverlay.hidden = false;
       studioUi.previewVideo.play?.().catch(() => {});
       if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+      studioTransformEditor?.refresh?.();
       return;
     }
     if (sources[0]?.stream) {
@@ -2465,8 +3081,10 @@ async function applyStudioPreview(sceneId) {
         studioUi.previewVideo.hidden = false;
         studioUi.previewCanvas.hidden = true;
         studioUi.previewEmpty.hidden = true;
+        if (studioUi.transformOverlay) studioUi.transformOverlay.hidden = false;
         studioUi.previewVideo.play?.().catch(() => {});
         if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
+        studioTransformEditor?.refresh?.();
         return;
       }
     }
@@ -2476,20 +3094,31 @@ async function applyStudioPreview(sceneId) {
     canvas: studioUi.previewCanvas,
     sources,
     layout: scene.layout,
-    width: w,
-    height: h,
-    fps: 30
+    width: dims.width,
+    height: dims.height,
+    fps: 30,
+    ownerDocument: document
   });
 
   if (studioPreviewCompositor) {
     studioUi.previewCanvas.hidden = false;
     studioUi.previewVideo.hidden = true;
     studioUi.previewEmpty.hidden = true;
+    if (studioUi.transformOverlay) studioUi.transformOverlay.hidden = false;
     if (studioUi.btnTransition) studioUi.btnTransition.disabled = false;
   } else {
     if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = false;
     if (studioUi.btnTransition) studioUi.btnTransition.disabled = true;
   }
+  studioTransformEditor?.refresh?.();
+}
+
+function scheduleApplyStudioPreview(sceneId) {
+  if (studioPreviewApplyTimer) clearTimeout(studioPreviewApplyTimer);
+  studioPreviewApplyTimer = setTimeout(() => {
+    studioPreviewApplyTimer = null;
+    applyStudioPreview(sceneId);
+  }, 80);
 }
 
 function renderStudioSceneList() {
@@ -2511,19 +3140,28 @@ function renderStudioSceneList() {
 function renderStudioSlotList() {
   if (!studioUi?.slotList) return;
   const scene = studio.getEditingScene();
+  const selectedPeerId = studio.getSelectedSlotPeerId();
   studioUi.slotList.innerHTML = '';
   if (!scene) return;
   scene.slots.forEach((slot, index) => {
     const li = document.createElement('li');
     li.className = 'studio-slot-item';
+    if (String(slot.peerId) === String(selectedPeerId)) li.classList.add('is-selected');
     const label = document.createElement('span');
     label.textContent = `${index + 1}. ${slot.label || slot.peerId}`;
+    label.style.cursor = 'pointer';
+    label.addEventListener('click', () => {
+      studio.setSelectedSlotPeerId(slot.peerId);
+      renderStudioSlotList();
+      studioTransformEditor?.refresh?.();
+    });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = 'Remover';
     btn.addEventListener('click', () => {
       studio.removeSlotFromEditingScene(slot.peerId);
-      applyStudioPreview(scene.id);
+      studioLastPreviewKey = '';
+      scheduleApplyStudioPreview(scene.id);
       renderStudioSlotList();
       renderStudioSceneEditor();
     });
@@ -2561,67 +3199,34 @@ function refreshStudioUi() {
   studio.syncSlotProducerIds(estado.clients);
   renderStudioSceneList();
   renderStudioSceneEditor();
-  renderStudioTransmissionCard();
-  renderStudioParticipantsList();
   syncStudioPopoutChrome();
   syncStudioProgramMirror();
   const preview = studio.getPreviewScene();
   if (preview && studio.isStudioModeEnabled()) {
-    applyStudioPreview(preview.id);
+    scheduleApplyStudioPreview(preview.id);
   }
+  studioTransformEditor?.refresh?.();
+  syncStudioCropModeUi();
 }
 
 function syncStudioPopoutChrome() {
   if (!studioUi?.root) return;
   const on = studio.isStudioModeEnabled();
   studioUi.root.classList.toggle('studio-mode-off', !on);
+  setPopoutControlsExpanded(popoutControlsExpanded);
   if (studioUi.modeToggle) studioUi.modeToggle.checked = on;
   if (studioUi.btnTransition) {
     studioUi.btnTransition.disabled = !on || !studio.getPreviewScene()?.slots?.length;
   }
-  if (studioUi.sourcesHint) {
-    studioUi.sourcesHint.textContent = on
-      ? 'Clique em uma fonte para adicionar à cena em edição.'
-      : 'Clique em uma fonte para ir ao ar imediatamente.';
-  }
-}
-
-function renderStudioTransmissionCard() {
-  if (!studioUi?.transmissionCard) return;
-  studioUi.transmissionCard.innerHTML = '';
-  const sel = estado.selecionado;
-  if (sel && sel.isProducing) {
-    studioUi.transmissionCard.appendChild(buildSourceCard(sel, () => {}, true));
-  } else {
-    const empty = document.createElement('div');
-    empty.className = 'hint-text';
-    empty.textContent = 'Nenhuma transmissao ativa';
-    studioUi.transmissionCard.appendChild(empty);
-  }
-}
-
-function handleStudioParticipantClick(peerId) {
-  if (studio.isStudioModeEnabled()) {
-    handleStudioAddParticipant(peerId);
-    return;
-  }
-  selecionar(peerId);
-}
-
-function renderStudioParticipantsList() {
-  if (!studioUi?.participantsList) return;
-  studioUi.participantsList.innerHTML = '';
-  if (!estado.clients.length) {
-    const li = document.createElement('li');
-    li.className = 'hint-text';
-    li.textContent = 'Nenhuma fonte conectada';
-    studioUi.participantsList.appendChild(li);
-    return;
-  }
-  for (const c of sortClientsForDisplay(estado.clients)) {
-    studioUi.participantsList.appendChild(
-      buildSourceCard(c, (id) => handleStudioParticipantClick(id), false)
-    );
+  if (!on) {
+    stopStudioPreviewCompositor();
+    if (studioUi.previewVideo) {
+      studioUi.previewVideo.hidden = true;
+      studioUi.previewVideo.srcObject = null;
+    }
+    if (studioUi.previewCanvas) studioUi.previewCanvas.hidden = true;
+    if (studioUi.previewEmpty) studioUi.previewEmpty.hidden = true;
+    if (studioUi.transformOverlay) studioUi.transformOverlay.hidden = true;
   }
 }
 
@@ -2631,7 +3236,7 @@ function handleStudioSceneClick(sceneId) {
   renderStudioSceneEditor();
   renderStudioSceneList();
   if (studio.isStudioModeEnabled()) {
-    applyStudioPreview(sceneId);
+    scheduleApplyStudioPreview(sceneId);
     syncStudioPopoutChrome();
     return;
   }
@@ -2641,42 +3246,52 @@ function handleStudioSceneClick(sceneId) {
 function getValidSceneSlots(scene) {
   if (!scene?.slots?.length) return [];
   return scene.slots.filter((slot) => {
-    const client = getClientByPeerId(slot.peerId);
-    const pid = slot.producerId || resolveClientProducerId(client);
-    if (hostPeerId && String(slot.peerId) === String(hostPeerId)) {
-      return (
-        media?.localScreenStream?.getVideoTracks?.()?.[0]?.readyState === 'live' ||
-        media?.hasVideoProducer?.() ||
-        media?.isSyntheticVideoActive?.()
-      );
-    }
-    return !!pid;
+    if (hostPeerId && String(slot.peerId) === String(hostPeerId)) return true;
+    return !!getClientByPeerId(slot.peerId);
   });
 }
 
-async function ensureSceneCompositor(scene, validSlots) {
+async function ensureSceneCompositor(scene, validSlots, { forProgram = false } = {}) {
   const snap = studio.getSnapshot();
   if (
+    !forProgram &&
     studioPreviewCompositor?.stream &&
     snap.previewSceneId === scene.id &&
-    validSlots.length > 1
+    validSlots.length >= 1
   ) {
     return studioPreviewCompositor;
   }
-  stopStudioPreviewCompositor();
+
+  if (forProgram) {
+    stopStudioProgramCompositor();
+  } else {
+    stopStudioPreviewCompositor();
+  }
+
+  studio.applyLayoutFramesToScene(scene.id);
   const sources = await buildStudioPreviewSources({ ...scene, slots: validSlots });
-  const frame = studioUi?.previewCanvas?.parentElement;
-  const w = frame?.clientWidth ? Math.max(640, frame.clientWidth) : 1280;
-  const h = Math.round((w * 9) / 16);
+  const dims = getStudioCompositorSize(sources);
+  const canvas = forProgram && STUDIO_COMPOSITOR_IN_MAIN
+    ? ensureStudioProgramCanvasHost()
+    : undefined;
+  const ownerDocument = forProgram && STUDIO_COMPOSITOR_IN_MAIN ? document : undefined;
+
   const comp = StudioCompositor.start({
+    canvas,
     sources,
     layout: scene.layout,
-    width: w,
-    height: h,
-    fps: 30
+    width: dims.width,
+    height: dims.height,
+    fps: 30,
+    ownerDocument
   });
   if (!comp?.stream) throw new Error('Falha ao compor cena multi-fonte');
-  studioPreviewCompositor = comp;
+
+  if (forProgram) {
+    studioProgramCompositor = comp;
+  } else {
+    studioPreviewCompositor = comp;
+  }
   return comp;
 }
 
@@ -2690,22 +3305,25 @@ async function goLiveScene(sceneId) {
     return;
   }
 
+  const needsCompositor = sceneNeedsCompositor(scene, validSlots);
+
   try {
-    if (validSlots.length === 1) {
+    if (validSlots.length === 1 && !needsCompositor) {
       if (media?.isSyntheticVideoActive?.()) {
         await media.stopSyntheticVideo();
         stopStudioProgramCompositor();
       }
       await selecionar(validSlots[0].peerId);
       studio.setProgramScene(scene.id);
+      startHostVideoWatchdog();
       refreshStudioUi();
       showToast('Cena no ar', 'success');
       return;
     }
 
-    const comp = await ensureSceneCompositor(scene, validSlots);
-    studioProgramCompositor = comp;
+    const comp = await ensureSceneCompositor(scene, validSlots, { forProgram: true });
     studioPreviewCompositor = null;
+    studioLastPreviewKey = '';
 
     await media.publishSyntheticVideoStream(comp.stream);
     try {
@@ -2722,6 +3340,7 @@ async function goLiveScene(sceneId) {
     studio.setProgramScene(scene.id);
     syncStudioProgramMirror();
     renderStudioSceneList();
+    startHostVideoWatchdog();
     showToast('Cena composta no ar', 'success');
   } catch (e) {
     errors.handle(e, 'studio-golive');
@@ -2741,24 +3360,16 @@ async function executeStudioTransition() {
 
 function handleStudioAddParticipant(peerId) {
   const client = getClientByPeerId(peerId);
-  if (!client) return;
+  if (!client?.id) return;
+
   const producerId = resolveClientProducerId(client);
-  const hasVideo =
-    (hostPeerId && String(peerId) === String(hostPeerId) && media?.localScreenStream?.getVideoTracks?.()?.[0]?.readyState === 'live') ||
-    !!producerId ||
-    client.isProducing ||
-    client.hasVideo;
-  if (!hasVideo) {
-    showToast('Esta fonte nao esta transmitindo tela', 'warn');
-    return;
-  }
   const scene = studio.getEditingScene();
   if (!scene) {
     studio.createScene({ name: 'Nova cena' });
   }
   const added = studio.addSlotToEditingScene({
     peerId,
-    producerId,
+    producerId: producerId || null,
     label: client.displayName || peerId
   });
   if (!added) {
@@ -2768,12 +3379,52 @@ function handleStudioAddParticipant(peerId) {
   const editing = studio.getEditingScene();
   if (editing) {
     studio.setPreviewScene(editing.id);
-    applyStudioPreview(editing.id);
+    if (studio.isStudioModeEnabled()) {
+      scheduleApplyStudioPreview(editing.id);
+    }
   }
   renderStudioSceneList();
   renderStudioSceneEditor();
+  renderLista();
   syncStudioPopoutChrome();
   showToast('Fonte adicionada à cena', 'info');
+}
+
+function syncStudioCropModeUi() {
+  if (studioUi?.btnCropMode) {
+    studioUi.btnCropMode.classList.toggle('is-active', studioCropMode);
+    studioUi.btnCropMode.setAttribute('aria-pressed', String(studioCropMode));
+  }
+}
+
+function handleStudioTransformChange(sceneId, peerId, patch) {
+  studio.updateSlotTransform(sceneId, peerId, patch);
+  studioLastPreviewKey = '';
+  scheduleApplyStudioPreview(sceneId);
+  renderStudioSlotList();
+}
+
+function initStudioTransformEditor() {
+  studioTransformEditor?.dispose?.();
+  if (!studioUi?.transformOverlay) return;
+  studioTransformEditor = createStudioTransformEditor({
+    container: studioUi.transformOverlay,
+    onChange: handleStudioTransformChange,
+    getScene: () => studio.getEditingScene(),
+    getSelectedPeerId: () => studio.getSelectedSlotPeerId(),
+    setSelectedPeerId: (peerId) => {
+      studio.setSelectedSlotPeerId(peerId);
+      renderStudioSlotList();
+      studioTransformEditor?.refresh?.();
+    },
+    getCropMode: () => studioCropMode,
+    setCropMode: (v) => {
+      studioCropMode = !!v;
+      syncStudioCropModeUi();
+      studioTransformEditor?.refresh?.();
+    }
+  });
+  studioTransformEditor.refresh();
 }
 
 function mountStudioPopoutShell(win) {
@@ -2783,12 +3434,58 @@ function mountStudioPopoutShell(win) {
     return null;
   }
   const node = tpl.content.firstElementChild.cloneNode(true);
-  win.document.body.insertBefore(node, win.document.body.firstChild);
-  studioPopoutRoot = node;
+  win.document.body.appendChild(node);
+  studioPopoutRoot = node.querySelector('#studio-popout-root') || node;
   studioUi = getStudioUiFromPopout(win);
+  setPopoutControlsExpanded(false);
 
-  const snap = studio.getSnapshot();
   syncStudioPopoutChrome();
+  initStudioTransformEditor();
+
+  studioUi?.btnExpandControls?.addEventListener('click', () => {
+    setPopoutControlsExpanded(!popoutControlsExpanded);
+    syncStudioPopoutChrome();
+  });
+
+  studioUi?.btnCropMode?.addEventListener('click', () => {
+    studioCropMode = !studioCropMode;
+    syncStudioCropModeUi();
+    studioTransformEditor?.refresh?.();
+  });
+
+  studioUi?.btnResetSlot?.addEventListener('click', () => {
+    const editing = studio.getEditingScene();
+    const peerId = studio.getSelectedSlotPeerId() || editing?.slots?.[0]?.peerId;
+    if (!editing || !peerId) return;
+    studio.resetSlotTransform(editing.id, peerId);
+    studioLastPreviewKey = '';
+    scheduleApplyStudioPreview(editing.id);
+    studioTransformEditor?.refresh?.();
+  });
+
+  win.document.addEventListener('keydown', (e) => {
+    if (!studio.isStudioModeEnabled()) return;
+    if (e.target?.matches('input, textarea, select')) return;
+    if (e.key === 'Escape') {
+      studio.setSelectedSlotPeerId(null);
+      renderStudioSlotList();
+      studioTransformEditor?.refresh?.();
+    } else if (e.key === 'r' || e.key === 'R') {
+      studioUi?.btnResetSlot?.click();
+    } else if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      studioCropMode = true;
+      syncStudioCropModeUi();
+      studioTransformEditor?.refresh?.();
+    }
+  });
+
+  win.document.addEventListener('keyup', (e) => {
+    if (e.key === 'Alt') {
+      studioCropMode = !!studioUi?.btnCropMode?.classList.contains('is-active');
+      syncStudioCropModeUi();
+      studioTransformEditor?.refresh?.();
+    }
+  });
 
   studioUi?.modeToggle?.addEventListener('change', () => {
     studio.setStudioModeEnabled(!!studioUi.modeToggle.checked);
@@ -2800,19 +3497,11 @@ function mountStudioPopoutShell(win) {
       clearInterval(studioProgramMirrorId);
       studioProgramMirrorId = null;
     }
-    try {
-      controlsPopoutWindow.document.title = studio.isStudioModeEnabled()
-        ? 'Studio — ShareScreen'
-        : 'Controles — ShareScreen';
-    } catch (_) {}
+    setPopoutControlsExpanded(popoutControlsExpanded);
     refreshStudioUi();
   });
 
   studioUi?.btnTransition?.addEventListener('click', () => executeStudioTransition());
-  studioUi?.btnStop?.addEventListener('click', () => els.btnLimpar?.click());
-  studioUi?.btnPause?.addEventListener('click', () => els.btnPlayPause?.click());
-  studioUi?.btnRecord?.addEventListener('click', () => els.btnRecordingToggle?.click());
-  studioUi?.btnMute?.addEventListener('click', () => els.btnMuteAudio?.click());
 
   studioUi?.btnNew?.addEventListener('click', () => {
     studio.createScene({ name: `Cena ${studio.getSnapshot().scenes.length + 1}` });
@@ -2848,7 +3537,10 @@ function mountStudioPopoutShell(win) {
     const editing = studio.getEditingScene();
     if (editing) {
       studio.updateScene(editing.id, { layout: studioUi.sceneLayout.value });
-      applyStudioPreview(editing.id);
+      studio.applyLayoutFramesToScene(editing.id);
+      studioLastPreviewKey = '';
+      scheduleApplyStudioPreview(editing.id);
+      studioTransformEditor?.refresh?.();
     }
   });
 
@@ -2869,6 +3561,14 @@ function teardownStudioPopout() {
     clearInterval(studioProgramMirrorId);
     studioProgramMirrorId = null;
   }
+  if (studioPreviewApplyTimer) {
+    clearTimeout(studioPreviewApplyTimer);
+    studioPreviewApplyTimer = null;
+  }
+  studioTransformEditor?.dispose?.();
+  studioTransformEditor = null;
+  studioCropMode = false;
+  studioLastPreviewKey = '';
   stopStudioPreviewCompositor();
   stopStudioProgramCompositor();
   media?.closePreviewConsumers?.().catch(() => {});
@@ -2945,14 +3645,88 @@ function isSidebarPoppedOut() {
   return !!(controlsPopoutWindow && !controlsPopoutWindow.closed);
 }
 
+function ensurePopoutExpandButtonInSidebar() {
+  const sidebar = els.sidebar;
+  const actions = sidebar?.querySelector('.sidebar-actions');
+  if (!actions) return;
+  const doc = sidebar.ownerDocument;
+  let btn = doc.getElementById('btn-sidebar-popout-expand');
+  if (!btn) {
+    btn = doc.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btn-sidebar-popout-expand';
+    btn.className = 'sidebar-icon-btn';
+    btn.setAttribute('aria-label', 'Expandir controles avançados');
+    btn.title = 'Expandir controles avançados';
+    btn.innerHTML = POPOUT_EXPAND_ICON;
+    btn.addEventListener('click', () => {
+      setPopoutControlsExpanded(!popoutControlsExpanded);
+      syncStudioPopoutChrome();
+    });
+    actions.insertBefore(btn, actions.firstChild);
+  }
+  syncPopoutExpandButtonInSidebar();
+}
+
+function syncPopoutExpandButtonInSidebar() {
+  const btn = els.sidebar?.ownerDocument?.getElementById('btn-sidebar-popout-expand');
+  if (!btn) return;
+  const show = isSidebarPoppedOut() && !popoutControlsExpanded;
+  btn.hidden = !show;
+}
+
+function removePopoutExpandButtonFromSidebar() {
+  els.sidebar?.ownerDocument?.getElementById('btn-sidebar-popout-expand')?.remove();
+}
+
+function isSidebarInMainDocument() {
+  const sidebar = els.sidebar;
+  if (!sidebar) return true;
+  return sidebar.ownerDocument === document && document.contains(sidebar);
+}
+
+function ensureSidebarDockedInMain() {
+  if (sidebarPopoutTransition || isSidebarPoppedOut()) return false;
+  if (isSidebarInMainDocument()) return false;
+  debugPopoutLog('A', 'host/app.js:ensureSidebarDockedInMain', 'restoring orphan sidebar to main', {
+    poppedOut: false,
+    sidebarOwnerIsMain: els.sidebar?.ownerDocument === document
+  });
+  return restoreSidebarFromPopout();
+}
+
+function moveSidebarToPopout(win) {
+  const sidebar = els.sidebar;
+  const layout = win?.document?.getElementById('popout-layout');
+  if (!sidebar || !layout) return false;
+
+  let placeholder = document.getElementById('sidebar-popout-placeholder');
+  if (!placeholder) {
+    placeholder = document.createElement('div');
+    placeholder.id = 'sidebar-popout-placeholder';
+    placeholder.hidden = true;
+    sidebar.parentNode?.insertBefore(placeholder, sidebar);
+  }
+
+  sidebar.classList.remove('is-collapsed');
+  sidebar.hidden = false;
+  layout.insertBefore(sidebar, layout.firstChild);
+  ensurePopoutExpandButtonInSidebar();
+  debugPopoutLog('C', 'host/app.js:moveSidebarToPopout', 'sidebar moved', {
+    layoutFound: true,
+    sidebarInPopout: sidebar.ownerDocument === win.document
+  });
+  return true;
+}
+
 function restoreSidebarFromPopout() {
   const sidebar = els.sidebar;
-  if (!sidebar || !controlsPopoutWindow) return false;
-  try {
-    if (!controlsPopoutWindow.document?.body?.contains(sidebar)) return false;
-  } catch {
-    return false;
+  if (!sidebar) return false;
+
+  if (sidebar.ownerDocument === document && document.contains(sidebar)) {
+    return true;
   }
+
   const placeholder = document.getElementById('sidebar-popout-placeholder');
   if (placeholder?.parentNode) {
     placeholder.parentNode.insertBefore(sidebar, placeholder);
@@ -2960,6 +3734,7 @@ function restoreSidebarFromPopout() {
   } else {
     els.appMain?.appendChild(sidebar);
   }
+  removePopoutExpandButtonFromSidebar();
   return true;
 }
 
@@ -2975,27 +3750,42 @@ function applySidebarDockedLayout() {
 }
 
 function finalizePopoutDock({ skipClosePopup = false } = {}) {
-  if (controlsPopoutWatchId) {
-    clearInterval(controlsPopoutWatchId);
-    controlsPopoutWatchId = null;
-  }
+  const popoutWin = controlsPopoutWindow;
+  const needsDock = !!popoutWin || !isSidebarInMainDocument();
+  if (!needsDock) return;
 
-  teardownStudioPopout();
-  if (els.sidebar && !sidebarHiddenForPopout) {
-    els.sidebar.hidden = false;
-  }
-  sidebarHiddenForPopout = false;
-  document.getElementById('sidebar-popout-placeholder')?.remove();
-  restoreFullscreenToSidebar();
-  applySidebarDockedLayout();
-  syncPopoutControlsUi(false);
+  sidebarPopoutTransition = true;
+  try {
+    debugPopoutLog('D', 'host/app.js:finalizePopoutDock', 'dock called', {
+      skipClosePopup: !!skipClosePopup,
+      hadPopout: !!popoutWin
+    });
+    if (controlsPopoutWatchId) {
+      clearInterval(controlsPopoutWatchId);
+      controlsPopoutWatchId = null;
+    }
 
-  if (!skipClosePopup && controlsPopoutWindow && !controlsPopoutWindow.closed) {
-    try {
-      controlsPopoutWindow.close();
-    } catch (_) {}
+    controlsPopoutWindow = null;
+    teardownStudioPopout();
+    restoreSidebarFromPopout();
+    if (els.sidebar && !sidebarHiddenForPopout) {
+      els.sidebar.hidden = false;
+    }
+    sidebarHiddenForPopout = false;
+    removePopoutExpandButtonFromSidebar();
+    restoreFullscreenToSidebar();
+    applySidebarDockedLayout();
+    syncPopoutControlsUi(false);
+    renderLista();
+
+    if (!skipClosePopup && popoutWin && !popoutWin.closed) {
+      try {
+        popoutWin.close();
+      } catch (_) {}
+    }
+  } finally {
+    sidebarPopoutTransition = false;
   }
-  controlsPopoutWindow = null;
 }
 
 function dockControlsPopout(skipClosePopup = false) {
@@ -3031,7 +3821,7 @@ function openControlsPopout() {
   }
 
   const features =
-    'width=1000,height=900,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
+    `width=${POPOUT_WIDTH_BASIC},height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
   const win = window.open('about:blank', 'sharescreen-controls', features);
   if (!win) {
     showToast('Permita pop-ups para abrir os controles em nova janela', 'warn');
@@ -3039,36 +3829,52 @@ function openControlsPopout() {
   }
 
   setupPopoutDocument(win);
-  mountStudioPopoutShell(win);
-
   sidebarWasCollapsed = els.sidebar.classList.contains('is-collapsed');
   sidebarHiddenForPopout = !!els.sidebar.hidden;
-  els.sidebar.hidden = true;
-  moveFullscreenToPreview();
-
-  els.appMain?.classList.add('sidebar-popped-out');
-  els.appMain?.classList.remove('sidebar-open', 'sidebar-collapsed');
-
+  mountStudioPopoutShell(win);
+  sidebarPopoutTransition = true;
   controlsPopoutWindow = win;
-  win.document.title = studio.isStudioModeEnabled()
-    ? 'Studio — ShareScreen'
-    : 'Controles — ShareScreen';
-  syncPopoutControlsUi(true);
+  try {
+    if (!win.document.getElementById('popout-layout') || !moveSidebarToPopout(win)) {
+      controlsPopoutWindow = null;
+      teardownStudioPopout();
+      win.close();
+      showToast('Falha ao abrir painel de controles', 'error');
+      return;
+    }
 
-  if (!studioProgramMirrorId) {
-    studioProgramMirrorId = setInterval(syncStudioProgramMirror, 500);
+    moveFullscreenToPreview();
+
+    els.appMain?.classList.add('sidebar-popped-out');
+    els.appMain?.classList.remove('sidebar-open', 'sidebar-collapsed');
+
+    win.document.title = 'Controles — ShareScreen';
+    syncPopoutControlsUi(true);
+
+    debugPopoutLog('C,D', 'host/app.js:openControlsPopout', 'popout opened', {
+      popoutLayoutChildren: win.document.getElementById('popout-layout')?.childElementCount ?? 0,
+      sidebarInPopout: els.sidebar?.ownerDocument === win.document,
+      popoutBodyChildCount: win.document.body?.childElementCount ?? 0
+    });
+
+    if (!studioProgramMirrorId) {
+      studioProgramMirrorId = setInterval(syncStudioProgramMirror, 500);
+    }
+    renderLista();
+    refreshStudioUi();
+
+    win.addEventListener('beforeunload', () => {
+      finalizePopoutDock({ skipClosePopup: true });
+    });
+
+    watchPopoutClosed();
+  } finally {
+    sidebarPopoutTransition = false;
   }
-  refreshStudioUi();
-
-  win.addEventListener('beforeunload', () => {
-    finalizePopoutDock({ skipClosePopup: true });
-  });
-
-  watchPopoutClosed();
 }
 
 els.btnPopoutControls?.addEventListener('click', handlePopoutControlsClick);
-window.addEventListener('pagehide', dockControlsPopout);
+window.addEventListener('pagehide', () => dockControlsPopout());
 
 els.btnTech?.addEventListener('click', () => {
   const open = els.techDrawer.hidden;
@@ -3193,6 +3999,7 @@ els.btnHostMic?.addEventListener('click', () => onHostMicClick());
 
 window.addEventListener('sharescreen-ended', async () => {
   if (recorder.isRecording()) pararGravacao();
+  stopHostVideoWatchdog();
   try {
     await media?.stopVideoShare();
   } catch (_) {}
@@ -3466,10 +4273,18 @@ function setupSettingsInteraction() {
     }
   });
 }
+
+function updateHostSettingsAccountUi() {
+  bindLogoutControl({
+    wrapEl: document.getElementById('host-settings-account-wrap'),
+    labelEl: document.getElementById('host-auth-user-label'),
+    buttonEl: document.getElementById('btn-host-logout'),
+    user: authUser
+  });
+}
 const isHost = window.location.pathname.includes('/host') || !!document.getElementById('host-entry-modal');
 if (isHost) {
-  if (els.sidebar) els.sidebar.hidden = false;
-  els.appMain?.classList.add('sidebar-open');
+  setHostShellVisible(false);
   updateRecordingUi(RecordingState.IDLE);
   updateMuteButtonIcon();
   setupRecordingsDirInput();
@@ -3491,21 +4306,57 @@ let activeContextClient = null;
 let activeAudioFiltersClient = null;
 bindLtOverlayResize(els.previewArea);
 
-const liveAnnotation = createLiveAnnotation({
-  previewArea: els.previewArea,
-  videoEl: els.preview,
-  canvasEl: els.drawCanvas,
-  btnDraw: els.btnDraw,
-  btnRect: els.btnRect,
-  drawStack: els.drawStack,
-  getPeerId: () => hostPeerId,
-  getPeerName: () => hostDisplayName || 'Host',
-  onSegment: (payload) => {
-    if (signaling?.connected) signaling.send('anotacaoSegmento', payload);
+annotationToolbar = createAnnotationToolbar({
+  rootEl: els.annotationToolbar,
+  toggleEl: els.annotationToolbarToggle,
+  panelEl: els.annotationToolbarPanel,
+  colorEl: els.annotationColor,
+  widthEl: els.annotationWidth,
+  clearEl: els.annotationClear,
+  getCanClear: () => canClearWhiteboard(),
+  onToolChange: (tool) => {
+    drawingSurface?.syncDrawUi();
+  },
+  onClear: () => {
+    if (!canClearWhiteboard()) return;
+    signaling?.send('quadroBrancoLimpar');
+    whiteboardEngine?.clear();
+    drawingSurface?.clearPersistentOverlay();
   }
 });
 
-function applyLtOverlayForTransmission(_tx) {
+drawingSurface = createDrawingSurface({
+  previewArea: els.previewArea,
+  videoEl: els.preview,
+  canvasEl: els.drawCanvas,
+  getPeerId: () => hostPeerId,
+  getPeerName: () => hostDisplayName || 'Host',
+  getTool: () => annotationToolbar?.getTool(),
+  getColor: () => annotationToolbar?.getColor(),
+  getWidth: () => annotationToolbar?.getWidth(),
+  getMode: () => getDrawingMode(),
+  onSegment: (payload) => {
+    if (signaling?.connected) signaling.send('anotacaoSegmento', payload);
+  },
+  onElementCommit: (element) => {
+    if (signaling?.connected) signaling.send('quadroBrancoElemento', element);
+    handleWhiteboardElement(element);
+  }
+});
+
+els.btnQuadroBranco?.addEventListener('click', () => {
+  if (whiteboardActiveLocal || isWhiteboardTransmission(lastActiveTransmission)) {
+    stopWhiteboardTransmission({ notifyServer: true }).catch((e) => errors.handle(e, 'quadroBranco'));
+    return;
+  }
+  iniciarQuadroBranco();
+});
+
+function applyLtOverlayForTransmission(tx) {
+  if (tx?.sourceKind === 'whiteboard') {
+    hideLtOverlay();
+    return;
+  }
   hideLtOverlay();
 }
 
@@ -3578,12 +4429,12 @@ let originalAudioFilterPrefs = null;
 let saveTimeout = null;
 const sentAudioFilterKeys = new Map();
 
-function saveAudioFiltersPresetDebounced(name, prefs, kind = 'client') {
+function saveAudioFiltersPresetDebounced(name, prefs, kind = 'client', userId = null) {
   if (saveTimeout) clearTimeout(saveTimeout);
   const normalized = normalizeMicrophoneFilterPrefs(prefs);
   saveTimeout = setTimeout(() => {
     savePresetToLocalStorage(name, normalized);
-    saveAudioFilterPresetApi(kind, name, normalized).catch(() => {});
+    saveAudioFilterPresetApi(kind, name, normalized, userId).catch(() => {});
   }, 1000);
 }
 
@@ -3636,12 +4487,12 @@ async function syncPublishedAudioFiltersToClientsAsync(audioSources = []) {
 
     let stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
     if (displayName) {
-      const apiPreset = await fetchAudioFilterPresetApi('client', displayName);
+      const apiPreset = await fetchAudioFilterPresetApi('client', displayName, client?.userId || null);
       if (apiPreset?.prefs) {
         stored = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
         monitor.setFilterPrefs(id, stored);
       } else if (hasActiveMicrophoneFilter(stored)) {
-        saveAudioFilterPresetApi('client', displayName, stored).catch(() => {});
+        saveAudioFilterPresetApi('client', displayName, stored, client?.userId || null).catch(() => {});
       }
     }
 
@@ -3800,7 +4651,7 @@ function saveAudioFiltersModal() {
   const prefs = normalizeMicrophoneFilterPrefs(readAudioFilterPrefsFromUi());
   previewAudioFiltersFromUi();
   savePresetToLocalStorage(client.displayName, prefs);
-  saveAudioFilterPresetApi('client', client.displayName, prefs).catch(() => {});
+  saveAudioFilterPresetApi('client', client.displayName, prefs, client.userId || null).catch(() => {});
   showToast(`Filtros de audio atualizados para ${client.displayName}`, 'success');
   closeAudioFiltersModal(false);
 }
@@ -3974,7 +4825,7 @@ export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
   });
 
   signaling.addListener(coHostHandleMessage);
-  signaling.send('solicitarEstado', {});
+  requestRoomStateSync().catch((e) => errors.handle(e, 'cohost-state'));
 }
 
 const isHostPage = window.location.pathname.includes('/host');

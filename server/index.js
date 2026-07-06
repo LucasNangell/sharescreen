@@ -31,22 +31,32 @@ import {
   listAllClients,
   isDbReadonly,
   upsertClient,
-  updateClientIp,
   seedUsersFromJsonFile,
   seedUsersIfEmpty,
-  verifyDataDirWritable
+  verifyDataDirWritable,
+  listUserSettings,
+  setUserSetting,
+  getUserSetting
 } from './client-db.js';
 import { getClientIpFromRequest } from './client-ip.js';
-import { resolveComputerIp } from './user-resolve.js';
 import { room, getAgentDebugLogPath } from './room-manager.js';
 import { getDebugSessionRing, debugSessionLog } from './debug-session-log.js';
+import {
+  initAuth,
+  loginUser,
+  logoutUser,
+  resolveSessionUser,
+  setSessionCookie,
+  clearSessionCookie,
+  requireAuth,
+  optionalAuth,
+  requireAuthOrHostToken
+} from './auth-session.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
 const publicDir = path.join(rootDir, 'public');
 const isDev = process.argv.includes('--dev');
-const CLIENT_IP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
-let clientIpSyncRunning = false;
 
 function loadAppBuildId() {
   try {
@@ -103,32 +113,10 @@ function registerDevAdminRoutes(app) {
 
   app.post('/api/admin/users/resolve-ips', async (_req, res) => {
     applyNoStoreHeaders(res);
-    const users = listAllClients();
-    const results = [];
-    for (const user of users) {
-      if (!user.computerName) {
-        results.push({ name: user.name, ok: false, erro: 'Sem computer name' });
-        continue;
-      }
-      const resolved = await resolveComputerIp(user.computerName);
-      if (!resolved.ok) {
-        results.push({ name: user.name, computerName: user.computerName, ...resolved });
-        continue;
-      }
-      if (resolved.ip !== user.ip) {
-        updateClientIp(user.name, resolved.ip);
-      }
-      results.push({
-        name: user.name,
-        computerName: user.computerName,
-        ok: true,
-        ip: resolved.ip,
-        previousIp: user.ip,
-        changed: resolved.ip !== user.ip,
-        method: resolved.method
-      });
-    }
-    res.json({ ok: true, results, users: listAllClients() });
+    res.status(410).json({
+      ok: false,
+      erro: 'Resolução de IP por computer name foi descontinuada. Use login com usuário e senha.'
+    });
   });
 
   app.post('/api/admin/seed', (_req, res) => {
@@ -187,105 +175,6 @@ function loadTlsOptions() {
   };
 }
 
-function writeJsonAscii(filePath, data) {
-  const json = `${JSON.stringify(data, null, 2)}\n`.replace(/[^\x00-\x7F]/g, (char) =>
-    `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
-  );
-  fs.writeFileSync(filePath, json, 'utf8');
-}
-
-function updateUsersJsonIp(usersJsonPath, computerName, ip) {
-  try {
-    if (!fs.existsSync(usersJsonPath)) return false;
-    const data = JSON.parse(fs.readFileSync(usersJsonPath, 'utf8'));
-    const users = Array.isArray(data.users) ? data.users : [];
-    const computer = String(computerName || '').trim().toUpperCase();
-    let changed = false;
-    for (const user of users) {
-      const currentComputer = String(user.computer_name || user.computerName || '').trim().toUpperCase();
-      if (currentComputer === computer && user.ip !== ip) {
-        user.ip = ip;
-        changed = true;
-      }
-    }
-    if (changed) writeJsonAscii(usersJsonPath, data);
-    return changed;
-  } catch (err) {
-    logger.warn('Nao foi possivel atualizar users.json no startup', {
-      computerName,
-      ip,
-      erro: err.message
-    });
-    return false;
-  }
-}
-
-async function syncClientIps(usersJsonPath, reason = 'manual') {
-  const users = listAllClients().filter((user) => user.computerName);
-  if (!users.length) return { checked: 0, changed: 0, failed: 0 };
-
-  let changed = 0;
-  let failed = 0;
-  for (const user of users) {
-    const resolved = await resolveComputerIp(user.computerName);
-    if (!resolved.ok) {
-      failed += 1;
-      logger.warn('Nao foi possivel atualizar IP do client', {
-        reason,
-        name: user.name,
-        computerName: user.computerName,
-        erro: resolved.erro
-      });
-      continue;
-    }
-    if (resolved.ip === user.ip) continue;
-
-    const dbResult = updateClientIp(user.name, resolved.ip);
-    const jsonChanged = updateUsersJsonIp(usersJsonPath, user.computerName, resolved.ip);
-    changed += 1;
-    logger.info('IP do client atualizado', {
-      reason,
-      name: user.name,
-      computerName: user.computerName,
-      previousIp: user.ip,
-      ip: resolved.ip,
-      method: resolved.method,
-      database: dbResult.ok,
-      usersJson: jsonChanged
-    });
-  }
-
-  return { checked: users.length, changed, failed };
-}
-
-async function runClientIpSync(usersJsonPath, reason = 'manual') {
-  if (clientIpSyncRunning) {
-    logger.warn('Verificacao de IPs dos clients ignorada porque outra execucao esta em andamento', { reason });
-    return { skipped: true };
-  }
-  clientIpSyncRunning = true;
-  try {
-    const result = await syncClientIps(usersJsonPath, reason);
-    logger.info('Verificacao de IPs dos clients concluida', { reason, ...result });
-    return result;
-  } catch (err) {
-    logger.error('Falha na verificacao de IPs dos clients', { reason, error: err.message });
-    return { ok: false, error: err.message };
-  } finally {
-    clientIpSyncRunning = false;
-  }
-}
-
-function scheduleClientIpSync(usersJsonPath) {
-  const timer = setInterval(() => {
-    runClientIpSync(usersJsonPath, 'periodic').catch((err) => {
-      logger.error('Falha inesperada no agendamento de IPs dos clients', { error: err.message });
-    });
-  }, CLIENT_IP_SYNC_INTERVAL_MS);
-  timer.unref?.();
-  logger.info('Verificacao periodica de IPs dos clients agendada', { intervalHours: 24 });
-  return timer;
-}
 function createApp() {
   const app = express();
   if (config.trustProxy) app.set('trust proxy', 1);
@@ -299,6 +188,65 @@ function createApp() {
   });
 
   app.use(express.json({ limit: '1mb' }));
+
+  app.post('/api/auth/login', (req, res) => {
+    applyNoStoreHeaders(res);
+    const { username, password } = req.body || {};
+    const result = loginUser(username, password);
+    if (!result.ok) {
+      res.status(401).json(result);
+      return;
+    }
+    setSessionCookie(res, req, result.sessionId);
+    res.json({ ok: true, user: result.user });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    applyNoStoreHeaders(res);
+    logoutUser(req);
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    applyNoStoreHeaders(res);
+    const user = resolveSessionUser(req);
+    if (!user) {
+      res.status(401).json({ ok: false, erro: 'Não autenticado' });
+      return;
+    }
+    res.json({ ok: true, user });
+  });
+
+  app.get('/api/user-settings', requireAuth, (req, res) => {
+    applyNoStoreHeaders(res);
+    const namespace = String(req.query.namespace || '').trim();
+    res.json({ ok: true, settings: listUserSettings(req.user.id, namespace) });
+  });
+
+  app.put('/api/user-settings/:namespace/:key', requireAuth, (req, res) => {
+    applyNoStoreHeaders(res);
+    const namespace = decodeURIComponent(req.params.namespace || '').trim();
+    const key = decodeURIComponent(req.params.key || '').trim();
+    const result = setUserSetting(req.user.id, namespace, key, req.body?.value);
+    if (!result.ok) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
+  });
+
+  app.get('/api/user-settings/:namespace/:key', requireAuth, (req, res) => {
+    applyNoStoreHeaders(res);
+    const namespace = decodeURIComponent(req.params.namespace || '').trim();
+    const key = decodeURIComponent(req.params.key || '').trim();
+    const setting = getUserSetting(req.user.id, namespace, key);
+    if (!setting) {
+      res.status(404).json({ ok: false, erro: 'Configuração não encontrada' });
+      return;
+    }
+    res.json({ ok: true, ...setting });
+  });
 
   app.get('/api/registro-cliente', (req, res) => {
     applyNoStoreHeaders(res);
@@ -365,25 +313,24 @@ function createApp() {
     res.json({ ok: true, lowerThird: lt });
   });
 
-  app.get('/api/audio-filter/:kind/:name', (req, res) => {
+  app.get('/api/audio-filter/:kind/:name', optionalAuth, (req, res) => {
     applyNoStoreHeaders(res);
+    const userId = String(req.query.userId || req.user?.id || '').trim() || null;
     const preset = getAudioFilterPreset(
       decodeURIComponent(req.params.kind || ''),
-      decodeURIComponent(req.params.name || '')
+      decodeURIComponent(req.params.name || ''),
+      userId
     );
     res.json({ ok: true, preset: preset || null });
   });
 
-  app.post('/api/audio-filter', express.json({ limit: '32kb' }), (req, res) => {
+  app.post('/api/audio-filter', requireAuthOrHostToken, express.json({ limit: '32kb' }), (req, res) => {
     applyNoStoreHeaders(res);
-    if (!validateRecordingUpload(req)) {
-      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-      return;
-    }
     const kind = String(req.body?.kind || '').trim();
     const name = String(req.body?.name || '').trim();
     const prefs = req.body?.prefs;
-    const result = saveAudioFilterPreset(kind, name, prefs);
+    const userId = String(req.body?.userId || req.user?.id || '').trim() || null;
+    const result = saveAudioFilterPreset(kind, name, prefs, userId);
     if (!result.ok) {
       res.status(400).json(result);
       return;
@@ -394,12 +341,9 @@ function createApp() {
   app.post(
     '/api/lower-third',
     express.raw({ type: ['video/webm', 'application/octet-stream'], limit: '256mb' }),
+    requireAuthOrHostToken,
     (req, res) => {
       applyNoStoreHeaders(res);
-      if (!validateRecordingUpload(req)) {
-        res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-        return;
-      }
       const clientName = String(req.headers['x-lt-client-name'] || '').trim();
       if (!clientName) {
         res.status(400).json({ ok: false, erro: 'Informe o client (x-lt-client-name)' });
@@ -458,18 +402,32 @@ function createApp() {
   });
 
   app.post('/api/client-debug', (req, res) => {
-    const { hypothesisId, location, message, data } = req.body || {};
+    const { hypothesisId, location, message, data, sessionId } = req.body || {};
     if (hypothesisId && location && message) {
       debugSessionLog(hypothesisId, location, message, data || {});
+      if (sessionId === '3a36be') {
+        try {
+          const log3a = path.join(__dirname, '..', 'debug-3a36be.log');
+          fs.appendFileSync(
+            log3a,
+            `${JSON.stringify({ sessionId, hypothesisId, location, message, data: data || {}, timestamp: Date.now() })}\n`
+          );
+        } catch (_) {}
+      }
+      if (sessionId === 'c3e9ac') {
+        try {
+          const c3Log = path.join(__dirname, '..', 'debug-c3e9ac.log');
+          fs.appendFileSync(
+            c3Log,
+            `${JSON.stringify({ sessionId, hypothesisId, location, message, data: data || {}, timestamp: Date.now() })}\n`
+          );
+        } catch (_) {}
+      }
     }
     res.json({ ok: true });
   });
 
-  app.post('/api/link-externo', (req, res) => {
-    if (!validateRecordingUpload(req)) {
-      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-      return;
-    }
+  app.post('/api/link-externo', requireAuthOrHostToken, (req, res) => {
     const nome = String(req.body?.nome || '').trim();
     if (!nome || nome.length > 64) {
       res.status(400).json({ ok: false, erro: 'Informe o nome do convidado (máx. 64 caracteres)' });
@@ -489,11 +447,7 @@ function createApp() {
     res.json({ ok: true, url, expiresInMs, nome });
   });
 
-  app.post('/api/browse-dir', (req, res) => {
-    if (!validateRecordingUpload(req)) {
-      res.status(403).json({ ok: false, erro: 'Não autorizado' });
-      return;
-    }
+  app.post('/api/browse-dir', requireAuthOrHostToken, (req, res) => {
     let targetPath = String(req.body?.path || '').trim();
     try {
       if (!targetPath) {
@@ -531,12 +485,9 @@ function createApp() {
 
   app.post(
     '/api/gravacao',
+    requireAuthOrHostToken,
     express.raw({ type: 'application/octet-stream', limit: '4gb' }),
     (req, res) => {
-      if (!validateRecordingUpload(req)) {
-        res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-        return;
-      }
       const filename = req.headers['x-recording-filename'];
       const customDir = req.headers['x-recording-dir'];
       const result = saveRecording(req.body, filename, customDir);
@@ -550,12 +501,9 @@ function createApp() {
 
   app.post(
     '/api/gravacao/chunk',
+    requireAuthOrHostToken,
     express.raw({ type: 'application/octet-stream', limit: '32mb' }),
     (req, res) => {
-      if (!validateRecordingUpload(req)) {
-        res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-        return;
-      }
       pruneOldUploads();
       const uploadId = req.headers['x-upload-id'];
       const chunkIndex = req.headers['x-chunk-index'];
@@ -565,11 +513,7 @@ function createApp() {
     }
   );
 
-  app.post('/api/gravacao/complete', (req, res) => {
-    if (!validateRecordingUpload(req)) {
-      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-      return;
-    }
+  app.post('/api/gravacao/complete', requireAuthOrHostToken, (req, res) => {
     const { uploadId, filename, customDir } = req.body || {};
     const assembled = assembleUpload(uploadId);
     if (!assembled.ok) {
@@ -584,11 +528,7 @@ function createApp() {
     res.json(result);
   });
 
-  app.post('/api/gravacao/stream/start', (req, res) => {
-    if (!validateRecordingUpload(req)) {
-      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-      return;
-    }
+  app.post('/api/gravacao/stream/start', requireAuthOrHostToken, (req, res) => {
     pruneStaleRecordingStreams();
     const { customDir } = req.body || {};
     const result = startRecordingStream({ customDir: customDir || '' });
@@ -597,12 +537,9 @@ function createApp() {
 
   app.post(
     '/api/gravacao/stream/chunk',
+    requireAuthOrHostToken,
     express.raw({ type: 'application/octet-stream', limit: '32mb' }),
     async (req, res) => {
-      if (!validateRecordingUpload(req)) {
-        res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-        return;
-      }
       const sessionId = req.headers['x-session-id'];
       const chunkIndex = req.headers['x-chunk-index'];
       const result = await appendRecordingStreamChunk(sessionId, chunkIndex, req.body);
@@ -610,11 +547,7 @@ function createApp() {
     }
   );
 
-  app.post('/api/gravacao/stream/finish', async (req, res) => {
-    if (!validateRecordingUpload(req)) {
-      res.status(403).json({ ok: false, erro: 'Token de host inválido' });
-      return;
-    }
+  app.post('/api/gravacao/stream/finish', requireAuthOrHostToken, async (req, res) => {
     const { sessionId, filename, incomplete } = req.body || {};
     const result = await finishRecordingStream(sessionId, filename || '', { incomplete: !!incomplete });
     if (!result.ok) {
@@ -664,6 +597,10 @@ async function main() {
   const usersJsonPath = path.join(rootDir, 'users.json');
   const dataWritable = verifyDataDirWritable();
   const seedResult = seedUsersIfEmpty(usersJsonPath);
+  const authSeed = initAuth({
+    usersJsonPath,
+    defaultUsersPassword: process.env.SHARESCREEN_DEFAULT_IMPORTED_PASSWORD || '12345'
+  });
   if (!dataWritable.ok || seedResult?.readonly || isDbReadonly()) {
     logger.error(
       'AVISO: data/ ou SQLite sem permissao de escrita — cadastro/LT/filtros de audio nao serao salvos no servidor. ' +
@@ -671,8 +608,16 @@ async function main() {
       { dataWritable, seedResult, dbReadonly: isDbReadonly() }
     );
   }
-  await runClientIpSync(usersJsonPath, 'startup');
-  scheduleClientIpSync(usersJsonPath);
+  if (authSeed?.ok && !authSeed.skipped) {
+    logger.info('Usuário admin inicial provisionado', { username: process.env.SHARESCREEN_ADMIN_USER || 'admin' });
+  }
+  if (authSeed?.ok && (authSeed.imported || authSeed.updated)) {
+    logger.info('Usuários do users.json sincronizados para login', {
+      imported: authSeed.imported || 0,
+      updated: authSeed.updated || 0,
+      total: authSeed.total || 0
+    });
+  }
   debugSessionLog({
     runId: 'post-fix',
     hypothesisId: 'H3',
