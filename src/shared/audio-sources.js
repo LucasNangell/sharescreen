@@ -45,6 +45,7 @@ export function normalizeRemoteAudioSources(
     const producerId = raw?.producerId || raw?.producerIds?.audio;
     const source = normalizeAudioSource(raw?.source || 'microphone', 'microphone');
     if (!peerId || !producerId) continue;
+    if (excludedTypes.has(source)) continue;
     if (excludePeerId && String(peerId) === String(excludePeerId)) continue;
     if (byProducer.has(producerId)) continue;
     byProducer.set(producerId, {

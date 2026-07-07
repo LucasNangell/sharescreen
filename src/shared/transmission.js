@@ -179,7 +179,7 @@ export function roomSnapshotMediaKey(snapshot = {}) {
 /** Chave canônica só do vídeo ativo (sem áudio) — usada para troca de transmissão. */
 export function activeVideoTransmissionKey(transmission) {
   const t = normalizeTransmission(transmission);
-  return `${t.selectedPeerId || ''}:${t.producerIds?.video || ''}:${t.paused ? '1' : '0'}`;
+  return `${t.selectedPeerId || ''}:${t.producerIds?.video || ''}:${t.paused ? '1' : '0'}:${t.sourceKind || 'none'}`;
 }
 
 export function remoteVideoConsumeNeeded(

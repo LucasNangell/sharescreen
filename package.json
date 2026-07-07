@@ -13,6 +13,7 @@
     "build:prod": "node scripts/build-client.js --prod",
     "check": "node scripts/check-dev.js",
     "test:smoke": "node scripts/smoke-test.js",
+    "test:audio-policy": "node scripts/audio-policy-smoke.js",
     "cert": "node scripts/generate-cert.js",
     "cert:prod": "node scripts/generate-cert.js",
     "start": "node server/index.js",

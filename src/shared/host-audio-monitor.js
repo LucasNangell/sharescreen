@@ -8,31 +8,13 @@ import {
   audioTrace,
   normalizeRemoteAudioSources
 } from './audio-sources.js';
+import { resolvePlaybackSources } from './audio-policy.js';
 import {
   MIC_FILTER_DEFAULTS,
   combinedGateOpenThresholdDb,
   hasActiveMicrophoneFilter,
   normalizeMicrophoneFilterPrefs
 } from './mic-dsp.js';
-
-function sourcePriority(source) {
-  if (source === 'microphone') return 0;
-  if (source === 'system') return 1;
-  return 2;
-}
-
-function pickAntiEchoSources(list, { allowDualPeerAudio = false } = {}) {
-  if (allowDualPeerAudio) return list || [];
-  const byPeer = new Map();
-  for (const entry of list || []) {
-    const pid = String(entry.peerId);
-    const existing = byPeer.get(pid);
-    if (!existing || sourcePriority(entry.source) < sourcePriority(existing.source)) {
-      byPeer.set(pid, entry);
-    }
-  }
-  return [...byPeer.values()];
-}
 
 function loadPresetFromLocalStorage(name) {
   try {
@@ -133,6 +115,11 @@ export class HostAudioMonitor {
     );
     this.allChannelsRoutedToDest = false;
     this.allowDualPeerAudio = options.allowDualPeerAudio === true;
+    this.excludeSourceTypes = [...(options.excludeSourceTypes || [])];
+  }
+
+  setExcludeSourceTypes(types = []) {
+    this.excludeSourceTypes = [...(types || [])];
   }
 
   setPinnedPeerIds(peerIds = []) {
@@ -285,7 +272,8 @@ export class HostAudioMonitor {
     }
 
     for (const { ch, track } of liveChannels) {
-      const wantsDsp = this._hasAnyFilter(ch.peerId);
+      const channelKey = audioChannelKey(ch.peerId, ch.source);
+      const wantsDsp = ch.source !== 'system' && this._hasAnyFilter(channelKey);
       if (wantsDsp) {
         if (!ch.highpassNode) {
           this._clearChannelDsp(ch);
@@ -674,12 +662,11 @@ export class HostAudioMonitor {
       }
     }
 
-    const list = pickAntiEchoSources(
-      normalizeRemoteAudioSources(sources, {
-        excludePeerId: this.excludePeerId
-      }),
-      { allowDualPeerAudio: this.allowDualPeerAudio }
-    );
+    const list = resolvePlaybackSources(sources, {
+      excludePeerId: this.excludePeerId,
+      excludeSourceTypes: this.excludeSourceTypes,
+      allowDualPeerAudio: this.allowDualPeerAudio
+    });
 
     const wanted = new Map();
     for (const entry of list) {
@@ -783,9 +770,7 @@ export class HostAudioMonitor {
         sources.push({ peerId: c.id, producerId: ids.audio, source: 'microphone' });
       }
     }
-    return this.syncFromSources(
-      pickAntiEchoSources(sources, { allowDualPeerAudio: this.allowDualPeerAudio })
-    );
+    return this.syncFromSources(sources);
   }
 
   async _addChannel(channelKey, peerId, producerId, source = 'microphone', attempt = 0) {

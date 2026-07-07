@@ -203,6 +203,7 @@ let studioProgramCanvasHost = null;
 let hostVideoWatchdogId = null;
 let whiteboardEngine = null;
 let whiteboardActiveLocal = false;
+let lastWhiteboardServerElements = [];
 let lastTransmissionSourceKind = null;
 let drawingSurface = null;
 let annotationToolbar = null;
@@ -645,26 +646,15 @@ async function onHostAudioPrefsChange() {
     await media.ensureSendTransport();
     if (prefs.microphone) {
       await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
-      await media.publishMicrophone(prefs);
-    } else {
-      await media.stopMicrophone();
     }
-    if (media.hasVideoProducer?.() || media.localScreenStream) {
-      if (prefs.systemAudio !== false) {
-        await media.publishSystemAudioFromDisplay();
-      } else {
-        await media.stopSystemAudio();
-      }
-    } else if (!prefs.systemAudio) {
-      await media.stopSystemAudio();
-    }
+    await media.syncPublishedAudio(prefs);
     syncLocalHostVu();
     if (prefs.microphone && !media.hasPublishedMicrophone()) {
       showToast('Microfone nao publicado - verifique permissao do navegador', 'warn');
-    } else if (!prefs.microphone && !prefs.systemAudio) {
+    } else if (!prefs.microphone && prefs.systemAudio === false) {
       showToast('Audio desativado', 'info');
     } else if (!prefs.microphone) {
-      showToast('Microfone desativado - so audio do sistema', 'info');
+      showToast('Microfone desativado - so audio da aba/janela', 'info');
     } else if (media.hasPublishedMicrophone()) {
       showToast('Microfone atualizado', 'info');
     }
@@ -813,19 +803,28 @@ function updateQuadroBrancoUi() {
 function applyWhiteboardState(payload) {
   if (!payload) return;
   const elements = payload.elements || [];
+  lastWhiteboardServerElements = elements.slice();
   whiteboardEngine?.setElements(elements);
-  if (payload.active || isWhiteboardTransmission(lastActiveTransmission)) {
-    drawingSurface?.setPersistentElements(elements);
-  }
   whiteboardActiveLocal = !!payload.active;
   updateQuadroBrancoUi();
 }
 
 function handleWhiteboardElement(element) {
   whiteboardEngine?.addElement(element);
-  if (isWhiteboardTransmission(lastActiveTransmission)) {
-    drawingSurface?.receiveElement(element);
+}
+
+async function ensureWhiteboardEngineReady(elements = lastWhiteboardServerElements) {
+  if (whiteboardEngine?.stream) {
+    if (elements.length) whiteboardEngine.setElements(elements);
+    return whiteboardEngine;
   }
+  await media.ensureSendTransport();
+  whiteboardEngine = WhiteboardEngine.start({ width: 1920, height: 1080, fps: 30 });
+  if (elements.length) whiteboardEngine.setElements(elements);
+  await media.publishSyntheticVideoStream(whiteboardEngine.stream);
+  whiteboardActiveLocal = true;
+  updateQuadroBrancoUi();
+  return whiteboardEngine;
 }
 
 async function stopWhiteboardTransmission({ notifyServer = false } = {}) {
@@ -841,6 +840,7 @@ async function stopWhiteboardTransmission({ notifyServer = false } = {}) {
     await media.stopSyntheticVideo({ notifyServer: false });
   }
   whiteboardActiveLocal = false;
+  lastWhiteboardServerElements = [];
   drawingSurface?.clearPersistentOverlay();
   updateQuadroBrancoUi();
 }
@@ -866,6 +866,7 @@ async function iniciarQuadroBranco() {
     whiteboardActiveLocal = true;
     signaling.send('quadroBrancoIniciar');
     await selecionar(hostPeerId);
+    await bindHostSelfPreview(whiteboardEngine.stream);
     updateQuadroBrancoUi();
     showToast('Quadro branco ativo', 'success');
     startHostVideoWatchdog();
@@ -997,6 +998,21 @@ async function waitForVideoDimensions(videoEl, timeoutMs = 2500) {
     videoEl.addEventListener('loadeddata', done);
     videoEl.addEventListener('resize', done);
   });
+}
+
+async function bindHostSelfPreview(stream) {
+  if (!els.preview || !stream) return false;
+  const track = stream.getVideoTracks?.()?.[0];
+  if (!track || track.readyState !== 'live') return false;
+
+  if (els.preview.srcObject !== stream) {
+    els.preview.srcObject = stream;
+  }
+  try {
+    await els.preview.play();
+  } catch (_) {}
+  await waitForVideoDimensions(els.preview);
+  return track.readyState === 'live';
 }
 
 function getListaOwnerDocument() {
@@ -1227,6 +1243,7 @@ function ensureHostAudioMonitor() {
   if (!hostAudioMonitor) {
     hostAudioMonitor = new HostAudioMonitor(media, {
       excludePeerId: hostPeerId,
+      excludeSourceTypes: meetBridgeLiveMode ? ['system'] : [],
       onAutoplayBlocked: onHostRemoteAudioAutoplayBlocked
     });
     hostAudioMonitor.onLevels = updateCardVuMeters;
@@ -1251,9 +1268,16 @@ function mergeLastAudioSourcesFromEstado(payload = {}) {
 }
 
 function resolveHostAudioSources() {
-  const fromServer = normalizeRemoteAudioSources(lastAudioSources, { excludePeerId: hostPeerId });
+  const fromServer = normalizeRemoteAudioSources(lastAudioSources, hostAudioNormalizeOptions());
   if (fromServer.length) return fromServer;
   return buildHostAudioSources();
+}
+
+function hostAudioNormalizeOptions() {
+  return {
+    excludePeerId: hostPeerId,
+    excludeSourceTypes: meetBridgeLiveMode ? ['system'] : []
+  };
 }
 
 function countActiveHostAudioChannels(monitor) {
@@ -1681,7 +1705,11 @@ async function runTransmission(raw, gen = transmissionGeneration) {
   lastActiveTransmission = tx;
 
   if (prevKind === 'whiteboard' && tx.sourceKind !== 'whiteboard') {
-    stopWhiteboardTransmission({ notifyServer: false }).catch(() => {});
+    await stopWhiteboardTransmission({ notifyServer: false });
+  }
+
+  if (isWhiteboardTransmission(tx) && String(tx.selectedPeerId) === String(hostPeerId) && !whiteboardEngine) {
+    await ensureWhiteboardEngineReady(lastWhiteboardServerElements);
   }
 
   // Sync state selected
@@ -1734,8 +1762,13 @@ async function runTransmission(raw, gen = transmissionGeneration) {
     } else if (String(tx.selectedPeerId) === String(hostPeerId)) {
       await media?.closeActiveVideoConsumer({ videoEl: els.preview, notifyServer: true });
       let previewStream = null;
-      if (isWhiteboardTransmission(tx) && whiteboardEngine?.stream) {
-        previewStream = whiteboardEngine.stream;
+      if (isWhiteboardTransmission(tx)) {
+        if (whiteboardEngine?.stream) {
+          previewStream = whiteboardEngine.stream;
+        } else {
+          const engine = await ensureWhiteboardEngineReady(lastWhiteboardServerElements);
+          previewStream = engine?.stream || null;
+        }
       } else if (media?.isSyntheticVideoActive?.() && studioProgramCompositor?.stream) {
         previewStream = studioProgramCompositor.stream;
       } else if (media?.isSyntheticVideoActive?.() && media._syntheticStream) {
@@ -1743,21 +1776,20 @@ async function runTransmission(raw, gen = transmissionGeneration) {
       } else {
         previewStream = media?.localScreenStream;
       }
-      const localVideoTrack = previewStream?.getVideoTracks?.()?.[0];
-      if (els.preview && localVideoTrack?.readyState === 'live') {
-        if (els.preview.srcObject !== previewStream) {
-          els.preview.srcObject = previewStream;
-        }
-        els.preview.play?.().catch(() => {});
-      }
+      const previewBound = await bindHostSelfPreview(previewStream);
       applyLtOverlayForTransmission(tx);
-      ui.set({ hasPreview: true, isSharing: true });
+      if (isWhiteboardTransmission(tx)) {
+        drawingSurface?.clearPersistentOverlay();
+      }
+      ui.set({ hasPreview: previewBound, isSharing: previewBound });
       updatePreviewOverlays();
-      const statusMsg = isWhiteboardTransmission(tx)
-        ? 'Exibindo quadro branco'
-        : media?.isSyntheticVideoActive?.()
-          ? 'Exibindo cena composta'
-          : 'Exibindo sua tela';
+      const statusMsg = !previewBound
+        ? 'Preview indisponivel'
+        : isWhiteboardTransmission(tx)
+          ? 'Exibindo quadro branco'
+          : media?.isSyntheticVideoActive?.()
+            ? 'Exibindo cena composta'
+            : 'Exibindo sua tela';
       setStatus(statusMsg);
     } else {
       if (gen !== transmissionGeneration) return;
@@ -2328,6 +2360,7 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'quadroBrancoLimpar') {
+    lastWhiteboardServerElements = [];
     whiteboardEngine?.clear();
     drawingSurface?.clearPersistentOverlay();
     return;
@@ -2371,6 +2404,14 @@ function handleMessage(msg) {
       return;
     }
     window.location.href = `/client/?nome=${encodeURIComponent(hostDisplayName)}`;
+  }
+  if (msg.type === 'audioPolicyAplicada') {
+    if (media) {
+      media.applyAudioPolicyFromServer(msg.payload || {}).catch((e) =>
+        errors.handle(e, 'audio-policy')
+      );
+    }
+    return;
   }
   if (msg.type === 'fontesAudio') {
     const sources = msg.payload?.sources || [];
@@ -2523,6 +2564,7 @@ async function joinHost({ autoShare = true } = {}) {
 
     media = new MediaClient(signaling, {
       splitRecvTransports: true,
+      applyMicPublishChain: true,
       applyHostMicPublishChain: true,
       onLog: log,
       onIceState: (state) => {
@@ -4120,13 +4162,19 @@ function syncMeetBridgeLiveUi() {
 function applyMeetBridgeLiveModeFromRoom(ativo) {
   meetBridgeLiveMode = !!ativo;
   syncMeetBridgeLiveUi();
+  hostAudioMonitor?.setExcludeSourceTypes?.(meetBridgeLiveMode ? ['system'] : []);
+  lastAppliedAudioSig = '';
+  syncHostAudioMonitor(null, { force: true }).catch((e) => errors.handle(e, 'audio-sync'));
 }
 
 function sendMeetBridgeLiveMode(ativo) {
   meetBridgeLiveMode = !!ativo;
   syncMeetBridgeLiveUi();
+  hostAudioMonitor?.setExcludeSourceTypes?.(meetBridgeLiveMode ? ['system'] : []);
+  lastAppliedAudioSig = '';
   if (signaling && hostReady) {
     signaling.send('definirModoPonteMeet', { ativo: meetBridgeLiveMode });
+    syncHostAudioMonitor(null, { force: true }).catch((e) => errors.handle(e, 'audio-sync'));
   }
 }
 

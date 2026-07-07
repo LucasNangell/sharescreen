@@ -4,7 +4,7 @@
 import { startTrackLevelMeter } from './audio-level-meter.js';
 
 export const DEFAULT_CAPTURE_PREFS = {
-  systemAudio: true,
+  systemAudio: false,
   microphone: true,
   microphoneDeviceId: ''
 };
@@ -41,7 +41,7 @@ export function buildMicrophoneConstraints(deviceId = '', { disableAutoGainContr
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: !disableAutoGainControl,
-    channelCount: 2
+    channelCount: 1
   };
   if (deviceId) audio.deviceId = { ideal: deviceId };
   return { audio, video: false };

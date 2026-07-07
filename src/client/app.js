@@ -20,6 +20,7 @@ import {
 import { showToast } from '../shared/toast.js';
 import { HostAudioMonitor } from '../shared/host-audio-monitor.js';
 import { normalizeRemoteAudioSources, audioTraceSync, audioTrace, audioSourcesSignature } from '../shared/audio-sources.js';
+import { CLIENT_MIC_PUBLISH_DEFAULTS } from '../shared/mic-dsp.js';
 import { isSelectableSource, sortDisplaySources } from '../shared/display-sources.js';
 import { buildDisplaySourceCard } from '../shared/source-cards.js';
 import { ClientSession, SessionPhase, requestRoomStateWithRetry, joinPayloadExtras } from './session.js';
@@ -310,16 +311,11 @@ function getClientDrawingMode() {
 function applyClientWhiteboardState(payload, tx = txSync?.lastActiveTransmission) {
   if (!payload) return;
   clientWhiteboardActive = !!payload.active;
-  if (payload.active || isWhiteboardTransmission(tx)) {
-    drawingSurface?.setPersistentElements(payload.elements || []);
-  }
   annotationToolbar?.syncClearVisibility();
 }
 
-function handleClientWhiteboardElement(element) {
-  if (isWhiteboardTransmission(txSync?.lastActiveTransmission)) {
-    drawingSurface?.receiveElement(element);
-  }
+function handleClientWhiteboardElement(_element) {
+  // Elementos commitados aparecem apenas no video SFU — overlay so para traços em andamento.
 }
 
 function clientHasPreview() {
@@ -444,6 +440,7 @@ function applyLtOverlayForTransmission(tx) {
   }
   applyClientLocalPreview(tx);
   if (isWhiteboardTransmission(tx)) {
+    drawingSurface?.clearPersistentOverlay();
     drawingSurface?.syncDrawUi();
   } else {
     drawingSurface?.clearPersistentOverlay();
@@ -630,7 +627,7 @@ async function saveSettingsModal() {
   closeSettingsModal();
   if (sessionReady && media && !viewerOnly) {
     media
-      .syncPublishedAudio(prefs)
+      .syncPublishedAudio({ ...prefs, meetBridgeLiveMode })
       .then(() => {
         attachVuMeterIfNeeded();
         updateClientMicUi();
@@ -661,7 +658,8 @@ async function applyMeetBridgeLiveMode(ativo, { forceSync = true } = {}) {
   const next = !!ativo;
   if (next === meetBridgeLiveMode && !forceSync) return;
   meetBridgeLiveMode = next;
-  lastAppliedAudioSig = "";
+  roomAudioMonitor?.setExcludeSourceTypes?.(meetBridgeLiveMode ? ['system'] : []);
+  lastAppliedAudioSig = '';
   if (sessionReady && forceSync) {
     await syncClientAudioMonitor(lastAudioSources, { force: true }).catch((e) =>
       errors.handle(e, "audio-sync")
@@ -744,6 +742,7 @@ function ensureClientAudioMonitor() {
   if (!roomAudioMonitor) {
     roomAudioMonitor = new HostAudioMonitor(media, {
       excludePeerId: peerId,
+      excludeSourceTypes: meetBridgeLiveMode ? ['system'] : [],
       pinnedPeerIds: hostPeerId ? [hostPeerId] : [],
       onAutoplayBlocked: onRemoteAudioAutoplayBlocked
     });
@@ -1572,7 +1571,7 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
   if (sessionStarted && signaling?.connected && media?.hasVideoProducer?.()) {
     hideOverlay();
     signaling.send('atualizarNome', { nome });
-    media.syncPublishedAudio(getCapturePrefsFromUi()).catch((e) => errors.handle(e, 'audio-prefs'));
+    media.syncPublishedAudio({ ...getCapturePrefsFromUi(), meetBridgeLiveMode }).catch((e) => errors.handle(e, 'audio-prefs'));
     return;
   }
 
@@ -1732,11 +1731,15 @@ async function publishClientMedia(publishPrefs) {
     throw new Error('Falha ao publicar video - tente novamente');
   }
 
-  if (publishPrefs.microphone) {
-    await mediaPublisher.publishMicrophone(publishPrefs);
-  }
-  if (publishPrefs.systemAudio) {
-    await mediaPublisher.publishSystemAudio(clientDisplayStream, publishPrefs);
+  if (publishPrefs.microphone || publishPrefs.systemAudio) {
+    if (publishPrefs.microphone) {
+      const fallback = pendingMicrophoneFilterPrefs || CLIENT_MIC_PUBLISH_DEFAULTS;
+      await media.ensureMicPublishFilters(fallback);
+    }
+    await media.syncPublishedAudio(
+      { ...publishPrefs, meetBridgeLiveMode },
+      clientDisplayStream
+    );
   }
 
   const readyAck = await mediaPublisher.confirmMediaReady();
@@ -1997,6 +2000,7 @@ async function executeJoinAndStart() {
     setStatus('Preparando midia...');
     media = new MediaClient(signaling, {
       splitRecvTransports: true,
+      applyMicPublishChain: true,
       onLog: (m, l) => setStatus(m)
     });
     await media.loadDevice(payload.rtpCapabilities);
@@ -2004,6 +2008,9 @@ async function executeJoinAndStart() {
     await media.ensureRecvTransport();
     await media.ensureRecvTransport(media._audioRecvTag());
     await applyPendingMicrophoneFilters();
+    if (!pendingMicrophoneFilterPrefs) {
+      await media.ensureMicPublishFilters(CLIENT_MIC_PUBLISH_DEFAULTS);
+    }
 
     const deferShare = !viewerOnly && deferScreenShareOnJoin;
     deferScreenShareOnJoin = false;
@@ -2126,6 +2133,7 @@ async function rejoinSession() {
 
   media = new MediaClient(signaling, {
     splitRecvTransports: true,
+    applyMicPublishChain: true,
     onLog: (m, l) => setStatus(m)
   });
   await media.loadDevice(payload.rtpCapabilities);
@@ -2133,6 +2141,9 @@ async function rejoinSession() {
   await media.ensureRecvTransport();
   await media.ensureRecvTransport(media._audioRecvTag());
   await applyPendingMicrophoneFilters();
+  if (!pendingMicrophoneFilterPrefs) {
+    await media.ensureMicPublishFilters(CLIENT_MIC_PUBLISH_DEFAULTS);
+  }
 
   if (!viewerOnly) {
     await media.ensureSendTransport();
@@ -2258,6 +2269,14 @@ async function handleServerMessage(msg) {
     if (media) {
       await media.setMicrophoneFilterPrefs(pendingMicrophoneFilterPrefs).catch((e) =>
         errors.handle(e, 'audio-filters')
+      );
+    }
+    return;
+  }
+  if (msg.type === 'audioPolicyAplicada') {
+    if (media) {
+      await media.applyAudioPolicyFromServer(msg.payload || {}).catch((e) =>
+        errors.handle(e, 'audio-policy')
       );
     }
     return;

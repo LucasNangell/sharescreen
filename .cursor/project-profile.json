@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "bootstrap-project-rules",
-  "generatedAt": "2026-07-06T14:27:00Z",
+  "generatedAt": "2026-07-07T17:34:00Z",
   "projectTypes": [
     "web-app",
     "realtime-streaming",
@@ -14,7 +14,7 @@
     "scripts/build-client.js": "a095e29436a7174fab347824fce45104fb281c89570d5daf50c57ad1026f0554",
     "start-dev.bat": "3fa79f0274eed3f32683ea6416068ca4d606943f443e93a9b941f25e01538994",
     "check-dev.bat": "1464dbaf94181d27ed8ed426a7ff6c59fad9773eb58bdf5cce376211a7c4a6aa",
-    "server/index.js": "d43beef6cfd3ec0a33056bd89693a1cbef40f758ff4f379ae28ca4237a76d01b"
+    "server/index.js": "ff477d80bee688449c292340388cc89dfab3388e05eb29f5d5f3c017c91bbff5"
   },
   "generatedRules": [
     ".cursor/rules/auto-project-core.mdc",
@@ -35,6 +35,6 @@
   ],
   "uncertainties": [
     "Nenhum pipeline CI/CD versionado foi encontrado em arquivos YAML no workspace.",
-    "Nao foi localizado script local de validacao Test-CursorProjectProfile.ps1 neste repositorio."
+    "Script Test-CursorProjectProfile.ps1 da skill apresenta erro de parsing em PowerShell 5.x ($relativePath:); validacao foi feita manualmente por comparacao de hashes."
   ]
 }

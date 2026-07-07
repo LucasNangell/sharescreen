@@ -60,10 +60,13 @@ const config = {
 
   audio: {
     enabled: true,
-    systemAudioDefault: true,
+    systemAudioDefault: false,
     microphoneDefault: true,
+    dualPublishPolicy: 'mic-wins',
     maxBitrate: 128_000,
-    hostMicPublishGain: 1.4,
+    micAudioBitrate: 48_000,
+    systemAudioBitrate: 96_000,
+    hostMicPublishGain: 1.2,
     hostMicCompressor: true,
     hostMicPeaking: true
   },
@@ -166,7 +169,10 @@ export function getVideoQualityForClients() {
     systemAudioDefault: config.audio?.systemAudioDefault !== false,
     microphoneDefault: !!config.audio?.microphoneDefault,
     maxAudioBitrate: config.audio?.maxBitrate ?? 128_000,
-    hostMicPublishGain: config.audio?.hostMicPublishGain ?? 1.4,
+    micAudioBitrate: config.audio?.micAudioBitrate ?? 48_000,
+    systemAudioBitrate: config.audio?.systemAudioBitrate ?? 96_000,
+    dualPublishPolicy: config.audio?.dualPublishPolicy || 'mic-wins',
+    hostMicPublishGain: config.audio?.hostMicPublishGain ?? 1.2,
     hostMicCompressor: config.audio?.hostMicCompressor !== false,
     hostMicPeaking: config.audio?.hostMicPeaking !== false,
     stunServers: config.stunServers,

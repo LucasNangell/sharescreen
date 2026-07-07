@@ -9,26 +9,37 @@ import {
   acquireMicrophoneTrack
 } from './audio-manager.js';
 import { normalizeAudioSource, parseAudioChannelKey, audioTrace } from './audio-sources.js';
+import {
+  applyTabCaptureAudioHints,
+  dualPublishPolicyFromQuality,
+  resolvePublishAudioSources,
+  stripMonitorSystemAudio
+} from './audio-policy.js';
 import { buildIceServers, hasTurnServers } from './ice-servers.js';
 import {
   MIC_FILTER_DEFAULTS,
   HOST_MIC_PUBLISH_DEFAULTS,
+  CLIENT_MIC_PUBLISH_DEFAULTS,
   normalizeMicrophoneFilterPrefs,
   hasActiveMicrophoneFilter,
   closeMicrophoneFilterGraph,
-  createMicrophoneFilterGraph
+  createMicrophoneFilterGraph,
+  microphoneFilterPrefsSignature
 } from './mic-dsp.js';
 
 /**
  * Sess?fio mediasoup: transports, produce, consume, cleanup e baixa lat?fincia.
  */
 export class MediaClient {
-  constructor(signaling, { onLog, onIceState, splitRecvTransports = false, applyHostMicPublishChain = false } = {}) {
+  constructor(signaling, { onLog, onIceState, splitRecvTransports = false, applyHostMicPublishChain = false, applyMicPublishChain = false } = {}) {
     this.signaling = signaling;
     this.onLog = onLog || (() => {});
     this.onIceState = onIceState || (() => {});
     this.splitRecvTransports = splitRecvTransports;
-    this.applyHostMicPublishChain = !!applyHostMicPublishChain;
+    this.applyMicPublishChain = !!(applyMicPublishChain || applyHostMicPublishChain);
+    this.micPublishDefaults = applyHostMicPublishChain
+      ? HOST_MIC_PUBLISH_DEFAULTS
+      : CLIENT_MIC_PUBLISH_DEFAULTS;
     this.device = null;
     this.sendTransport = null;
     this.recvTransport = null;
@@ -46,10 +57,12 @@ export class MediaClient {
     this.localScreenStream = null;
     this._micTrack = null;
     this._micFilterPrefs = normalizeMicrophoneFilterPrefs();
+    this._micFilterPrefsSig = microphoneFilterPrefsSignature(this._micFilterPrefs);
     this._micFilterGraph = null;
+    this._displaySurface = null;
     this.localMicTracks = [];
     this.videoQuality = {};
-    this.capturePrefs = { systemAudio: true, microphone: false };
+    this.capturePrefs = { systemAudio: false, microphone: false };
     this._producing = false;
     this._publishedMicMuted = false;
     this._mediaOps = Promise.resolve();
@@ -140,15 +153,27 @@ export class MediaClient {
 
   _resolvePublishMicFilterPrefs() {
     const user = normalizeMicrophoneFilterPrefs(this._micFilterPrefs);
-    if (!this.applyHostMicPublishChain) return user;
+    if (!this.applyMicPublishChain) return user;
     const q = this.videoQuality || {};
+    const defaults = this.micPublishDefaults || CLIENT_MIC_PUBLISH_DEFAULTS;
     return normalizeMicrophoneFilterPrefs({
-      ...HOST_MIC_PUBLISH_DEFAULTS,
-      gain: Number(q.hostMicPublishGain ?? HOST_MIC_PUBLISH_DEFAULTS.gain),
+      ...defaults,
+      gain: Number(q.hostMicPublishGain ?? defaults.gain),
       compressor: q.hostMicCompressor !== false,
       peaking: q.hostMicPeaking !== false,
       peakingGain: 2,
       ...user
+    });
+  }
+
+  _resolvedPublishPrefs(capturePrefs = {}, displayStream = null) {
+    const stream = displayStream ?? this.localScreenStream ?? null;
+    const displaySurface =
+      this._displaySurface || (stream ? stripMonitorSystemAudio(stream).displaySurface : null);
+    return resolvePublishAudioSources(capturePrefs, {
+      displaySurface,
+      dualPublishPolicy: dualPublishPolicyFromQuality(this.videoQuality),
+      meetBridgeLiveMode: !!capturePrefs.meetBridgeLiveMode
     });
   }
 
@@ -399,26 +424,22 @@ export class MediaClient {
       existing &&
       !existing.closed &&
       existing.track === audioTrack &&
-      existing.track?.readyState === 'live'
+      existing.track?.readyState === 'live' &&
+      key !== 'microphone'
     ) {
       return true;
     }
 
     if (existing && !existing.closed) {
-      if (key === 'microphone' && typeof existing.replaceTrack === 'function') {
-        await existing.replaceTrack({ track: audioTrack });
-        if (key === 'microphone' && this._publishedMicMuted) audioTrack.enabled = false;
-        return true;
-      }
       existing.close();
       this.producers[key] = null;
     }
 
-    const audioOpts = buildAudioProduceOptions(this.device, this.videoQuality);
+    const audioOpts = buildAudioProduceOptions(this.device, this.videoQuality, key);
     audioOpts.track = audioTrack;
     this.producers[key] = await this.sendTransport.produce({
       ...audioOpts,
-      appData: { source: key }
+      appData: { source: key, displaySurface: this._displaySurface || undefined }
     });
     audioTrace('producer criado', {
       source: key,
@@ -440,12 +461,12 @@ export class MediaClient {
 
     await this.ensureSendTransport();
 
-    let track = capturePrefs.prefetchedMicTrack || this._micTrack || null;
     const publishPrefs = this._resolvePublishMicFilterPrefs();
-    const micCaptureOptions =
-      this.applyHostMicPublishChain && hasActiveMicrophoneFilter(publishPrefs)
-        ? { disableAutoGainControl: true }
-        : {};
+    const needsAgcOff = this.applyMicPublishChain && hasActiveMicrophoneFilter(publishPrefs);
+    const micCaptureOptions = needsAgcOff ? { disableAutoGainControl: true } : {};
+
+    let track =
+      needsAgcOff ? null : capturePrefs.prefetchedMicTrack || this._micTrack || null;
     if (!track || track.readyState !== 'live') {
       track = await acquireMicrophoneTrack(
         capturePrefs.microphoneDeviceId || '',
@@ -474,11 +495,32 @@ export class MediaClient {
   }
 
   async setMicrophoneFilterPrefs(prefs) {
-    this._micFilterPrefs = normalizeMicrophoneFilterPrefs(prefs || {});
-    if (this.capturePrefs?.microphone && this._micTrack?.readyState === 'live') {
+    const next = normalizeMicrophoneFilterPrefs(prefs || {});
+    const nextSig = microphoneFilterPrefsSignature(next);
+    const changed = nextSig !== this._micFilterPrefsSig;
+    this._micFilterPrefs = next;
+    this._micFilterPrefsSig = nextSig;
+    if (this.capturePrefs?.microphone && this._micTrack?.readyState === 'live' && changed) {
       return this.publishMicrophone({ ...this.capturePrefs, microphone: true });
     }
     return true;
+  }
+
+  async ensureMicPublishFilters(fallbackPrefs = null) {
+    const fallback = fallbackPrefs || this.micPublishDefaults || CLIENT_MIC_PUBLISH_DEFAULTS;
+    if (!hasActiveMicrophoneFilter(this._micFilterPrefs)) {
+      await this.setMicrophoneFilterPrefs(fallback);
+    }
+    return this._micFilterPrefs;
+  }
+
+  applyAudioPolicyFromServer(payload = {}) {
+    const closed = payload?.closed || payload?.blocked;
+    if (closed === 'microphone') return this.stopMicrophone();
+    if (closed === 'system') return this.stopSystemAudio();
+    if (payload?.blocked === 'system') return this.stopSystemAudio();
+    if (payload?.blocked === 'microphone') return this.stopMicrophone();
+    return Promise.resolve(false);
   }
 
   async stopMicrophone() {
@@ -515,20 +557,28 @@ export class MediaClient {
     return false;
   }
 
-  /** Sincroniza microfone e ?fiudio do sistema conforme prefs (sem mixar). */
+  /** Sincroniza microfone e áudio do sistema conforme prefs (sem mixar). */
   async syncPublishedAudio(capturePrefs, displayStream = null) {
     this.setCapturePrefs(capturePrefs);
+    const resolved = this._resolvedPublishPrefs(capturePrefs, displayStream);
+    if (resolved.blockedReason === 'mic-wins' && capturePrefs.systemAudio !== false) {
+      this.onLog('Áudio da aba/janela omitido — microfone ativo (anti-eco)', 'info');
+    }
+    if (resolved.blockedReason === 'monitor-no-audio' && capturePrefs.systemAudio !== false) {
+      this.onLog('Áudio indisponível em tela inteira — use aba ou janela', 'warn');
+    }
+
     let micOk = true;
     let sysOk = true;
 
-    if (capturePrefs.microphone) {
-      micOk = await this.publishMicrophone(capturePrefs);
+    if (resolved.microphone) {
+      micOk = await this.publishMicrophone({ ...capturePrefs, microphone: true });
     } else if (this.hasPublishedMicrophone()) {
       await this.stopMicrophone();
     }
 
     const screenStream = displayStream ?? this.localScreenStream ?? null;
-    if (screenStream && capturePrefs.systemAudio !== false) {
+    if (screenStream && resolved.systemAudio) {
       sysOk = await this.publishSystemAudioFromDisplay(screenStream);
     } else if (this.hasPublishedSystemAudio()) {
       await this.stopSystemAudio();
@@ -579,6 +629,13 @@ export class MediaClient {
   async publishDisplayStream(displayStream, capturePrefs) {
     if (!displayStream) throw new Error('Nenhuma captura de tela fornecida');
 
+    const { displaySurface, systemAudioBlocked } = stripMonitorSystemAudio(
+      displayStream,
+      (message, level) => this.onLog(message, level)
+    );
+    this._displaySurface = displaySurface;
+    await applyTabCaptureAudioHints(displayStream);
+
     this.setCapturePrefs(capturePrefs);
     await this.ensureSendTransport();
 
@@ -628,15 +685,7 @@ export class MediaClient {
         await this.producers.video.requestKeyFrame();
       } catch (_) {}
 
-      if (capturePrefs.systemAudio !== false) {
-        await this.publishSystemAudioFromDisplay(displayStream);
-      } else {
-        await this.stopSystemAudio();
-      }
-
-      if (capturePrefs.microphone) {
-        await this.publishMicrophone(capturePrefs);
-      }
+      await this.syncPublishedAudio(capturePrefs, displayStream);
 
       this._producing = true;
       this.onLog('Tela compartilhada com sucesso', 'info');
@@ -1223,6 +1272,41 @@ export class MediaClient {
     }
   }
 
+  async restoreScreenVideoProducer() {
+    const videoTrack = this.localScreenStream?.getVideoTracks?.()?.find((t) => t.readyState === 'live');
+    if (!videoTrack) return false;
+
+    await this.ensureSendTransport();
+
+    if (this.producers.video && !this.producers.video.closed) {
+      if (typeof this.producers.video.replaceTrack === 'function') {
+        await this.producers.video.replaceTrack({ track: videoTrack });
+        try {
+          await this.producers.video.requestKeyFrame();
+        } catch (_) {}
+        this._producing = true;
+        return true;
+      }
+      this.producers.video.close();
+      this.producers.video = null;
+    }
+
+    try {
+      applyContentHint(videoTrack, this.videoQuality.contentHint || 'detail');
+      const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
+      videoOpts.track = videoTrack;
+      this.producers.video = await this.sendTransport.produce(videoOpts);
+      try {
+        await this.producers.video.requestKeyFrame();
+      } catch (_) {}
+      this._producing = true;
+      this.onLog('Producer de video restaurado a partir da captura de tela', 'info');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   async stopSyntheticVideo({ notifyServer = false } = {}) {
     if (!this._isSyntheticVideo) return;
     this._isSyntheticVideo = false;
@@ -1234,10 +1318,13 @@ export class MediaClient {
       }
       this._syntheticStream = null;
     }
-    if (this.producers.video && !this.producers.video.closed) {
+
+    const restored = await this.restoreScreenVideoProducer();
+    if (!restored && this.producers.video && !this.producers.video.closed) {
       this.producers.video.close();
       this.producers.video = null;
     }
+
     this._producing = this.hasVideoProducer();
     if (
       notifyServer &&

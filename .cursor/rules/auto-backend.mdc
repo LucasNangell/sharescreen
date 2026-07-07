@@ -12,6 +12,6 @@ alwaysApply: false
 
 - Entrada principal do backend e `server/index.js`; preservar inicializacao (`bootstrap-dev`, auth, mediasoup, sinalizacao e rotas HTTP/HTTPS).
 - APIs usam Express com payloads JSON e raw binario em endpoints de gravacao/lower-third; ao alterar contratos, manter validacoes e limites (`server/index.js`).
-- Sinalizacao em tempo real e WebRTC dependem de `attachSignaling` e configuracoes de ICE/portas em `config/default.js`; evitar alteracoes parciais que quebrem compatibilidade host/client.
+- Sinalizacao em tempo real e WebRTC passam por `attachSignaling` (`signaling.js`) e estado de sala/transmissao em `room-manager.js` (incl. `roomState` quando `useLegacyRoomSync` e false em `config/default.js`); evitar alteracoes parciais que quebrem compatibilidade host/client.
 - Seguranca de sessao e autorizacao passam por `auth-session.js` e middlewares `requireAuth*`; manter checagens nesses fluxos para rotas sensiveis.
 - Ajustes de runtime (host, portas, STUN/TURN, trust proxy, tokens) devem ficar em variaveis de ambiente e `config/default.js`, nao hardcoded em handlers.

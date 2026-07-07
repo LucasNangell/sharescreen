@@ -140,8 +140,9 @@ export function buildDisplayMediaConstraints(quality = {}) {
 export function buildDisplayConstraintsWithAudio(quality, wantSystemAudio) {
   const base = buildDisplayMediaConstraints(quality);
   if (wantSystemAudio) {
+    // exclude: áudio em aba/janela; não oferece áudio de sistema em tela inteira (Chrome)
     base.audio = true;
-    base.systemAudio = 'include';
+    base.systemAudio = 'exclude';
   }
   return base;
 }
@@ -190,8 +191,10 @@ export function buildVideoProduceOptions(track, device, quality = {}) {
   return opts;
 }
 
-export function buildAudioProduceOptions(device, quality = {}) {
-  const maxBitrate = quality.maxAudioBitrate ?? 128_000;
+export function buildAudioProduceOptions(device, quality = {}, source = 'microphone') {
+  const micBitrate = quality.micAudioBitrate ?? 48_000;
+  const sysBitrate = quality.systemAudioBitrate ?? quality.maxAudioBitrate ?? 96_000;
+  const maxBitrate = source === 'system' ? sysBitrate : micBitrate;
   const opts = {
     track: null,
     encodings: [{ maxBitrate }],

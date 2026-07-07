@@ -64,6 +64,47 @@ function producerSlot(kind, appData = {}) {
 
 const AUDIO_PRODUCER_SLOTS = ['microphone', 'system', 'mixed'];
 
+const AUDIO_SOURCE_PRIORITY = {
+  microphone: 0,
+  system: 1,
+  mixed: 2
+};
+
+function enforceDualPublishPolicy(peer, newSlot, room) {
+  const policy = config.audio?.dualPublishPolicy || 'mic-wins';
+  if (policy === 'allow-both' || !AUDIO_PRODUCER_SLOTS.includes(newSlot)) return null;
+
+  const newPri = AUDIO_SOURCE_PRIORITY[newSlot] ?? 2;
+  for (const slot of AUDIO_PRODUCER_SLOTS) {
+    if (slot === newSlot) continue;
+    const existing = peer.producers[slot];
+    if (!existing || existing.closed) continue;
+    const existingPri = AUDIO_SOURCE_PRIORITY[slot] ?? 2;
+    if (newPri < existingPri) {
+      room.closeProducer(peer, slot);
+      peer.send({
+        type: 'audioPolicyAplicada',
+        payload: { policy, kept: newSlot, closed: slot }
+      });
+      logger.info('[audio] política anti-eco: producer fechado', {
+        peerId: peer.id.slice(0, 8),
+        kept: newSlot,
+        closed: slot,
+        policy
+      });
+    } else if (newPri > existingPri) {
+      peer.send({
+        type: 'audioPolicyAplicada',
+        payload: { policy, kept: slot, blocked: newSlot }
+      });
+      const err = new Error(`Política de áudio (${policy}): ${slot} já ativo`);
+      err.code = 'AUDIO_POLICY_BLOCKED';
+      throw err;
+    }
+  }
+  return null;
+}
+
 function computeAudioSourcesSignature(sources) {
   const byProducer = new Map();
   for (const raw of sources || []) {
@@ -338,7 +379,12 @@ export class RoomManager {
   stopWhiteboard() {
     this.whiteboardActive = false;
     this._whiteboardSourcePeerId = null;
+    this.whiteboardElements = [];
     this.broadcastActiveProducer();
+    this.broadcastToRoom({
+      type: 'quadroBrancoLimpar',
+      payload: { ok: true }
+    });
     this.broadcastToRoom({
       type: 'quadroBrancoEstado',
       payload: this.buildWhiteboardStatePayload()
@@ -1041,6 +1087,9 @@ export class RoomManager {
 
   selectClient(peerId) {
     if (!peerId) {
+      if (this.whiteboardActive) {
+        this.stopWhiteboard();
+      }
       this.selectedPeerId = null;
       this.transmissionPaused = false;
       this.interrompidaPor = null;
@@ -1056,6 +1105,14 @@ export class RoomManager {
     }
     if (!peer.hasVideoProducer()) {
       return { ok: false, erro: 'Esta fonte nÃ£o estÃ¡ transmitindo tela' };
+    }
+
+    const wouldBeWhiteboard =
+      this.whiteboardActive &&
+      this._whiteboardSourcePeerId &&
+      String(peerId) === String(this._whiteboardSourcePeerId);
+    if (this.whiteboardActive && !wouldBeWhiteboard) {
+      this.stopWhiteboard();
     }
 
     this.selectedPeerId = peerId;
@@ -1295,6 +1352,9 @@ export class RoomManager {
 
     let producer;
     try {
+      if (AUDIO_PRODUCER_SLOTS.includes(slot)) {
+        enforceDualPublishPolicy(peer, slot, this);
+      }
       this.closeProducer(peer, slot);
 
       producer = await peer.sendTransport.produce({

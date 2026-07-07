@@ -66,7 +66,7 @@ export function createDrawingSurface({
   }
 
   function useFullArea() {
-    return isPersistent();
+    return false;
   }
 
   function getContentRect() {
@@ -231,7 +231,7 @@ export function createDrawingSurface({
   }
 
   function sendSegment({ final = false, points = null, text = null, fontSize = null } = {}) {
-    if (!onSegment || !strokeId) return;
+    if (isPersistent() || !onSegment || !strokeId) return;
     const stroke = strokes.get(strokeId);
     const type = normalizeShape(stroke?.type);
     const batch =
@@ -259,7 +259,7 @@ export function createDrawingSurface({
   }
 
   function flushSend(force = false) {
-    if (!strokeId || pendingPoints.length === 0) return;
+    if (isPersistent() || !strokeId || pendingPoints.length === 0) return;
     const now = Date.now();
     if (!force && now - lastSendAt < SEND_THROTTLE_MS) return;
     lastSendAt = now;
@@ -419,11 +419,13 @@ export function createDrawingSurface({
     const id = strokeId;
     const stroke = strokes.get(id);
     flushSend(true);
-    sendSegment({ final: true });
 
     if (isPersistent() && stroke) {
       onElementCommit?.(buildElementFromStroke(stroke, id));
+      strokes.delete(id);
+      redrawAll();
     } else {
+      sendSegment({ final: true });
       scheduleFade(id);
     }
 

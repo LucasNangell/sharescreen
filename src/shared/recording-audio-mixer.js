@@ -15,7 +15,10 @@ function matchesPeerFilter(peerId, restrictToPeerId) {
 
 function collectOwnAudioTracks(media, { excludeSystem = false } = {}) {
   const tracks = [];
-  if (!excludeSystem) {
+  const hasMic =
+    media?.producers?.microphone?.track?.readyState === 'live' ||
+    media?.getLocalMicrophoneTrack?.()?.readyState === 'live';
+  if (!excludeSystem && !hasMic) {
     addTrackOnce(tracks, media?.producers?.system?.track);
     addTrackOnce(tracks, media?.localScreenStream?.getAudioTracks?.()[0]);
   }

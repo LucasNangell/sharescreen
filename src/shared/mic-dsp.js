@@ -16,8 +16,12 @@ export const MIC_FILTER_DEFAULTS = {
   micCaptureDistance: 6
 };
 
+export function microphoneFilterPrefsSignature(prefs) {
+  return JSON.stringify(normalizeMicrophoneFilterPrefs(prefs || {}));
+}
+
 export const HOST_MIC_PUBLISH_DEFAULTS = {
-  gain: 1.4,
+  gain: 1.2,
   bass: 0,
   treble: 0,
   highpass: false,
@@ -33,7 +37,7 @@ export const HOST_MIC_PUBLISH_DEFAULTS = {
 };
 
 export const CLIENT_MIC_PUBLISH_DEFAULTS = {
-  gain: 1.2,
+  gain: 1.15,
   bass: 0,
   treble: 0,
   highpass: false,
