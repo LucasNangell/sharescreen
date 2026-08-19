@@ -581,6 +581,16 @@ const errors = new ErrorManager({
   onToast: (msg, type) => showToast(msg, type),
   onTechnicalLog: (msg, level) => log(msg, level)
 });
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    const msg = String(event.message || event.error?.message || '');
+    if (/resizeobserver|script error/i.test(msg)) return;
+    errors.handle(event.error || new Error(msg || 'Erro de script'), 'window.onerror');
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    errors.handle(event.reason || new Error('Promise rejeitada'), 'unhandledrejection');
+  });
+}
 const recorder = new RecordingClient({
   onLog: log,
   onStateChange: updateRecordingUi,
@@ -704,6 +714,8 @@ function formatRecordingBytes(bytes) {
 }
 
 function log(msg, level = 'info') {
+  if (level === 'error') console.error(msg);
+  else if (level === 'warn') console.warn(msg);
   if (!els.logs) return;
   const time = new Date().toLocaleTimeString('pt-BR');
   const line = document.createElement('div');
@@ -711,7 +723,6 @@ function log(msg, level = 'info') {
   line.textContent = `[${time}] ${msg}`;
   els.logs.prepend(line);
   while (els.logs.children.length > 150) els.logs.lastChild?.remove();
-  if (level === 'error') console.error(msg);
 }
 
 function setStatus(text) {
@@ -854,21 +865,44 @@ async function ensureWhiteboardEngineReady(elements = lastWhiteboardServerElemen
   return whiteboardEngine;
 }
 
+function resetAppliedTransmissionDedup() {
+  lastAppliedActiveVideoKey = '';
+  lastAppliedSnapshotKey = '';
+}
+
 async function stopWhiteboardTransmission({ notifyServer = false } = {}) {
-  const wasActive = whiteboardActiveLocal;
+  const wasActive = whiteboardActiveLocal || isWhiteboardTransmission(lastActiveTransmission);
   if (notifyServer && signaling?.connected && wasActive) {
     signaling.send('quadroBrancoParar');
   }
+
+  const syntheticActive = !!media?.isSyntheticVideoActive?.();
+  if (syntheticActive) {
+    await media.stopSyntheticVideo({ notifyServer: false });
+  }
+
   if (whiteboardEngine) {
     whiteboardEngine.stop();
     whiteboardEngine = null;
   }
-  if (media?.isSyntheticVideoActive?.() && wasActive) {
-    await media.stopSyntheticVideo({ notifyServer: false });
-  }
+
   whiteboardActiveLocal = false;
   lastWhiteboardServerElements = [];
   drawingSurface?.clearPersistentOverlay();
+  annotationToolbar?.setTool(null);
+  resetAppliedTransmissionDedup();
+
+  if (
+    notifyServer &&
+    signaling?.connected &&
+    signaling?.authenticated &&
+    !media?.hasVideoProducer?.()
+  ) {
+    try {
+      signaling.send('pararProducao', {});
+    } catch (_) {}
+  }
+
   updateQuadroBrancoUi();
 }
 
@@ -894,6 +928,7 @@ async function iniciarQuadroBranco() {
     signaling.send('quadroBrancoIniciar');
     await selecionar(hostPeerId);
     await bindHostSelfPreview(whiteboardEngine.stream);
+    annotationToolbar?.expandWithDefaultTool?.();
     updateQuadroBrancoUi();
     showToast('Quadro branco ativo', 'success');
     startHostVideoWatchdog();
@@ -920,15 +955,6 @@ function sortClientsForDisplay(clients) {
 }
 
 function getHostVideoStreamForStudio() {
-  const local = media?.localScreenStream;
-  const localTrack = local?.getVideoTracks?.()?.[0];
-  if (localTrack?.readyState === 'live') return local;
-
-  const producerTrack = media?.producers?.video?.track;
-  if (producerTrack?.readyState === 'live') {
-    return new MediaStream([producerTrack]);
-  }
-
   if (media?._syntheticStream) {
     const synTrack = media._syntheticStream.getVideoTracks?.()?.[0];
     if (synTrack?.readyState === 'live') return media._syntheticStream;
@@ -937,6 +963,15 @@ function getHostVideoStreamForStudio() {
   if (whiteboardEngine?.stream) {
     const wbTrack = whiteboardEngine.stream.getVideoTracks?.()?.[0];
     if (wbTrack?.readyState === 'live') return whiteboardEngine.stream;
+  }
+
+  const local = media?.localScreenStream;
+  const localTrack = local?.getVideoTracks?.()?.[0];
+  if (localTrack?.readyState === 'live') return local;
+
+  const producerTrack = media?.producers?.video?.track;
+  if (producerTrack?.readyState === 'live') {
+    return new MediaStream([producerTrack]);
   }
 
   if (studioProgramCompositor?.stream) {
@@ -1551,6 +1586,13 @@ function queueTransmission(raw) {
     .catch((e) => errors.handle(e, 'applyTransmission'));
 }
 
+function queueWhiteboardOp(fn, context = 'quadroBranco') {
+  transmissionWork = transmissionWork
+    .then(() => fn())
+    .catch((e) => errors.handle(e, context));
+  return transmissionWork;
+}
+
 function hasAnyClientAudio() {
   return estado.clients.some(
     (c) => c.hasAudio && String(c.id) !== String(hostPeerId)
@@ -1915,14 +1957,29 @@ async function runTransmission(raw, gen = transmissionGeneration) {
         previewStream = media?.localScreenStream;
       }
       const previewBound = await bindHostSelfPreview(previewStream);
+      let bound = previewBound;
+      if (!bound) {
+        resetAppliedTransmissionDedup();
+        const fallback =
+          whiteboardEngine?.stream ||
+          (media?.producers?.video?.track?.readyState === 'live'
+            ? new MediaStream([media.producers.video.track])
+            : null);
+        if (fallback && fallback !== previewStream) {
+          bound = await bindHostSelfPreview(fallback);
+        }
+      }
       applyLtOverlayForTransmission(tx);
       if (isWhiteboardTransmission(tx)) {
         drawingSurface?.clearPersistentOverlay();
+        if (!annotationToolbar?.getTool()) {
+          annotationToolbar?.expandWithDefaultTool?.();
+        }
       }
-      ui.set({ hasPreview: previewBound, isSharing: previewBound });
+      ui.set({ hasPreview: bound, isSharing: bound || !!media?.hasVideoProducer?.() });
       updatePreviewOverlays();
-      const statusMsg = !previewBound
-        ? 'Preview indisponivel'
+      const statusMsg = !bound
+        ? 'Preview indisponivel — recompartilhe a tela se a captura foi encerrada'
         : isWhiteboardTransmission(tx)
           ? 'Exibindo quadro branco'
           : media?.isSyntheticVideoActive?.()
@@ -2658,12 +2715,15 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'erro') {
-    const mensagem = msg.payload?.mensagem || '';
+    const payload = msg.payload || {};
+    const mensagem = payload.mensagem || payload.message || payload.erro || '';
     if (isTransientServerError(mensagem, { joinInProgress })) {
       log(mensagem || 'Erro transitorio', 'warn');
       return;
     }
-    errors.handleServerMessage(mensagem, 'servidor', { joinInProgress });
+    errors.handleServerMessage(mensagem || 'Erro do servidor sem mensagem', payload.tipo || 'servidor', {
+      joinInProgress
+    });
   }
 }
 
@@ -4258,6 +4318,19 @@ async function unlockHostRemoteAudio() {
 els.btnHostMic?.addEventListener('click', () => onHostMicClick());
 
 window.addEventListener('sharescreen-ended', async () => {
+  const syntheticActive = !!media?.isSyntheticVideoActive?.();
+  if (syntheticActive) {
+    try {
+      media.releaseLocalScreenStream?.();
+    } catch (_) {}
+    updateHostMicUi();
+    setStatus(
+      isWhiteboardTransmission(lastActiveTransmission)
+        ? 'Quadro branco ativo — captura de tela encerrada'
+        : 'Captura de tela encerrada'
+    );
+    return;
+  }
   if (recorder.isRecording()) pararGravacao();
   stopHostVideoWatchdog();
   try {
@@ -4623,6 +4696,8 @@ annotationToolbar = createAnnotationToolbar({
   widthEl: els.annotationWidth,
   clearEl: els.annotationClear,
   getCanClear: () => canClearWhiteboard(),
+  coupleToolWithExpansion: true,
+  defaultTool: 'stroke',
   onToolChange: (tool) => {
     drawingSurface?.syncDrawUi();
   },
@@ -4655,10 +4730,10 @@ drawingSurface = createDrawingSurface({
 
 els.btnQuadroBranco?.addEventListener('click', () => {
   if (whiteboardActiveLocal || isWhiteboardTransmission(lastActiveTransmission)) {
-    stopWhiteboardTransmission({ notifyServer: true }).catch((e) => errors.handle(e, 'quadroBranco'));
+    queueWhiteboardOp(() => stopWhiteboardTransmission({ notifyServer: true }));
     return;
   }
-  iniciarQuadroBranco();
+  queueWhiteboardOp(() => iniciarQuadroBranco());
 });
 
 function applyLtOverlayForTransmission(tx) {

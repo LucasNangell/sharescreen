@@ -460,6 +460,18 @@ export class RoomManager {
     return { ok: true };
   }
 
+  _stopWhiteboardIfSource(peerId) {
+    if (!this.whiteboardActive) return;
+    if (
+      this._whiteboardSourcePeerId &&
+      peerId &&
+      String(this._whiteboardSourcePeerId) !== String(peerId)
+    ) {
+      return;
+    }
+    this.stopWhiteboard();
+  }
+
   addWhiteboardElement(element) {
     const MAX_ELEMENTS = 500;
     if (this.whiteboardElements.length >= MAX_ELEMENTS) {
@@ -734,10 +746,10 @@ export class RoomManager {
   }
 
   setDisplayControl(peerId, ativo) {
-    if (!peerId) return { ok: false, erro: 'Client invÃ¡lido' };
+    if (!peerId) return { ok: false, erro: 'Client inválido' };
     const peer = this.peers.get(peerId);
     if (!peer || peer.role !== 'client') {
-      return { ok: false, erro: 'Client nÃ£o encontrado' };
+      return { ok: false, erro: 'Client não encontrado' };
     }
     if (!peer.hasVideoProducer()) {
       return { ok: false, erro: 'Apenas clients transmitindo podem receber controle' };
@@ -747,7 +759,7 @@ export class RoomManager {
     } else {
       this.displayControllerIds.delete(peerId);
     }
-    logger.info('Controle de exibiÃ§Ã£o atualizado', {
+    logger.info('Controle de exibição atualizado', {
       peerId,
       name: peer.displayName,
       ativo
@@ -764,11 +776,11 @@ export class RoomManager {
   }
 
   selectDisplaySource(peerId, actorPeer) {
-    if (!actorPeer) return { ok: false, erro: 'NÃ£o autenticado' };
+    if (!actorPeer) return { ok: false, erro: 'Não autenticado' };
     const isHost = actorPeer.role === 'host';
     const isDelegated = actorPeer.role === 'client' && this.canControlDisplay(actorPeer.id);
     if (!isHost && !isDelegated) {
-      return { ok: false, erro: 'Sem permissÃ£o para alternar a exibiÃ§Ã£o' };
+      return { ok: false, erro: 'Sem permissão para alternar a exibição' };
     }
     return this.selectClient(peerId);
   }
@@ -923,7 +935,7 @@ export class RoomManager {
 
     let audioSourcesChanged = false;
 
-    // Um painel host ativo â€” aba antiga deixa de receber atualizaÃ§Ãµes
+    // Um painel host ativo — aba antiga deixa de receber atualizações
     if (role === 'host') {
       for (const old of this.getHostPeers()) {
         if (old.ws === ws) continue;
@@ -932,6 +944,7 @@ export class RoomManager {
           old.ws?.close(4000, 'Novo painel host conectado');
         } catch (_) {}
         if (old.hasAudioProducer()) audioSourcesChanged = true;
+        this._stopWhiteboardIfSource(old.id);
         this.cleanupPeerMedia(old);
         if (this.selectedPeerId === old.id) {
           const alternative = [...this.peers.values()].find(
@@ -1045,6 +1058,7 @@ export class RoomManager {
 
     const isPrimaryHost = peer.role === 'host' && !peer.isCoHost;
 
+    this._stopWhiteboardIfSource(peerId);
     this.cleanupPeerMedia(peer);
 
     if (this.selectedPeerId === peerId) {
@@ -1118,7 +1132,7 @@ export class RoomManager {
       }
       peer.recvTransports?.clear();
     } catch (err) {
-      logger.warn('Erro ao limpar mÃ­dia do peer', { peerId: peer.id, err: err.message });
+      logger.warn('Erro ao limpar mídia do peer', { peerId: peer.id, err: err.message });
     } finally {
       peer.cleaningUpMedia = false;
     }
@@ -1128,6 +1142,7 @@ export class RoomManager {
   }
 
   stopAllProduction(peer) {
+    this._stopWhiteboardIfSource(peer?.id);
     const hadAudio = peer.hasAudioProducer();
     this.closeProducer(peer, 'video');
     for (const slot of AUDIO_PRODUCER_SLOTS) {
@@ -1178,10 +1193,10 @@ export class RoomManager {
 
     const peer = this.peers.get(peerId);
     if (!peer || (peer.role !== 'client' && peer.role !== 'host')) {
-      return { ok: false, erro: 'Fonte nÃ£o encontrada' };
+      return { ok: false, erro: 'Fonte não encontrada' };
     }
     if (!peer.hasVideoProducer()) {
-      return { ok: false, erro: 'Esta fonte nÃ£o estÃ¡ transmitindo tela' };
+      return { ok: false, erro: 'Esta fonte não está transmitindo tela' };
     }
 
     const wouldBeWhiteboard =
@@ -1197,7 +1212,7 @@ export class RoomManager {
     this.interrompidaPor = null;
     this.finalizadaPor = null;
     const ids = peer.getProducerIds();
-    logger.info('Fonte selecionada para retransmissÃ£o', {
+    logger.info('Fonte selecionada para retransmissão', {
       peerId,
       name: peer.displayName,
       producerIds: ids
@@ -1228,7 +1243,7 @@ export class RoomManager {
     }
     this.broadcastActiveProducer();
     this.notifyHostState();
-    logger.info('TransmissÃ£o pausada', { peerId: this.selectedPeerId });
+    logger.info('Transmissão pausada', { peerId: this.selectedPeerId });
     return { ok: true };
   }
 
@@ -1244,18 +1259,21 @@ export class RoomManager {
     }
     this.broadcastActiveProducer();
     this.notifyHostState();
-    logger.info('TransmissÃ£o retomada', { peerId: this.selectedPeerId });
+    logger.info('Transmissão retomada', { peerId: this.selectedPeerId });
     return { ok: true };
   }
 
   clearTransmission(actorPeer) {
+    if (this.whiteboardActive) {
+      this.stopWhiteboard();
+    }
     this.selectedPeerId = null;
     this.transmissionPaused = false;
     this.interrompidaPor = actorPeer ? actorPeer.displayName : 'Host';
     this.finalizadaPor = null;
     this.broadcastActiveProducer();
     this.notifyHostState();
-    logger.info('TransmissÃ£o limpa pelo host');
+    logger.info('Transmissão limpa pelo host');
     return { ok: true };
   }
 
@@ -1379,7 +1397,7 @@ export class RoomManager {
     const transport =
       direction === 'send' ? peer.sendTransport : this._findRecvTransport(peer, transportId);
     if (!transport || transport.id !== transportId) {
-      throw new Error('Transport invÃ¡lido');
+      throw new Error('Transport inválido');
     }
     await transport.connect({ dtlsParameters });
   }
@@ -1404,6 +1422,7 @@ export class RoomManager {
   }
 
   _onSelectedVideoLost(peer) {
+    this._stopWhiteboardIfSource(peer?.id);
     if (this.selectedPeerId !== peer.id) return;
     const fallback = [...this.peers.values()].find(
       (p) =>
@@ -1420,7 +1439,7 @@ export class RoomManager {
 
   async produce(peer, { transportId, kind, rtpParameters, appData }) {
     if (!peer.sendTransport || peer.sendTransport.id !== transportId) {
-      throw new Error('Transport de envio invÃ¡lido');
+      throw new Error('Transport de envio inválido');
     }
 
     const slot = producerSlot(kind, appData);
@@ -1558,7 +1577,7 @@ export class RoomManager {
     }
     const transport = peer.recvTransports.get(consumerTag) || peer.recvTransport;
     if (!transport) {
-      throw new Error('Transport de recepÃ§Ã£o nÃ£o criado');
+      throw new Error('Transport de recepção não criado');
     }
 
     const existing = [...peer.consumers.values()].find(
@@ -1605,7 +1624,7 @@ export class RoomManager {
   async resumeConsumer(peer, consumerId) {
     const consumer = peer.consumers.get(consumerId);
     if (!consumer) {
-      logger.warn('retomarConsumer: consumer jÃ¡ removido (ignorado)', {
+      logger.warn('retomarConsumer: consumer já removido (ignorado)', {
         peerId: peer.id,
         consumerId
       });

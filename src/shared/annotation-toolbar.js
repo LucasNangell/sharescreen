@@ -39,6 +39,16 @@ const TOOL_DEFS = [
   }
 ];
 
+const NEUTRAL_TOOL = TOOL_DEFS.find((d) => d.id === 'stroke') || TOOL_DEFS[0];
+
+function toolDef(toolId) {
+  return TOOL_DEFS.find((d) => d.id === toolId) || null;
+}
+
+function iconMarkup(svg, size = 20) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${svg}</svg>`;
+}
+
 /**
  * Barra de ferramentas colapsável para desenho/anotações.
  */
@@ -53,7 +63,9 @@ export function createAnnotationToolbar({
   onToolChange,
   onColorChange,
   onWidthChange,
-  onClear
+  onClear,
+  defaultTool = 'stroke',
+  coupleToolWithExpansion = false
 }) {
   /** @type {null | string} */
   let activeTool = null;
@@ -68,9 +80,10 @@ export function createAnnotationToolbar({
       btn.dataset.tool = def.id;
       btn.setAttribute('aria-label', def.label);
       btn.title = def.title;
-      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${def.svg}</svg>`;
+      btn.innerHTML = iconMarkup(def.svg, 18);
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (coupleToolWithExpansion && activeTool === def.id) return;
         setTool(activeTool === def.id ? null : def.id);
       });
       panelEl.appendChild(btn);
@@ -87,25 +100,69 @@ export function createAnnotationToolbar({
     }
   }
 
-  function setExpanded(next) {
-    expanded = !!next;
+  function renderToggleIcon() {
+    if (!toggleEl) return;
+    const def = toolDef(activeTool) || NEUTRAL_TOOL;
+    toggleEl.innerHTML = iconMarkup(def.svg, 20);
+    const hasTool = activeTool !== null;
+    toggleEl.classList.toggle('is-tool-active', hasTool);
+    toggleEl.setAttribute('aria-pressed', String(hasTool));
+    if (!hasTool) {
+      toggleEl.title = expanded ? 'Recolher ferramentas' : 'Ferramentas de desenho';
+    } else {
+      toggleEl.title = expanded ? `Recolher (${def.title})` : def.title;
+    }
+    toggleEl.setAttribute('aria-label', hasTool ? def.title : 'Ferramentas de desenho');
+  }
+
+  function setExpanded(next, { fromToggle = false } = {}) {
+    const want = !!next;
+    expanded = want;
     if (rootEl) {
       rootEl.classList.toggle('is-collapsed', !expanded);
       rootEl.classList.toggle('is-expanded', expanded);
     }
     if (toggleEl) {
       toggleEl.setAttribute('aria-expanded', String(expanded));
-      toggleEl.title = expanded ? 'Recolher ferramentas' : 'Ferramentas de desenho';
     }
     if (panelEl) panelEl.hidden = !expanded;
     if (colorEl?.parentElement) colorEl.parentElement.hidden = !expanded;
+
+    if (coupleToolWithExpansion && fromToggle) {
+      if (expanded && !activeTool) {
+        setTool(defaultTool, { skipExpandSync: true });
+      } else if (!expanded && activeTool) {
+        setTool(null, { skipExpandSync: true });
+      }
+    }
+    renderToggleIcon();
+    syncClearVisibility();
   }
 
-  function setTool(tool) {
+  function setTool(tool, { skipExpandSync = false } = {}) {
     activeTool = tool || null;
     syncToolButtons();
+    if (coupleToolWithExpansion && !skipExpandSync) {
+      if (activeTool && !expanded) {
+        setExpanded(true);
+      } else if (!activeTool && expanded) {
+        setExpanded(false);
+      } else {
+        renderToggleIcon();
+      }
+    } else {
+      renderToggleIcon();
+    }
     const isActive = activeTool !== null;
     onToolChange?.(activeTool, isActive);
+    return activeTool;
+  }
+
+  function expandWithDefaultTool() {
+    setExpanded(true);
+    setTool(defaultTool, { skipExpandSync: true });
+    renderToggleIcon();
+    syncClearVisibility();
     return activeTool;
   }
 
@@ -134,8 +191,7 @@ export function createAnnotationToolbar({
 
   toggleEl?.addEventListener('click', (e) => {
     e.stopPropagation();
-    setExpanded(!expanded);
-    syncClearVisibility();
+    setExpanded(!expanded, { fromToggle: true });
   });
 
   colorEl?.addEventListener('input', () => {
@@ -160,6 +216,7 @@ export function createAnnotationToolbar({
     getColor,
     getWidth,
     setExpanded,
+    expandWithDefaultTool,
     isExpanded: () => expanded,
     setVisible,
     syncClearVisibility,

@@ -170,6 +170,7 @@ export function buildVideoProduceOptions(track, device, quality = {}) {
 
   const opts = {
     track,
+    stopTracks: false,
     encodings: [
       {
         maxBitrate,

@@ -648,7 +648,7 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       const element = validateWhiteboardElement(msg.payload, peer.id);
       if (!element) break;
       const result = room.addWhiteboardElement(element);
-      if (!result.ok) enviar({ type: 'erro', payload: { message: result.erro } });
+      if (!result.ok) enviar({ type: 'erro', payload: { mensagem: result.erro } });
       break;
     }
 

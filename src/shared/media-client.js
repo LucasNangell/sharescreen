@@ -1023,16 +1023,19 @@ export class MediaClient {
 
     await this.stopSystemAudio();
 
-    if (this.localScreenStream) {
-      for (const track of this.localScreenStream.getTracks()) {
-        try {
-          track.stop();
-        } catch (_) {}
-      }
-      this.localScreenStream = null;
-    }
+    this.releaseLocalScreenStream();
 
     this._producing = this.hasVideoProducer();
+  }
+
+  releaseLocalScreenStream() {
+    if (!this.localScreenStream) return;
+    for (const track of this.localScreenStream.getTracks()) {
+      try {
+        track.stop();
+      } catch (_) {}
+    }
+    this.localScreenStream = null;
   }
 
   async requestDisplayCapture(capturePrefs) {
@@ -1093,6 +1096,7 @@ export class MediaClient {
       }
 
       videoTrack.addEventListener('ended', () => {
+        if (this.localScreenStream !== displayStream) return;
         window.dispatchEvent(new CustomEvent('sharescreen-ended'));
       });
 
@@ -1589,6 +1593,11 @@ export class MediaClient {
     const own =
       hostPeerId && selectedPeerId && String(selectedPeerId) === String(hostPeerId);
 
+    if (this._isSyntheticVideo && this._syntheticStream) {
+      const synTrack = this._syntheticStream.getVideoTracks?.()?.[0];
+      if (synTrack?.readyState === 'live') return this._syntheticStream;
+    }
+
     if (own && this.localScreenStream) {
       const vt = this.localScreenStream.getVideoTracks()[0];
       if (vt?.readyState === 'live') return this.localScreenStream;
@@ -1738,16 +1747,17 @@ export class MediaClient {
   async stopSyntheticVideo({ notifyServer = false } = {}) {
     if (!this._isSyntheticVideo) return;
     this._isSyntheticVideo = false;
-    if (this._syntheticStream) {
-      for (const track of this._syntheticStream.getTracks()) {
+    const syntheticStream = this._syntheticStream;
+    this._syntheticStream = null;
+
+    const restored = await this.restoreScreenVideoProducer();
+    if (syntheticStream) {
+      for (const track of syntheticStream.getTracks()) {
         try {
           track.stop();
         } catch (_) {}
       }
-      this._syntheticStream = null;
     }
-
-    const restored = await this.restoreScreenVideoProducer();
     if (!restored && this.producers.video && !this.producers.video.closed) {
       this.producers.video.close();
       this.producers.video = null;

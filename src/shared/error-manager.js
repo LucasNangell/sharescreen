@@ -22,6 +22,31 @@ export const ErrorCodes = {
   UNKNOWN: 'unknown'
 };
 
+const MOJIBAKE_PAIRS = [
+  ['Ã¡', 'á'],
+  ['Ã©', 'é'],
+  ['Ã­', 'í'],
+  ['Ã³', 'ó'],
+  ['Ãº', 'ú'],
+  ['Ã£', 'ã'],
+  ['Ãµ', 'õ'],
+  ['Ã§', 'ç'],
+  ['Ã¢', 'â'],
+  ['Ãª', 'ê'],
+  ['Ã´', 'ô']
+];
+
+export function normalizeErrorText(msg) {
+  let text = String(msg || '');
+  for (const [from, to] of MOJIBAKE_PAIRS) {
+    text = text.split(from).join(to);
+  }
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 const FRIENDLY = {
   [ErrorCodes.PERMISSION_DENIED]:
     'Permissão negada. Clique em permitir quando o navegador solicitar tela ou microfone.',
@@ -61,7 +86,7 @@ const FRIENDLY = {
 };
 
 export function classifyServerMessage(msg) {
-  const text = String(msg || '').toLowerCase();
+  const text = normalizeErrorText(msg);
 
   if (text.includes('limite de') && text.includes('client')) {
     return ErrorCodes.ROOM_FULL;
@@ -105,7 +130,7 @@ export function classifyServerMessage(msg) {
 }
 
 export function isUnrecoverableConsumeError(msg) {
-  const text = String(msg || '').toLowerCase();
+  const text = normalizeErrorText(msg);
   if (!text) return false;
   if (text.includes('proprio producer') || text.includes('próprio producer')) return true;
   if (text.includes('producer indisponivel') || text.includes('producer indisponível')) return true;
@@ -116,7 +141,7 @@ export function isUnrecoverableConsumeError(msg) {
 }
 
 export function isTransientServerError(msg, { joinInProgress = false } = {}) {
-  const text = String(msg || '').toLowerCase();
+  const text = normalizeErrorText(msg);
   if (joinInProgress && (text.includes('não autenticado') || text.includes('nao autenticado'))) {
     return true;
   }
@@ -144,7 +169,7 @@ export function formatServerError(message) {
 
 export function classifyError(err) {
   const name = err?.name || '';
-  const msg = String(err?.message || err || '').toLowerCase();
+  const msg = normalizeErrorText(err?.message || err);
 
   const serverCode = classifyServerMessage(msg);
   if (serverCode) return serverCode;
@@ -211,6 +236,13 @@ export class ErrorManager {
     const code = classifyError(err);
     const technical = err?.stack || String(err?.message || err);
     const friendly = FRIENDLY[code] || FRIENDLY[ErrorCodes.UNKNOWN];
+    const firstLine = String(err?.message || technical)
+      .split(/\r?\n/)
+      .find((line) => line.trim()) || String(err || 'erro desconhecido');
+    const detail = firstLine.length > 180 ? `${firstLine.slice(0, 177)}...` : firstLine;
+    const toastMsg = context
+      ? `${friendly} — [${code}] ${context}: ${detail}`
+      : `${friendly} — [${code}] ${detail}`;
 
     const entry = {
       code,
@@ -223,6 +255,11 @@ export class ErrorManager {
     this.lastErrors.unshift(entry);
     if (this.lastErrors.length > this.maxHistory) this.lastErrors.pop();
 
+    if (typeof window !== 'undefined') {
+      window.__shareScreenErrors = this.lastErrors;
+    }
+    console.error(`[${code}] ${context}: ${technical}`, err);
+
     this.onTechnicalLog(`[${code}] ${context}: ${technical}`, 'error');
 
     const now = Date.now();
@@ -231,7 +268,7 @@ export class ErrorManager {
       now - this._lastToast.at >= this.toastDedupeMs
     ) {
       this._lastToast = { code, at: now };
-      this.onToast(friendly, 'error');
+      this.onToast(toastMsg, 'error');
     }
 
     return entry;

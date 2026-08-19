@@ -1011,6 +1011,11 @@
 
 .annotation-toolbar.is-expanded .annotation-toolbar-toggle {
   opacity: 1;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.annotation-toolbar-toggle.is-tool-active {
+  opacity: 1;
   color: var(--color-accent, #4f6ef7);
   border-color: rgba(79, 110, 247, 0.55);
   background: rgba(0, 0, 0, 0.45);
