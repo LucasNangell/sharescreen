@@ -95,6 +95,8 @@ const els = {
   settingsMicWrap: $('settings-mic-picker-wrap'),
   settingsMicSelect: $('settings-mic-select'),
   settingsBtnRefreshMics: $('settings-btn-refresh-mics'),
+  settingsSwitchScreenWrap: $('settings-switch-screen-wrap'),
+  btnSettingsSwitchScreen: $('btn-settings-switch-screen'),
   btnSettingsSave: $('btn-settings-save'),
   btnSettingsClose: $('btn-settings-close'),
   settingsAccountWrap: $('settings-account-wrap'),
@@ -622,10 +624,90 @@ async function openSettingsModal() {
     showToast('Nao foi possivel listar microfones', 'warn');
   }
   if (els.settingsModal) els.settingsModal.hidden = false;
+  syncSwitchScreenSettingsUi();
 }
 
 function closeSettingsModal() {
   if (els.settingsModal) els.settingsModal.hidden = true;
+}
+
+function clientCanSwitchDisplay() {
+  if (viewerOnly) return false;
+  const liveDisplay = clientDisplayStream?.getVideoTracks?.()?.some((t) => t.readyState === 'live');
+  const liveMedia = media?.localScreenStream?.getVideoTracks?.()?.some((t) => t.readyState === 'live');
+  return !!(media?.hasVideoProducer?.() || liveDisplay || liveMedia);
+}
+
+function syncSwitchScreenSettingsUi() {
+  if (els.settingsSwitchScreenWrap) {
+    els.settingsSwitchScreenWrap.hidden = !clientCanSwitchDisplay();
+  }
+}
+
+async function switchClientDisplayCapture() {
+  if (!clientCanSwitchDisplay()) {
+    showToast('Compartilhe uma tela antes de trocar', 'warn');
+    return;
+  }
+  assertSecureContext();
+  const prefs = getSettingsPrefsFromModal();
+  saveCapturePrefs(prefs);
+  applyCapturePrefsToUi(prefs);
+  setStatus('Selecione a nova tela para compartilhar...');
+
+  if (!media) {
+    try {
+      const stream = await promptDisplayCapture(prefs);
+      const previous = clientDisplayStream;
+      clientDisplayStream = stream;
+      previous?.getTracks?.().forEach((t) => {
+        if (stream.getTracks().some((nt) => nt.id === t.id)) return;
+        try {
+          t.stop();
+        } catch (_) {}
+      });
+      applyClientLocalPreview();
+      setStatus('Tela de captura atualizada');
+      showToast('Tela atualizada', 'success');
+    } catch (e) {
+      const cancelled =
+        e?.name === 'NotAllowedError' ||
+        e?.name === 'AbortError' ||
+        /cancel|abort|denied/i.test(String(e?.message || ''));
+      if (cancelled) {
+        setStatus('Selecao de tela cancelada — captura atual mantida');
+        showToast('Selecao de tela cancelada', 'info');
+        return;
+      }
+      errors.handle(e, 'trocar-tela');
+    }
+    return;
+  }
+
+  try {
+    const result = await media.switchDisplayCapture(prefs);
+    if (result?.cancelled) {
+      setStatus('Selecao de tela cancelada — captura atual mantida');
+      showToast('Selecao de tela cancelada', 'info');
+      return;
+    }
+    if (result?.busy) {
+      showToast('Troca de tela ja em andamento', 'info');
+      return;
+    }
+    if (!result?.ok) {
+      showToast('Nao foi possivel trocar a tela', 'error');
+      return;
+    }
+    clientDisplayStream = result.stream || media.localScreenStream;
+    applyClientLocalPreview();
+    drawingSurface?.resize();
+    signaling?.send('status', { status: 'transmitindo' });
+    setStatus(result.synthetic ? 'Captura de fundo atualizada' : 'Tela de captura atualizada');
+    showToast(result.synthetic ? 'Captura de fundo atualizada' : 'Tela atualizada', 'success');
+  } catch (e) {
+    errors.handle(e, 'trocar-tela');
+  }
 }
 
 async function saveSettingsModal() {
@@ -2550,6 +2632,7 @@ async function handleServerMessage(msg) {
 els.btnSettings?.addEventListener('click', () => openSettingsModal());
 els.btnSettingsSave?.addEventListener('click', () => saveSettingsModal());
 els.btnSettingsClose?.addEventListener('click', () => closeSettingsModal());
+els.btnSettingsSwitchScreen?.addEventListener('click', () => switchClientDisplayCapture());
 
 els.btnClientMic?.addEventListener('click', () => onClientMicClick());
 
@@ -2574,7 +2657,7 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('sharescreen-ended', async () => {
-  if (suppressShareEndedHandler || clientJoinInProgress || bootstrapping) {
+  if (media?._suppressShareEnded || suppressShareEndedHandler || clientJoinInProgress || bootstrapping) {
     logCaptureTrackState('share-ended-suppressed');
     return;
   }

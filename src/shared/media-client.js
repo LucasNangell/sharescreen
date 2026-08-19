@@ -90,6 +90,8 @@ export class MediaClient {
     this._micHealthCheckScheduled = false;
     this._micFiltersDropped = false;
     this._micFiltersRestoreAttempts = 0;
+    this._switchDisplayInFlight = false;
+    this._suppressShareEnded = false;
   }
 
   /** Publicação caiu para trilha crua e ainda há filtros pedidos que podem ser restaurados. */
@@ -1095,10 +1097,7 @@ export class MediaClient {
         );
       }
 
-      videoTrack.addEventListener('ended', () => {
-        if (this.localScreenStream !== displayStream) return;
-        window.dispatchEvent(new CustomEvent('sharescreen-ended'));
-      });
+      this._bindDisplayTrackEnded(displayStream, videoTrack);
 
       const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
       videoOpts.track = videoTrack;
@@ -1129,6 +1128,128 @@ export class MediaClient {
 
     const displayStream = await this.requestDisplayCapture(capturePrefs);
     return this.publishDisplayStream(displayStream, capturePrefs);
+  }
+
+  _isDisplayCaptureCancelled(err) {
+    const name = err?.name || '';
+    if (name === 'NotAllowedError' || name === 'AbortError') return true;
+    return /cancel|abort|denied/i.test(String(err?.message || ''));
+  }
+
+  _bindDisplayTrackEnded(displayStream, videoTrack) {
+    if (!videoTrack) return;
+    videoTrack.addEventListener('ended', () => {
+      if (this._suppressShareEnded) return;
+      if (this.localScreenStream !== displayStream) return;
+      window.dispatchEvent(new CustomEvent('sharescreen-ended'));
+    });
+  }
+
+  _stopReplacedDisplayStream(previousStream, nextStream) {
+    if (!previousStream || previousStream === nextStream) return;
+    const keepTrackIds = new Set(nextStream.getTracks().map((t) => t.id));
+    this._suppressShareEnded = true;
+    try {
+      for (const track of previousStream.getTracks()) {
+        if (keepTrackIds.has(track.id)) continue;
+        try {
+          track.stop();
+        } catch (_) {}
+      }
+    } finally {
+      this._suppressShareEnded = false;
+    }
+  }
+
+  /**
+   * Recaptura monitor/janela/aba sem encerrar a sessão.
+   * Mantém o producer de vídeo (replaceTrack) e o microfone.
+   */
+  async switchDisplayCapture(capturePrefs = {}) {
+    if (this._switchDisplayInFlight) {
+      return { ok: false, busy: true };
+    }
+    this._switchDisplayInFlight = true;
+    try {
+      this.setCapturePrefs(capturePrefs);
+
+      let displayStream;
+      try {
+        displayStream = await this.requestDisplayCapture(capturePrefs);
+      } catch (err) {
+        if (this._isDisplayCaptureCancelled(err)) {
+          return { ok: false, cancelled: true };
+        }
+        throw err;
+      }
+
+      const { displaySurface } = stripMonitorSystemAudio(displayStream, (message, level) =>
+        this.onLog(message, level)
+      );
+      this._displaySurface = displaySurface;
+      await applyTabCaptureAudioHints(displayStream);
+
+      const videoTrack = displayStream.getVideoTracks().find((t) => t.readyState === 'live');
+      if (!videoTrack) {
+        for (const track of displayStream.getTracks()) {
+          try {
+            track.stop();
+          } catch (_) {}
+        }
+        throw new Error('Pista de video indisponivel - selecione a tela novamente');
+      }
+
+      applyContentHint(videoTrack, this.videoQuality.contentHint || 'detail');
+
+      const synthetic = this.isSyntheticVideoActive();
+      const previousStream = this.localScreenStream;
+      const liveProducer = this.producers.video && !this.producers.video.closed;
+
+      if (!synthetic && !liveProducer) {
+        const stream = await this.publishDisplayStream(displayStream, capturePrefs);
+        return { ok: true, stream, synthetic: false };
+      }
+
+      if (!synthetic && liveProducer && typeof this.producers.video.replaceTrack === 'function') {
+        try {
+          await this.producers.video.replaceTrack({ track: videoTrack });
+          try {
+            await this.producers.video.requestKeyFrame();
+          } catch (_) {}
+        } catch (err) {
+          for (const track of displayStream.getTracks()) {
+            try {
+              track.stop();
+            } catch (_) {}
+          }
+          throw err;
+        }
+      } else if (!synthetic && liveProducer) {
+        const stream = await this.publishDisplayStream(displayStream, capturePrefs);
+        return { ok: true, stream, synthetic: false };
+      }
+
+      this.localScreenStream = displayStream;
+      this._bindDisplayTrackEnded(displayStream, videoTrack);
+      this._stopReplacedDisplayStream(previousStream, displayStream);
+
+      await this.syncPublishedAudio(capturePrefs, displayStream);
+      if (!synthetic) this._producing = true;
+
+      const settings = videoTrack.getSettings?.() || {};
+      if (settings.width && settings.height) {
+        this.onLog(
+          `Captura atualizada: ${settings.width}x${settings.height} @ ${settings.frameRate || '?'}fps`,
+          'info'
+        );
+      } else {
+        this.onLog(synthetic ? 'Captura de fundo atualizada' : 'Tela de captura atualizada', 'info');
+      }
+
+      return { ok: true, stream: displayStream, synthetic };
+    } finally {
+      this._switchDisplayInFlight = false;
+    }
   }
 
   applyLowLatencyPlayback(consumer) {

@@ -490,6 +490,19 @@
   width: 100%;
 }
 
+.client-settings-panel .settings-switch-screen {
+  margin-top: var(--space-md);
+}
+
+.client-settings-panel .settings-switch-screen .btn {
+  width: 100%;
+}
+
+.client-settings-panel .settings-switch-screen .hint-text {
+  margin-top: var(--space-xs);
+  margin-bottom: 0;
+}
+
 .fs-source-toggle {
   position: absolute;
   top: var(--space-md);

@@ -1,0 +1,1 @@
+& "$env:LOCALAPPDATA\Programs\Git\cmd\git.exe" push origin main

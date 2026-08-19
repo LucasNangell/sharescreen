@@ -137,6 +137,7 @@ const els = {
   statusBar: $('status-bar'),
   qualityPreset: $('quality-preset'),
   qualityHint: $('quality-hint'),
+  btnHostSwitchScreen: $('btn-host-switch-screen'),
   techDrawer: $('tech-drawer'),
   btnTech: $('btn-tech-panel'),
   btnCloseTech: $('btn-close-tech'),
@@ -2297,6 +2298,54 @@ async function iniciarCompartilhamentoHost() {
   }
 }
 
+async function trocarTelaHost() {
+  if (!media) {
+    showToast('Conecte-se antes de trocar a tela', 'warn');
+    return;
+  }
+  try {
+    assertSecureContext();
+    saveCapturePrefs(getHostCapturePrefs());
+    setStatus('Selecione a nova tela para compartilhar...');
+    const prefs = getHostCapturePrefs();
+    const result = await media.switchDisplayCapture(prefs);
+    if (result?.cancelled) {
+      setStatus('Selecao de tela cancelada — captura atual mantida');
+      showToast('Selecao de tela cancelada', 'info');
+      return;
+    }
+    if (result?.busy) {
+      showToast('Troca de tela ja em andamento', 'info');
+      return;
+    }
+    if (!result?.ok) {
+      showToast('Nao foi possivel trocar a tela', 'error');
+      return;
+    }
+
+    const selfSelected = String(lastActiveTransmission?.selectedPeerId || '') === String(hostPeerId || '');
+    if (selfSelected && !media.isSyntheticVideoActive?.()) {
+      await bindHostSelfPreview(result.stream || media.localScreenStream);
+    }
+
+    if (prefs.microphone && !media.hasPublishedMicrophone()) {
+      await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
+      await media.ensureMicrophonePublication(prefs);
+    }
+    signaling?.send('status', { status: 'transmitindo' });
+    ui.set({ isSharing: true });
+    updateHostMicUi();
+    startHostVideoWatchdog();
+    setStatus(
+      result.synthetic ? 'Captura de fundo atualizada' : 'Tela de captura atualizada'
+    );
+    showToast(result.synthetic ? 'Captura de fundo atualizada' : 'Tela atualizada', 'success');
+  } catch (e) {
+    errors.handle(e, 'trocar-tela');
+    updateHostMicUi();
+  }
+}
+
 function updateRecordingUi(state) {
   const labels = {
     [RecordingState.IDLE]: 'Pronto para gravar',
@@ -4319,8 +4368,10 @@ async function unlockHostRemoteAudio() {
 }
 
 els.btnHostMic?.addEventListener('click', () => onHostMicClick());
+els.btnHostSwitchScreen?.addEventListener('click', () => trocarTelaHost());
 
 window.addEventListener('sharescreen-ended', async () => {
+  if (media?._suppressShareEnded) return;
   const syntheticActive = !!media?.isSyntheticVideoActive?.();
   if (syntheticActive) {
     try {

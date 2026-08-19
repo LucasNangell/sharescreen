@@ -376,8 +376,10 @@
   
   
   
+  
+  
   <script>(function(){
-var BUILD_ID="2026-08-19T14-04-55-psbrsn";
+var BUILD_ID="2026-08-19T14-32-03-3vzdvu";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -411,9 +413,9 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T14-04-55-psbrsn" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T14-04-55-psbrsn" />
-  <link rel="stylesheet" href="style.css?v=2026-08-19T14-04-55-psbrsn" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T14-32-03-3vzdvu" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T14-32-03-3vzdvu" />
+  <link rel="stylesheet" href="style.css?v=2026-08-19T14-32-03-3vzdvu" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body class="app-host">
@@ -622,6 +624,8 @@ try{
                   <option value="lowLatency">Baixa — 8 Mbps</option>
                 </select>
                 <p id="quality-hint" class="hint-text"></p>
+                <button type="button" id="btn-host-switch-screen" class="btn btn-ghost btn-sm btn-switch-screen">Trocar tela</button>
+                <p class="hint-text">Abre o diálogo do navegador. Cancelar mantém a captura atual.</p>
               </div>
             </details>
 
@@ -1140,7 +1144,7 @@ try{
     </div>
   </template>
 
-  <script src="app.bundle.js?v=2026-08-19T14-04-55-psbrsn"></script>
+  <script src="app.bundle.js?v=2026-08-19T14-32-03-3vzdvu"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/host/sw.js', { scope: '/host/' }).catch(function () {});

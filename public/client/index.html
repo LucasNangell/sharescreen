@@ -352,8 +352,10 @@
   
   
   
+  
+  
   <script>(function(){
-var BUILD_ID="2026-08-19T14-04-55-psbrsn";
+var BUILD_ID="2026-08-19T14-32-03-3vzdvu";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -401,10 +403,10 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T14-04-55-psbrsn" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T14-04-55-psbrsn" />
-  <link rel="stylesheet" href="style.css?v=2026-08-19T14-04-55-psbrsn" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-19T14-04-55-psbrsn" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T14-32-03-3vzdvu" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T14-32-03-3vzdvu" />
+  <link rel="stylesheet" href="style.css?v=2026-08-19T14-32-03-3vzdvu" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-19T14-32-03-3vzdvu" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body class="app-client">
@@ -735,6 +737,10 @@ try{
         <select id="settings-mic-select"></select>
         <button type="button" id="settings-btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar lista</button>
       </div>
+      <div id="settings-switch-screen-wrap" class="settings-switch-screen" hidden>
+        <button type="button" id="btn-settings-switch-screen" class="btn btn-ghost">Trocar tela</button>
+        <p class="hint-text">Abre o diálogo do navegador. Cancelar mantém a captura atual.</p>
+      </div>
       <div id="settings-account-wrap" class="settings-account" hidden>
         <p id="settings-auth-user-label" class="settings-account-label"></p>
         <button type="button" id="btn-settings-logout" class="btn btn-ghost btn-sm">Sair da conta</button>
@@ -819,7 +825,7 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-08-19T14-04-55-psbrsn"></script>
+  <script src="app.bundle.js?v=2026-08-19T14-32-03-3vzdvu"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/meet/sw.js', { scope: '/meet/' }).catch(function () {});
