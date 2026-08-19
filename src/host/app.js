@@ -624,18 +624,25 @@ function updateQualityHint() {
   }
 }
 
-function applyHostQuality(presetId) {
+async function applyHostQuality(presetId) {
   savePresetId(presetId);
   updateQualityHint();
   const quality = mergeServerQuality(media?.videoQuality || {}, presetId);
   media?.setVideoQuality(quality);
+  const appliedLive = media ? await media.applyLiveVideoQuality() : false;
   if (els.previewQuality && ui._flags.hasPreview) {
     els.previewQuality.textContent = getPreset(presetId).label;
   }
   if (canHostCommand()) {
     signaling.send('definirQualidade', { presetId });
   }
-  showToast(`Qualidade: ${getPreset(presetId).label}`, 'info');
+  const label = getPreset(presetId).label;
+  showToast(
+    appliedLive
+      ? `Qualidade aplicada na transmissao: ${label}`
+      : `Qualidade: ${label} (vale no proximo compartilhamento)`,
+    'info'
+  );
 }
 
 hostMicPicker = setupMicrophonePicker({

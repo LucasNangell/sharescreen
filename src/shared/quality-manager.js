@@ -82,15 +82,32 @@ export function getPreset(id) {
   return PRESETS[id] || PRESETS.highQuality;
 }
 
+export function videoEncodingParamsFromQuality(quality = {}) {
+  return {
+    maxBitrate: quality.maxBitrate ?? 10_000_000,
+    maxFramerate: quality.targetFrameRate ?? 30
+  };
+}
+
+function clampStartBitrateKbps(maxBitrate, presetStart, serverStart) {
+  const maxKbps = Math.floor(maxBitrate / 1000);
+  const capKbps = Math.min(maxKbps, Math.floor(maxKbps * 0.85));
+  const candidates = [presetStart, capKbps];
+  if (Number.isFinite(serverStart) && serverStart > 0) candidates.push(serverStart);
+  return Math.max(1, Math.min(...candidates.filter((n) => Number.isFinite(n) && n > 0)));
+}
+
 export function mergeServerQuality(serverQuality = {}, presetId = loadPresetId()) {
   const preset = getPreset(presetId);
   const serverMax = serverQuality.maxBitrate ?? preset.maxBitrate;
+  const maxBitrate = Math.min(preset.maxBitrate, serverMax);
   return {
     ...serverQuality,
-    maxBitrate: Math.min(preset.maxBitrate, serverMax),
-    startBitrateKbps: Math.max(
+    maxBitrate,
+    startBitrateKbps: clampStartBitrateKbps(
+      maxBitrate,
       preset.startBitrateKbps,
-      serverQuality.startBitrateKbps ?? 0
+      serverQuality.startBitrateKbps
     ),
     targetFrameRate: Math.min(
       preset.targetFrameRate,
@@ -147,26 +164,36 @@ export function buildDisplayConstraintsWithAudio(quality, wantSystemAudio) {
   return base;
 }
 
+function h264ProfileLevelId(codec) {
+  const raw = codec?.parameters?.['profile-level-id'] || codec?.parameters?.profileLevelId || '';
+  return String(raw).toLowerCase();
+}
+
+function h264CodecScore(codec) {
+  const id = h264ProfileLevelId(codec);
+  const profileByte = id.slice(0, 2);
+  const levelByte = Number.parseInt(id.slice(4, 6), 16);
+  const profileRank =
+    profileByte === '64' ? 3 : profileByte === '4d' ? 2 : profileByte === '42' ? 1 : 0;
+  const level = Number.isFinite(levelByte) ? levelByte : 0;
+  return profileRank * 1000 + level;
+}
+
 export function pickScreenCodec(device, preferH264 = true) {
   if (!device?.rtpCapabilities?.codecs) return null;
   const codecs = device.rtpCapabilities.codecs;
-  if (preferH264) {
-    return (
-      codecs.find((c) => c.mimeType.toLowerCase() === 'video/h264') ||
-      codecs.find((c) => c.mimeType.toLowerCase() === 'video/vp8')
-    );
-  }
-  return (
-    codecs.find((c) => c.mimeType.toLowerCase() === 'video/vp8') ||
-    codecs.find((c) => c.mimeType.toLowerCase() === 'video/h264')
-  );
+  const h264 = codecs
+    .filter((c) => c.mimeType.toLowerCase() === 'video/h264')
+    .sort((a, b) => h264CodecScore(b) - h264CodecScore(a));
+  const vp8 = codecs.find((c) => c.mimeType.toLowerCase() === 'video/vp8');
+  if (preferH264) return h264[0] || vp8 || null;
+  return vp8 || h264[0] || null;
 }
 
 export function buildVideoProduceOptions(track, device, quality = {}) {
-  const maxBitrate = quality.maxBitrate ?? 10_000_000;
-  const maxFramerate = quality.targetFrameRate ?? 30;
+  const { maxBitrate, maxFramerate } = videoEncodingParamsFromQuality(quality);
   const maxKbps = Math.floor(maxBitrate / 1000);
-  const startKbps = quality.startBitrateKbps ?? Math.floor(maxKbps * 0.85);
+  const startKbps = clampStartBitrateKbps(maxBitrate, quality.startBitrateKbps);
 
   const opts = {
     track,

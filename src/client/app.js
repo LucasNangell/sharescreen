@@ -2612,11 +2612,9 @@ async function handleServerMessage(msg) {
     savePresetId(presetId);
     if (media) {
       media.setVideoQuality(mergeServerQuality(media.videoQuality, presetId));
+      await media.applyLiveVideoQuality();
     }
-    showToast(
-      'Qualidade atualizada pelo host - recompartilhe a tela para aplicar',
-      'info'
-    );
+    return;
   }
   if (msg.type === 'controleExibicaoAtualizado') {
     applyDisplayControlUpdate(msg.payload);

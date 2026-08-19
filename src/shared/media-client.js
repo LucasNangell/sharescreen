@@ -3,7 +3,8 @@ import {
   buildDisplayConstraintsWithAudio,
   buildVideoProduceOptions,
   buildAudioProduceOptions,
-  applyContentHint
+  applyContentHint,
+  videoEncodingParamsFromQuality
 } from './quality-manager.js';
 import {
   acquireMicrophoneTrack
@@ -278,6 +279,37 @@ export class MediaClient {
     if (quality?.microphoneDefault !== undefined) {
       this.capturePrefs.microphone = quality.microphoneDefault;
     }
+  }
+
+  async applyLiveVideoQuality() {
+    const producer = this.producers.video;
+    if (!producer || producer.closed) return false;
+
+    const quality = this.videoQuality || {};
+    const params = videoEncodingParamsFromQuality(quality);
+    const track = producer.track;
+    if (track) applyContentHint(track, quality.contentHint || 'detail');
+
+    try {
+      if (typeof producer.setRtpEncodingParameters === 'function') {
+        await producer.setRtpEncodingParameters({
+          maxBitrate: params.maxBitrate,
+          maxFramerate: params.maxFramerate
+        });
+      }
+    } catch (err) {
+      this.onLog(
+        `Nao foi possivel atualizar bitrate ao vivo: ${err?.message || err}`,
+        'warn'
+      );
+      return false;
+    }
+
+    try {
+      await producer.requestKeyFrame();
+    } catch (_) {}
+
+    return true;
   }
 
   setCapturePrefs(prefs) {
