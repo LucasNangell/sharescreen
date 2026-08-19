@@ -25,7 +25,7 @@ todos:
     status: completed
   - id: mute-sync
     content: Sincronizar btn-host-mic e btn-client-mic com o source-mute-btn dos cards usando mutedPeerIds do servidor como fonte unica (onHostMicClick envia definirClientMute, host ganha syncOwnMicMuteFromRoom, client reaplica apos publicar)
-    status: pending
+    status: completed
   - id: docs-tests-build
     content: Atualizar FRONTEND_MAP e BACKEND_MAP, cobrir a resolucao do preset do host no smoke e rodar check/test:smoke/build
     status: completed
