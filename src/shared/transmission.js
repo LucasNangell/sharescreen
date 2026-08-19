@@ -33,7 +33,30 @@ function roomClientEntryScore(c) {
   if (c?.producerIds?.video || c?.producerId) score += 4;
   if (c?.hasVideo || c?.isProducing) score += 2;
   if (c?.selectable) score += 1;
+  if (c?.hasAudio || c?.hasMicrophone || c?.hasSystemAudio) score += 2;
+  if (
+    c?.producerIds?.microphone ||
+    c?.producerIds?.system ||
+    c?.producerIds?.mixed ||
+    c?.producerIds?.audio
+  ) {
+    score += 4;
+  }
   return score;
+}
+
+function audioFlagsFromProducerIds(ids = {}) {
+  const hasMicrophone = !!ids.microphone;
+  const hasSystemAudio = !!ids.system;
+  return {
+    hasAudio: !!(hasMicrophone || hasSystemAudio || ids.mixed || ids.audio),
+    hasMicrophone,
+    hasSystemAudio
+  };
+}
+
+function mergeProducerIds(prev = {}, incoming = {}) {
+  return { ...prev, ...incoming };
 }
 
 /** Mescla duas entradas do mesmo peer, preferindo a mais completa. */
@@ -42,12 +65,14 @@ export function mergeRoomClientEntry(a, b) {
   if (!b) return { ...a };
   const primary = roomClientEntryScore(a) >= roomClientEntryScore(b) ? a : b;
   const secondary = primary === a ? b : a;
+  const producerIds = mergeProducerIds(a.producerIds, b.producerIds);
   return {
     ...secondary,
     ...primary,
-    producerIds: { ...(secondary.producerIds || {}), ...(primary.producerIds || {}) },
+    producerIds,
     mediaReady: { ...(secondary.mediaReady || {}), ...(primary.mediaReady || {}) },
-    permissions: { ...(secondary.permissions || {}), ...(primary.permissions || {}) }
+    permissions: { ...(secondary.permissions || {}), ...(primary.permissions || {}) },
+    ...audioFlagsFromProducerIds(producerIds)
   };
 }
 

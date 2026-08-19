@@ -3,6 +3,7 @@
  */
 import {
   hasAuthoritativeRoomRoster,
+  mergeRoomClientEntry,
   mergeRoomClients,
   reconcileRoomClients,
   resolveRoomClients
@@ -22,6 +23,44 @@ function assert(condition, message) {
 const a = { id: 'a', displayName: 'Alice', producerIds: { video: 'v-a' } };
 const b = { id: 'b', displayName: 'Bob' };
 const c = { id: 'c', displayName: 'Carol' };
+const mergedAudio = mergeRoomClientEntry(
+  {
+    id: 'a',
+    displayName: 'Alice',
+    hasAudio: true,
+    hasMicrophone: true,
+    producerIds: { microphone: 'm-a' }
+  },
+  {
+    id: 'a',
+    displayName: 'Alice',
+    hasVideo: true,
+    hasAudio: false,
+    producerIds: { video: 'v-a' }
+  }
+);
+assert(mergedAudio.producerIds?.microphone === 'm-a', 'merge preserva producer de microfone frente a snapshot so-video');
+assert(mergedAudio.producerIds?.video === 'v-a', 'merge une producer de video ao de audio');
+assert(mergedAudio.hasAudio === true, 'hasAudio derivado permanece true com microphone vivo');
+assert(mergedAudio.hasMicrophone === true, 'hasMicrophone derivado permanece true com microphone vivo');
+
+const stoppedMic = mergeRoomClientEntry(
+  {
+    id: 'a',
+    hasAudio: true,
+    hasMicrophone: true,
+    producerIds: { video: 'v-a', microphone: 'm-a' }
+  },
+  {
+    id: 'a',
+    hasVideo: true,
+    hasAudio: false,
+    producerIds: { video: 'v-a', microphone: null }
+  }
+);
+assert(!stoppedMic.producerIds?.microphone, 'snapshot autoritativo com microphone null remove o slot');
+assert(stoppedMic.hasAudio === false, 'hasAudio derivado fica false sem producer de audio');
+
 const existing = [a, b, c];
 const incomingTwo = [
   { id: 'a', displayName: 'Alice' },

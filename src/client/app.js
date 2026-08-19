@@ -517,42 +517,20 @@ function updateClientMicUi() {
   const btn = els.btnClientMic;
   if (!btn) return;
   const micPublished = media?.hasPublishedMicrophone?.();
-  const show = micPublished || clientMicAutoplayNeeded;
-  btn.hidden = !show;
-  if (!show) return;
-  const muted = media?.isPublishedAudioMuted?.();
-  btn.classList.toggle('is-muted', !!muted || clientMicAutoplayNeeded);
-  btn.title = clientMicAutoplayNeeded
-    ? 'Ativar audio'
-    : muted
-      ? 'Ativar microfone'
-      : 'Silenciar microfone';
+  btn.hidden = !micPublished;
+  if (!micPublished) return;
+  const muted = !!media?.isPublishedAudioMuted?.();
+  btn.classList.toggle('is-muted', muted);
+  btn.title = muted ? 'Ativar microfone' : 'Silenciar microfone';
   const svgOn = btn.querySelector('.mic-icon-on');
   const svgOff = btn.querySelector('.mic-icon-off');
-  if (clientMicAutoplayNeeded) {
-    if (svgOn) svgOn.hidden = false;
-    if (svgOff) svgOff.hidden = true;
-  } else {
-    if (svgOn) svgOn.hidden = !!muted;
-    if (svgOff) svgOff.hidden = !muted;
-  }
+  if (svgOn) svgOn.hidden = muted;
+  if (svgOff) svgOff.hidden = !muted;
 }
 
 async function onClientMicClick() {
   if (!els.btnClientMic) return;
   try {
-    if (clientMicAutoplayNeeded) {
-      const confirmed = await roomAudioMonitor?.resume();
-      roomAudioMonitor?.connectOutput(els.audio);
-      await els.audio?.play?.().catch(() => {});
-      if (confirmed || roomAudioMonitor?.isPlaybackConfirmed?.()) {
-        clientMicAutoplayNeeded = false;
-      }
-      updateClientMicUi();
-      updateActivateAudioUi();
-      showToast(clientMicAutoplayNeeded ? 'Clique novamente para ativar o audio' : 'Audio ativado', clientMicAutoplayNeeded ? 'warn' : 'success');
-      return;
-    }
     if (!media?.hasPublishedMicrophone?.() || !peerId) return;
     const muted = !media.isPublishedAudioMuted();
     media.setPublishedAudioMuted(muted);

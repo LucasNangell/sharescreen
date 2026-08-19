@@ -13,6 +13,19 @@ export function isSelectableSource(client) {
   );
 }
 
+export function peerHasPublishedAudio(client) {
+  const ids = client?.producerIds || {};
+  return !!(
+    client?.hasAudio ||
+    client?.hasMicrophone ||
+    client?.hasSystemAudio ||
+    ids.microphone ||
+    ids.system ||
+    ids.mixed ||
+    ids.audio
+  );
+}
+
 export function sortDisplaySources(clients) {
   return [...(clients || [])].sort((a, b) => {
     const aHost = a.ehHost || a.role === 'host';

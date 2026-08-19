@@ -30,7 +30,7 @@ import {
   formatSourceDisplayName,
   buildDisplaySourceCard
 } from '../shared/source-cards.js';
-import { sortDisplaySources } from '../shared/display-sources.js';
+import { sortDisplaySources, peerHasPublishedAudio } from '../shared/display-sources.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
 import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
 import { createDrawingSurface } from '../shared/drawing-surface.js';
@@ -1131,7 +1131,7 @@ function buildSourceCard(c, onSelect, isTransmissionSection = false, studioOptio
     noSharingHighlight: studioOptions?.forStudioSlot || !isTransmissionSection,
     ownerDocument,
     decorateBody: (body, source) => {
-      if (source.hasAudio) {
+      if (peerHasPublishedAudio(source)) {
         const isMuted = mutedClients.has(source.id);
         const muteBtn = ownerDocument.createElement('button');
         muteBtn.type = 'button';
@@ -1178,7 +1178,7 @@ function buildSourceCard(c, onSelect, isTransmissionSection = false, studioOptio
         const nameWrap = row.querySelector('.source-name-wrap');
         if (nameWrap) nameWrap.append(badge);
       }
-      if (!source.hasAudio) return;
+      if (!peerHasPublishedAudio(source)) return;
       const vuColumn = ownerDocument.createElement('div');
       vuColumn.className = 'source-vu-column';
       vuColumn.title = 'Nivel de audio';
@@ -1281,29 +1281,19 @@ function updateHostMicUi() {
   if (!btn) return;
   const micPublished = media?.hasPublishedMicrophone?.();
   const degraded = hostMicPublishDegraded || !!media?.isMicPublishDegraded?.();
-  const show = micPublished || hostMicAutoplayNeeded || degraded;
+  const show = micPublished || degraded;
   btn.hidden = !show;
   if (show) {
     const muted = media?.isPublishedAudioMuted?.() ?? false;
-    btn.classList.toggle('is-muted', muted || hostMicAutoplayNeeded || degraded);
+    btn.classList.toggle('is-muted', muted || degraded);
     btn.setAttribute('aria-pressed', String(muted));
-    btn.title = hostMicAutoplayNeeded
-      ? 'Ativar audio'
-      : degraded
-        ? 'Microfone publicado sem audio - clique para reativar'
-        : muted
-          ? 'Ativar microfone'
-          : 'Silenciar microfone';
-    btn.setAttribute(
-      'aria-label',
-      hostMicAutoplayNeeded
-        ? 'Ativar audio'
-        : degraded
-          ? 'Microfone publicado sem audio - clique para reativar'
-          : muted
-            ? 'Ativar microfone'
-            : 'Silenciar microfone'
-    );
+    const label = degraded
+      ? 'Microfone publicado sem audio - clique para reativar'
+      : muted
+        ? 'Ativar microfone'
+        : 'Silenciar microfone';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
   }
   syncLocalHostVu();
   ensureSelfAudioMonitor().refresh().catch(() => {});
@@ -1312,7 +1302,7 @@ function updateHostMicUi() {
 async function onHostMicClick() {
   if (!els.btnHostMic) return;
   try {
-    if (hostMicAutoplayNeeded || hostMicPublishDegraded || media?.isMicPublishDegraded?.()) {
+    if (hostMicPublishDegraded || media?.isMicPublishDegraded?.()) {
       await unlockHostRemoteAudio();
       return;
     }
@@ -4892,7 +4882,7 @@ function openContextMenu(e, client) {
   if (audioBtn) audioBtn.hidden = false;
   const recAudioBtn = $('ctx-rec-audio');
   if (recAudioBtn) {
-    recAudioBtn.hidden = isHostCard || !client.hasAudio;
+    recAudioBtn.hidden = isHostCard || !peerHasPublishedAudio(client);
     const isDefault = !!(
       client.displayName &&
       getDefaultRecordingAudioClientName().toLowerCase() ===
