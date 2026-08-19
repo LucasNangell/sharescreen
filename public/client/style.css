@@ -243,7 +243,7 @@
   background: rgba(0, 0, 0, 0.22);
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  opacity: 0.4;
+  opacity: 0.75;
   transition: opacity 0.2s, background 0.2s, color 0.2s, border-color 0.2s;
   backdrop-filter: blur(4px);
   flex-shrink: 0;
@@ -251,7 +251,7 @@
 
 .annotation-toolbar-toggle:hover,
 .annotation-toolbar-toggle:focus-visible {
-  opacity: 0.92;
+  opacity: 0.95;
   background: rgba(0, 0, 0, 0.5);
   color: rgba(255, 255, 255, 0.95);
   border-color: rgba(255, 255, 255, 0.25);

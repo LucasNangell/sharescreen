@@ -3877,11 +3877,6 @@ function teardownStudioPopout() {
   studioPopoutRoot = null;
 }
 
-const POPOUT_OPEN_ICON =
-  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="13" height="11" rx="1"/><path d="M15 3h6v6"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
-const POPOUT_DOCK_ICON =
-  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="13" height="11" rx="1"/><path d="M9 3H3v6"/><line x1="14" y1="10" x2="3" y2="21"/></svg>';
-
 function isFullscreenInSidebar() {
   return !!els.btnFullscreen?.closest('#sidebar');
 }
@@ -3911,14 +3906,22 @@ function restoreFullscreenToSidebar() {
 function syncPopoutControlsUi(popped) {
   const btn = els.btnPopoutControls;
   if (!btn) return;
+  const doc = btn.ownerDocument || document;
+  let icon = btn.querySelector('i');
+  if (!icon) {
+    icon = doc.createElement('i');
+    icon.setAttribute('aria-hidden', 'true');
+    btn.replaceChildren(icon);
+  }
+  icon.className = popped
+    ? 'fa-solid fa-up-right-from-square fa-flip-both'
+    : 'fa-solid fa-up-right-from-square';
   if (popped) {
     btn.setAttribute('aria-label', 'Voltar para janela principal');
     btn.setAttribute('title', 'Voltar para janela principal');
-    btn.innerHTML = POPOUT_DOCK_ICON;
   } else {
     btn.setAttribute('aria-label', 'Abrir controles em nova janela');
     btn.setAttribute('title', 'Abrir controles em nova janela');
-    btn.innerHTML = POPOUT_OPEN_ICON;
   }
 }
 
