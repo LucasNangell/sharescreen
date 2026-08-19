@@ -10,6 +10,7 @@ import {
   buildDisplayMediaConstraints,
   videoEncodingParamsFromQuality
 } from '../src/shared/quality-manager.js';
+import { shouldPresentScaled } from '../src/shared/playback-scaler.js';
 
 let failed = 0;
 
@@ -96,6 +97,23 @@ assert(opts.codecOptions.videoGoogleStartBitrate <= 32000, 'google start bitrate
 assert(
   opts.codec?.parameters?.['profile-level-id'] === '42e02a',
   'produce usa Constrained Baseline de maior level'
+);
+
+assert(
+  shouldPresentScaled(1920, 1080, 900, 500, 1) === true,
+  'tela menor que a origem ativa o scaler de apresentacao'
+);
+assert(
+  shouldPresentScaled(1920, 1080, 1920, 1080, 1) === false,
+  'tela 1:1 nao ativa o scaler'
+);
+assert(
+  shouldPresentScaled(1920, 1080, 1920, 1080, 1.5) === false,
+  'DPR alto em 1:1 CSS ainda nao e downscale da origem'
+);
+assert(
+  shouldPresentScaled(1920, 1080, 900, 500, 2) === true,
+  'janela pequena com DPR 2 continua downscale'
 );
 
 if (failed) {

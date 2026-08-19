@@ -30,6 +30,7 @@ import { hideLtOverlay, bindLtOverlayResize } from '../shared/lt-overlay.js';
 import { createDrawingSurface } from '../shared/drawing-surface.js';
 import { createAnnotationToolbar } from '../shared/annotation-toolbar.js';
 import { updateStreamSourceBadge } from '../shared/stream-source-badge.js';
+import { attachPlaybackScaler } from '../shared/playback-scaler.js';
 import { verifyServerBuild } from '../shared/build-verify.js';
 import { debugClientSessionLog } from '../shared/debug-session-client.js';
 import { requireAuthSession, authDisplayName, bindLogoutControl } from '../shared/auth-client.js';
@@ -122,6 +123,20 @@ const els = {
 
 let signaling = null;
 let media = null;
+let playbackScaler = null;
+
+function ensurePlaybackScaler() {
+  if (playbackScaler || !els.video) return;
+  playbackScaler = attachPlaybackScaler({
+    video: els.video,
+    container: els.video.parentElement
+  });
+}
+
+function stopPlaybackScaler() {
+  playbackScaler?.detach();
+  playbackScaler = null;
+}
 let peerId = null;
 let displayName = readQueryParam('nome') || localStorage.getItem(STORAGE_NAME) || '';
 let authUser = null;
@@ -991,6 +1006,7 @@ async function ensureClientMicTrack(deviceId = '') {
 }
 
 async function teardownClientSession({ keepDisplayStream = false, keepMicTrack = false } = {}) {
+  stopPlaybackScaler();
   stopAudioHealthWatchdog();
   if (fontesAudioDebounceTimer) {
     clearTimeout(fontesAudioDebounceTimer);
@@ -2077,6 +2093,7 @@ async function bootstrap(isViewer, { deferScreenShare = false, skipJoinPublish =
   if (bootstrapPromise) return bootstrapPromise;
 
   bootstrapPromise = (async () => {
+    ensurePlaybackScaler();
     viewerOnly = isViewer;
     deferScreenShareOnJoin = deferScreenShare;
     skipJoinPublishOnJoin = skipJoinPublish;
@@ -2685,11 +2702,13 @@ window.addEventListener('pageshow', async (event) => {
   if (!event.persisted) return;
   resetClientPageState();
   await teardownClientSession({ keepDisplayStream: false });
+  ensurePlaybackScaler();
   showIdentifyStep();
   setStatus('Sessao restaurada - selecione a tela novamente');
 });
 
 initOnboarding();
+ensurePlaybackScaler();
 verifyServerBuild({
   onToast: (m, t) => showToast(m, t),
   onTitlePrefix: (prefix) => {

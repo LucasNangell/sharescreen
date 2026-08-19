@@ -9,6 +9,7 @@ import { ErrorManager, assertSecureContext, isTransientServerError } from '../sh
 import { UiStateMachine } from '../shared/ui-state.js';
 import { mergeServerQuality, loadPresetId, savePresetId, getPreset, bitrateMbps } from '../shared/quality-manager.js';
 import { showToast as originalShowToast } from '../shared/toast.js';
+import { attachPlaybackScaler } from '../shared/playback-scaler.js';
 import { verifyServerBuild } from '../shared/build-verify.js';
 import { debugClientSessionLog } from '../shared/debug-session-client.js';
 import { collectWebRtcStats } from '../shared/stats-collector.js';
@@ -171,6 +172,20 @@ const els = {
 
 let signaling = null;
 let media = null;
+let playbackScaler = null;
+
+function ensurePlaybackScaler() {
+  if (playbackScaler || !els.preview) return;
+  playbackScaler = attachPlaybackScaler({
+    video: els.preview,
+    container: els.previewArea || els.preview.parentElement
+  });
+}
+
+function stopPlaybackScaler() {
+  playbackScaler?.detach();
+  playbackScaler = null;
+}
 let estado = { clients: [], selecionado: null, controleExibicao: [] };
 let hostPeerId = null;
 let hostReady = false;
@@ -3006,6 +3021,8 @@ async function bootstrap() {
     showToast('Use HTTPS para captura de tela confiavel', 'warn');
   }
 
+  ensurePlaybackScaler();
+
   setHostShellVisible(false);
 
   hostTabBlocked = !tryAcquireHostLock();
@@ -4455,6 +4472,7 @@ window.addEventListener('sharescreen-ended', async () => {
 });
 
 window.addEventListener('beforeunload', () => {
+  stopPlaybackScaler();
   clearInterval(hostLockTimer);
   releaseHostLock();
   localHostVuStop?.();
