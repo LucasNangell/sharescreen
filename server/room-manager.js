@@ -253,7 +253,70 @@ export class RoomManager {
     /** @type {object[]} */
     this.whiteboardElements = [];
     this._whiteboardSourcePeerId = null;
+    this.coHostIdentities = new Set();
+    this.actingHostPeerId = null;
     this._initActiveSpeakerBridge();
+  }
+
+  _peerCoHostIdentity(peer) {
+    if (!peer || peer.role !== 'client') return '';
+    if (peer.userId) return `user:${peer.userId}`;
+    const host = String(peer.agentHostname || '').trim().toUpperCase();
+    const name = String(peer.displayName || '').trim().toLowerCase();
+    if (host && name) return `machine:${host}|${name}`;
+    if (name) return `name:${name}`;
+    return '';
+  }
+
+  _restoreCoHostFromIdentity(peer) {
+    if (!peer || peer.role !== 'client') return;
+    const identity = this._peerCoHostIdentity(peer);
+    if (!identity || !this.coHostIdentities.has(identity)) return;
+    peer.isCoHost = true;
+    this.displayControllerIds.add(peer.id);
+  }
+
+  getActingHostPeer() {
+    if (this.actingHostPeerId) {
+      const pinned = this.peers.get(this.actingHostPeerId);
+      if (pinned && pinned.isCoHost && this.isPeerSocketOpen(pinned)) return pinned;
+    }
+    return [...this.peers.values()].find((p) => p.isCoHost && this.isPeerSocketOpen(p)) || null;
+  }
+
+  getSnapshotHostPeer() {
+    return this.getHostPeer() || this.getActingHostPeer();
+  }
+
+  setCoHost(targetPeerId, ativo) {
+    const target = this.peers.get(targetPeerId);
+    if (!target) return { ok: false, erro: 'Peer nao encontrado' };
+    if (target.role !== 'client') {
+      return { ok: false, erro: 'Apenas clients podem ser co-host' };
+    }
+    const next = !!ativo;
+    if (!!target.isCoHost === next) {
+      return { ok: true, unchanged: true };
+    }
+
+    target.isCoHost = next;
+    const identity = this._peerCoHostIdentity(target);
+    if (next) {
+      this.displayControllerIds.add(target.id);
+      if (identity) this.coHostIdentities.add(identity);
+      target.send({
+        type: 'promovidoCoHost',
+        payload: { nome: target.displayName }
+      });
+    } else {
+      this.displayControllerIds.delete(target.id);
+      if (identity) this.coHostIdentities.delete(identity);
+      if (this.actingHostPeerId === target.id) this.actingHostPeerId = null;
+      target.send({ type: 'demovidoCoHost' });
+    }
+    this.sendDisplayControlSnapshot(target);
+    this.notifyHostState();
+    return { ok: true, unchanged: false };
   }
 
   _initActiveSpeakerBridge() {
@@ -557,7 +620,7 @@ export class RoomManager {
       .filter((p) => this.isPeerSocketOpen(p))
       .map((p) => this._mapPeerForState(p));
 
-    const host = this.getHostPeer();
+    const host = this.getSnapshotHostPeer();
     const selected =
       transmission.selectedPeerId
         ? peers.find((p) => p.id === transmission.selectedPeerId) ||
@@ -738,7 +801,7 @@ export class RoomManager {
   }
 
   sendDisplayControlSnapshot(peer) {
-    if (!peer || peer.role !== 'client' || !this.canControlDisplay(peer.id)) return;
+    if (!peer || peer.role !== 'client') return;
     peer.send({
       type: 'controleExibicaoAtualizado',
       payload: this.buildDisplayControlPayload(peer.id)
@@ -838,7 +901,7 @@ export class RoomManager {
 
   buildRoomSnapshot(viewingPeer = null) {
     this.purgeStalePeers();
-    const host = this.getHostPeer();
+    const host = this.getSnapshotHostPeer();
     const transmission = this.buildTransmissionPayload();
     const audioSources = this.getAudioSources();
     const peers = [...this.peers.values()]
@@ -935,8 +998,9 @@ export class RoomManager {
 
     let audioSourcesChanged = false;
 
-    // Um painel host ativo — aba antiga deixa de receber atualizações
     if (role === 'host') {
+      this.actingHostPeerId = null;
+      // Um painel host ativo — aba antiga deixa de receber atualizações
       for (const old of this.getHostPeers()) {
         if (old.ws === ws) continue;
         logger.info('Substituindo host anterior', { peerId: old.id });
@@ -1027,6 +1091,7 @@ export class RoomManager {
     peer.ws = ws;
     if (role === 'client') {
       peer.clientIp = getClientIpFromWs(ws);
+      this._restoreCoHostFromIdentity(peer);
     }
     this.peers.set(peer.id, peer);
     sessionDebugLog('[ROOM_STATE]', 'peer entrou', {
@@ -1072,17 +1137,32 @@ export class RoomManager {
     this.peers.delete(peerId);
 
     if (isPrimaryHost) {
-      const coHost = [...this.peers.values()].find((p) => p.isCoHost);
-      if (coHost) {
-        coHost.role = 'host';
-        coHost.isCoHost = false;
-        logger.info('Co-host promovido a host principal', { peerId: coHost.id, name: coHost.displayName });
+      const hostSuccessor = [...this.peers.values()].find(
+        (p) => p.role === 'host' && this.isPeerSocketOpen(p)
+      );
+      if (hostSuccessor) {
+        this.actingHostPeerId = null;
+        logger.info('Painel host sucessor permanece ativo', {
+          peerId: hostSuccessor.id,
+          name: hostSuccessor.displayName
+        });
       } else {
-        this.finalizadaPor = peer.displayName;
-        this.interrompidaPor = null;
-        this.selectedPeerId = null;
-        this.transmissionPaused = false;
-        this.broadcastActiveProducer();
+        const coHost = [...this.peers.values()].find((p) => p.isCoHost);
+        if (coHost) {
+          this.actingHostPeerId = coHost.id;
+          logger.info('Co-host assume controles sem alterar papel', {
+            peerId: coHost.id,
+            name: coHost.displayName,
+            role: coHost.role
+          });
+        } else {
+          this.actingHostPeerId = null;
+          this.finalizadaPor = peer.displayName;
+          this.interrompidaPor = null;
+          this.selectedPeerId = null;
+          this.transmissionPaused = false;
+          this.broadcastActiveProducer();
+        }
       }
     }
 

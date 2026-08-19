@@ -14,7 +14,6 @@ export function createToastContainer(id = 'toast-root') {
 }
 
 export function showToast(message, type = 'info', durationMs = 5000) {
-  if (type !== 'error') return;
   const root = createToastContainer();
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;

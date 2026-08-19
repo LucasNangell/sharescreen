@@ -369,8 +369,10 @@
   
   
   
+  
+  
   <script>(function(){
-var BUILD_ID="2026-08-19T15-50-57-e90gea";
+var BUILD_ID="2026-08-19T16-11-58-zs1qbg";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -418,10 +420,10 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T15-50-57-e90gea" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T15-50-57-e90gea" />
-  <link rel="stylesheet" href="style.css?v=2026-08-19T15-50-57-e90gea" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-19T15-50-57-e90gea" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T16-11-58-zs1qbg" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T16-11-58-zs1qbg" />
+  <link rel="stylesheet" href="style.css?v=2026-08-19T16-11-58-zs1qbg" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-19T16-11-58-zs1qbg" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body class="app-client">
@@ -628,12 +630,6 @@ try{
                   </svg>
                 </button>
 
-                <button type="button" id="btn-gravacao-toggle" class="btn btn-secondary trans-btn" disabled title="Iniciar gravação">
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="red">
-                    <circle cx="12" cy="12" r="8"></circle>
-                  </svg>
-                </button>
-
                 <button type="button" id="btn-mute-audio" class="btn btn-ghost trans-btn" title="Silenciar áudio">
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -647,8 +643,6 @@ try{
           <div style="display: none !important;">
             <button type="button" id="btn-pausar" disabled>Pausar</button>
             <button type="button" id="btn-retomar" disabled></button>
-            <button type="button" id="btn-gravar" disabled>Gravar</button>
-            <button type="button" id="btn-parar-gravar" disabled>Parar</button>
           </div>
         </section>
 
@@ -694,28 +688,24 @@ try{
               </div>
             </details>
 
-            <details class="settings-subdetails" id="details-recording">
+            <details class="settings-subdetails" id="details-sala">
               <summary class="settings-subsummary">
-                <span>Gravação</span>
+                <span>Sala</span>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon-sub">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </summary>
-              <div class="subdetails-content recording-section">
-                <div id="recording-status" class="recording-status">Pronto</div>
-                <div id="recording-timer" class="recording-timer" hidden>00:00</div>
-                <div class="progress-bar" id="upload-progress-wrap" hidden>
-                  <div class="progress-fill" id="upload-progress"></div>
-                </div>
-                <p id="recording-filename" class="hint-text"></p>
-
-                <div class="field recordings-dir-field" style="margin-top: var(--space-sm);">
-                  <label for="recordings-dir-input" style="font-size: 0.8rem; color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Destino da gravação</label>
-                  <div style="display: flex; gap: var(--space-xs);">
-                    <input id="recordings-dir-input" type="text" placeholder="Padrão do servidor" style="flex: 1; padding: 0.4rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); min-width: 0;" />
-                    <button type="button" id="btn-browse-dir" class="btn btn-secondary" style="padding: 0 0.8rem; font-size: 0.8rem; flex-shrink: 0;">Procurar</button>
-                  </div>
-                </div>
+              <div class="subdetails-content">
+                <label class="field-label" style="display:flex;align-items:center;gap:0.5rem;">
+                  <input id="chk-meet-bridge-live" type="checkbox" />
+                  <span>Anti-eco Meet (ponte ao vivo)</span>
+                </label>
+                <label class="field-label" style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;">
+                  <input id="chk-shared-room-mode" type="checkbox" />
+                  <span>Modo sala compartilhada</span>
+                </label>
+                <p id="shared-room-hint" class="hint-text" hidden>Falante dominante ativo.</p>
+                <button type="button" id="btn-shared-room-preset" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;">Aplicar preset de sala</button>
               </div>
             </details>
 
@@ -783,7 +773,7 @@ try{
   </div>
 
   <div id="custom-context-menu" class="context-menu" hidden>
-    <button type="button" id="ctx-cohost" class="ctx-item">
+    <button type="button" id="ctx-cohost" class="ctx-item" hidden>
       <span class="ctx-icon"></span>
       <span class="ctx-text">Co-host</span>
     </button>
@@ -791,6 +781,61 @@ try{
       <span class="ctx-icon"></span>
       <span class="ctx-text">Troca telas</span>
     </button>
+    <button type="button" id="ctx-audio" class="ctx-item">
+      <span class="ctx-icon"></span>
+      <span class="ctx-text">Filtros de áudio</span>
+    </button>
+  </div>
+
+  <div id="audio-filters-modal" class="modal-backdrop" hidden>
+    <div class="modal-panel audio-filters-modal-panel" role="dialog" aria-labelledby="audio-filters-modal-title" style="max-width: 480px; width: 100%;">
+      <h1 id="audio-filters-modal-title">Configurações de Filtros de Áudio</h1>
+      <p class="hint-text">Participante: <strong id="audio-filters-client-name">—</strong></p>
+      <p id="audio-filters-note" class="hint-text" style="color: var(--color-text-muted); font-size: 0.8rem; margin-top: 2px;">
+        Estes filtros são aplicados na origem do participante. Todos os participantes ouvem o resultado.
+      </p>
+      <div style="display: flex; flex-direction: column; gap: var(--space-md); margin-top: var(--space-md);">
+        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md);">
+          <legend>Controles de Tom</legend>
+          <label>Ganho <strong id="audio-gain-val">1.0x</strong></label>
+          <input id="audio-gain" type="range" min="0.0" max="3.0" step="0.1" value="1.0" />
+          <label>Graves <strong id="audio-bass-val">0 dB</strong></label>
+          <input id="audio-bass" type="range" min="-12" max="12" step="1" value="0" />
+          <label>Agudos <strong id="audio-treble-val">0 dB</strong></label>
+          <input id="audio-treble" type="range" min="-12" max="12" step="1" value="0" />
+        </fieldset>
+        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md);">
+          <legend>Filtros</legend>
+          <label><input type="checkbox" id="audio-hp-enabled" /> Passa-alta</label>
+          <label>Corte <strong id="audio-hp-freq-val">80 Hz</strong></label>
+          <input id="audio-hp-frequency" type="range" min="50" max="300" step="5" value="80" />
+          <label><input type="checkbox" id="audio-peak-enabled" /> Presença</label>
+          <label>Freq <strong id="audio-peak-freq-val">3000 Hz</strong></label>
+          <input id="audio-peak-frequency" type="range" min="1000" max="5000" step="100" value="3000" />
+          <label>Ganho <strong id="audio-peak-gain-val">3 dB</strong></label>
+          <input id="audio-peak-gain" type="range" min="0" max="12" step="1" value="3" />
+          <label><input type="checkbox" id="audio-comp-enabled" /> Compressor</label>
+          <label><input type="checkbox" id="audio-nearfield-enabled" /> Near-field</label>
+          <label>Restrição <strong id="audio-nearfield-threshold-val">0.5</strong></label>
+          <input id="audio-nearfield-threshold" type="range" min="0.35" max="0.75" step="0.05" value="0.5" />
+          <label><input type="checkbox" id="audio-speech-gate-enabled" /> Portão de fala</label>
+          <label><input type="checkbox" id="audio-ml-ns-enabled" /> RNNoise</label>
+          <label><input type="checkbox" id="audio-sensitivity-enabled" /> Sensibilidade (legado)</label>
+          <label>Proximidade <strong id="audio-capture-distance-val">6/10</strong></label>
+          <input id="audio-capture-distance" type="range" min="1" max="10" step="1" value="6" />
+          <label><input type="checkbox" id="audio-gate-enabled" /> Noise gate</label>
+          <label>Limiar <strong id="audio-gate-thresh-val">-45 dB</strong></label>
+          <input id="audio-gate-threshold" type="range" min="-70" max="-20" step="1" value="-45" />
+        </fieldset>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-lg);">
+        <button type="button" id="btn-audio-filters-reset" class="btn btn-ghost">Resetar</button>
+        <div style="display: flex; gap: var(--space-sm);">
+          <button type="button" id="btn-audio-filters-cancel" class="btn btn-ghost">Cancelar</button>
+          <button type="button" id="btn-audio-filters-save" class="btn btn-primary">Salvar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="lt-modal" class="modal-backdrop" hidden>
@@ -840,7 +885,7 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-08-19T15-50-57-e90gea"></script>
+  <script src="app.bundle.js?v=2026-08-19T16-11-58-zs1qbg"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/meet/sw.js', { scope: '/meet/' }).catch(function () {});

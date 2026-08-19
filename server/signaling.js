@@ -451,28 +451,12 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
     }
 
     case 'definirCoHost': {
-      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode definir co-hosts');
-      const { peerId, ativo } = msg.payload || {};
-      const target = room.peers.get(peerId);
-      if (target) {
-        target.isCoHost = !!ativo;
-        if (ativo) {
-          room.displayControllerIds.add(peerId);
-          target.send({
-            type: 'promovidoCoHost',
-            payload: {
-              hostToken: config.hostToken || getSessionHostToken() || '',
-              nome: target.displayName
-            }
-          });
-          room.sendDisplayControlSnapshot(target);
-        } else {
-          room.displayControllerIds.delete(peerId);
-          target.send({ type: 'demovidoCoHost' });
-          room.sendDisplayControlSnapshot(target);
-        }
-        room.notifyHostState();
+      if (!peer || peer.role !== 'host') {
+        throw new Error('Apenas o host pode definir co-hosts');
       }
+      const { peerId, ativo } = msg.payload || {};
+      const result = room.setCoHost(peerId, !!ativo);
+      if (!result.ok) throw new Error(result.erro || 'Falha ao definir co-host');
       break;
     }
 

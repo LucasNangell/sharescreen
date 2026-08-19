@@ -41,6 +41,7 @@ import { createStudioState, slotNeedsTransform } from '../shared/studio-state.js
 import { StudioCompositor, resolveCompositorDimensions } from '../shared/studio-compositor.js';
 import { createStudioTransformEditor } from '../shared/studio-transform-editor.js';
 import { requireAuthSession, fetchCurrentUser, authDisplayName, bindLogoutControl } from '../shared/auth-client.js';
+import { createRoomControls } from '../shared/room-controls.js';
 
 const STUDIO_COMPOSITOR_IN_MAIN = true;
 
@@ -626,6 +627,28 @@ function releaseHostLock() {
 }
 
 const ui = new UiStateMachine({ onChange: syncControlButtons });
+const hostRoomControls = createRoomControls({
+  getSignaling: () => signaling,
+  getSelfPeerId: () => hostPeerId,
+  getHostPeerId: () => hostPeerId,
+  getEstado: () => estado,
+  setEstado: (next) => {
+    estado = next;
+  },
+  mutedClients,
+  ui,
+  capabilities: {
+    canManageCoHosts: true,
+    audioFilters: false,
+    modes: false
+  },
+  hooks: {
+    canCommand: () => canHostCommand(),
+    notify: showToast,
+    setStatus,
+    onError: (e, ctx) => errors.handle(e, ctx)
+  }
+});
 const errors = new ErrorManager({
   onToast: (msg, type) => showToast(msg, type),
   onTechnicalLog: (msg, level) => log(msg, level)
@@ -1341,27 +1364,11 @@ function isSharingScreen() {
 }
 
 function toggleClientMute(peerId) {
-  const muted = !mutedClients.has(peerId);
-  signaling.send('definirClientMute', { peerId, muted });
+  hostRoomControls.toggleClientMute(peerId);
 }
 
 async function toggleDisplayControl(peerId, ativo) {
-  if (!canHostCommand()) {
-    showToast('Aguarde o painel conectar ao servidor', 'warn');
-    return;
-  }
-  try {
-    const resultPromise = signaling.onceType('controleExibicaoResultado');
-    signaling.send('definirControleExibicao', { peerId, ativo });
-    const res = await resultPromise;
-    if (!res.ok) throw new Error(res.erro || 'Falha ao delegar controle');
-    showToast(
-      ativo ? 'Controle de exibicao delegado ao client' : 'Controle de exibicao revogado',
-      'success'
-    );
-  } catch (e) {
-    errors.handle(e, 'controle-exibicao');
-  }
+  return hostRoomControls.toggleDisplayControl(peerId, ativo);
 }
 
 function updateTransmissionSectionVu(level, active) {
@@ -1933,21 +1940,8 @@ async function selecionar(peerId) {
       authenticated: signaling?.authenticated,
       joinInProgress
     });
-    showToast('Aguarde o painel conectar ao servidor', 'warn');
-    return;
   }
-  try {
-    setStatus('Selecionando fonte...');
-    const resultPromise = signaling.onceType('selecaoResultado');
-    signaling.send('selecionarClient', { peerId });
-    const res = await resultPromise;
-    if (!res.ok) throw new Error(res.erro || 'Falha na selecao');
-    showToast('Fonte selecionada', 'success');
-    setStatus('Carregando video da fonte...');
-  } catch (e) {
-    errors.handle(e, 'selecionar');
-    setStatus('Conectado ao painel host');
-  }
+  return hostRoomControls.selectPeer(peerId);
 }
 
 async function runTransmission(raw, gen = transmissionGeneration) {

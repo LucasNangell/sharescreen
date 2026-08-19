@@ -34,6 +34,7 @@ import { attachPlaybackScaler } from '../shared/playback-scaler.js';
 import { verifyServerBuild } from '../shared/build-verify.js';
 import { debugClientSessionLog } from '../shared/debug-session-client.js';
 import { requireAuthSession, authDisplayName, bindLogoutControl } from '../shared/auth-client.js';
+import { createRoomControls } from '../shared/room-controls.js';
 
 const STORAGE_NAME = 'sharescreen_client_name';
 const STORAGE_MACHINE = 'sharescreen_agent_hostname';
@@ -192,6 +193,8 @@ let audioHealthTimer = null;
 let deferScreenShareOnJoin = false;
 let skipJoinPublishOnJoin = false;
 let pendingPostPublishRemoteWork = null;
+let isCoHost = false;
+let pendingCoHostSidebar = false;
 let clientDisplayStream = null;
 let clientMicTrack = null;
 let clientMicPicker = null;
@@ -265,6 +268,106 @@ function syncOwnMicMuteFromRoom() {
 const errors = new ErrorManager({
   onToast: (m, t) => showToast(m, t),
   onTechnicalLog: (m) => console.error(m)
+});
+
+const roomControls = createRoomControls({
+  getSignaling: () => signaling,
+  getSelfPeerId: () => peerId,
+  getHostPeerId: () => hostPeerId,
+  mutedClients,
+  capabilities: {
+    canManageCoHosts: false,
+    audioFilters: true,
+    modes: true
+  },
+  hooks: {
+    canCommand: () =>
+      !!isCoHost &&
+      !!peerId &&
+      !!signaling?.connected &&
+      !!signaling?.authenticated &&
+      !clientJoinInProgress,
+    notify: showToast,
+    setStatus,
+    onError: (e, ctx) => errors.handle(e, ctx),
+    onQualityChanged: async (presetId) => {
+      if (!media) return;
+      media.setVideoQuality(mergeServerQuality(media.videoQuality, presetId));
+      await media.applyLiveVideoQuality();
+    },
+    onPlaybackMuteChanged: (muted) => {
+      if (els.audio) els.audio.muted = muted;
+      roomAudioMonitor?.setMasterMuted?.(muted);
+    },
+    onMeetBridgeChanged: (ativo) => {
+      meetBridgeLiveMode = !!ativo;
+      roomAudioMonitor?.setExcludeSourceTypes?.(ativo ? ['system'] : []);
+    },
+    onSharedRoomChanged: (ativo) => {
+      sharedRoomMode = !!ativo;
+      media?.setSharedRoomMode?.(!!ativo);
+    },
+    onSnapshotApplied: (snapshot, parsed) => {
+      syncCoHostFromSnapshot(snapshot, parsed);
+    }
+  }
+});
+
+function showCoHostSidebar() {
+  const sidebar = $('sidebar');
+  if (sidebar) sidebar.hidden = false;
+  els.clientMain?.classList.add('sidebar-open');
+  roomControls.mount();
+}
+
+function hideCoHostSidebar() {
+  roomControls.unmount();
+  const sidebar = $('sidebar');
+  if (sidebar) sidebar.hidden = true;
+  els.clientMain?.classList.remove('sidebar-open', 'sidebar-collapsed');
+  sidebar?.classList.remove('is-collapsed');
+}
+
+function applyCoHostState(next, { notifyUser = false } = {}) {
+  const desired = !!next;
+  const sidebar = $('sidebar');
+  if (desired === isCoHost) {
+    if (desired && sidebar?.hidden) showCoHostSidebar();
+    else if (desired) roomControls.rebind();
+    return;
+  }
+  isCoHost = desired;
+  const applyLayout = () => {
+    pendingCoHostSidebar = false;
+    if (isCoHost) showCoHostSidebar();
+    else hideCoHostSidebar();
+  };
+  if (document.fullscreenElement) {
+    pendingCoHostSidebar = true;
+  } else {
+    applyLayout();
+  }
+  if (notifyUser) {
+    showToast(
+      isCoHost ? 'Voce agora e co-host desta sala' : 'Voce nao e mais co-host desta sala',
+      'info'
+    );
+  }
+}
+
+function syncCoHostFromSnapshot(snapshot, parsed) {
+  const id = String(peerId || '');
+  if (!id) return;
+  const peers = parsed?.peers || snapshot?.peers || snapshot?.clients || [];
+  const me = peers.find((p) => String(p.id) === id);
+  applyCoHostState(!!(me?.isCoHost || me?.permissions?.isCoHost));
+}
+
+document.addEventListener('fullscreenchange', () => {
+  if (!pendingCoHostSidebar || document.fullscreenElement) return;
+  pendingCoHostSidebar = false;
+  if (isCoHost) showCoHostSidebar();
+  else hideCoHostSidebar();
 });
 
 if (readQueryParam('nome') && !readQueryParam('token')) {
@@ -886,6 +989,9 @@ function ensureClientAudioMonitor() {
     roomAudioMonitor.setOwnPeerIds?.([...ownPeerIds]);
     if (hostPeerId) roomAudioMonitor.setPinnedPeerIds([hostPeerId]);
   }
+  roomAudioMonitor.onLevels = (levels) => {
+    if (isCoHost) roomControls.updateCardVuMeters(levels);
+  };
   return roomAudioMonitor;
 }
 
@@ -1008,6 +1114,9 @@ async function ensureClientMicTrack(deviceId = '') {
 async function teardownClientSession({ keepDisplayStream = false, keepMicTrack = false } = {}) {
   stopPlaybackScaler();
   stopAudioHealthWatchdog();
+  hideCoHostSidebar();
+  isCoHost = false;
+  pendingCoHostSidebar = false;
   if (fontesAudioDebounceTimer) {
     clearTimeout(fontesAudioDebounceTimer);
     fontesAudioDebounceTimer = null;
@@ -1982,6 +2091,7 @@ async function finalizeAfterPublish() {
 async function applyRoomSnapshot(snapshot, { force = false } = {}) {
   if (!snapshot) return;
 
+  roomControls.applyRoomSnapshot(snapshot);
   const parsed = parseRoomSnapshot(snapshot);
   applyHostPeerFromSnapshot(parsed);
 
@@ -2222,6 +2332,7 @@ async function executeJoinAndStart() {
     media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
     await media.ensureRecvTransport();
     await media.ensureRecvTransport(media._audioRecvTag());
+    roomControls.rebind();
     await applyPendingMicrophoneFilters();
     if (!pendingMicrophoneFilterPrefs) {
       await media.ensureMicPublishFilters(CLIENT_MIC_PUBLISH_DEFAULTS);
@@ -2359,6 +2470,7 @@ async function rejoinSession() {
   media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
   await media.ensureRecvTransport();
   await media.ensureRecvTransport(media._audioRecvTag());
+  roomControls.rebind();
   await applyPendingMicrophoneFilters();
   if (!pendingMicrophoneFilterPrefs) {
     await media.ensureMicPublishFilters(CLIENT_MIC_PUBLISH_DEFAULTS);
@@ -2479,6 +2591,10 @@ async function handleServerMessage(msg) {
     await applyRoomSnapshot(msg.payload);
     return;
   }
+  if (msg.type === 'estado') {
+    roomControls.applyLegacyEstado(msg.payload);
+    return;
+  }
   if (msg.type === 'modoPonteMeetAtualizado') {
     await applyMeetBridgeLiveMode(!!msg.payload?.ativo);
     return;
@@ -2497,6 +2613,7 @@ async function handleServerMessage(msg) {
     if (sharedRoomMode) {
       media?.handleDominantSpeaker?.(msg.payload || {});
     }
+    roomControls.setDominantSpeaker(msg.payload?.peerId);
     return;
   }
   if (msg.type === 'filtroAudioAtualizado') {
@@ -2524,6 +2641,7 @@ async function handleServerMessage(msg) {
     }
     syncOwnMicMuteFromRoom();
     applyClientAudioMute();
+    roomControls.setMutedFromRoom(mutedIds);
     return;
   }
   if (msg.type === 'anotacaoSegmento') {
@@ -2568,6 +2686,7 @@ async function handleServerMessage(msg) {
       return;
     }
     await txSync.apply(msg.payload);
+    roomControls.applyTransmissionFlags(tx);
     await syncClientAudioMonitor(lastAudioSources).catch((e) =>
       errors.handle(e, 'audio-sync')
     );
@@ -2618,10 +2737,10 @@ async function handleServerMessage(msg) {
     applyDisplayControlUpdate(msg.payload);
   }
   if (msg.type === 'promovidoCoHost') {
-    showToast('Funcoes de co-host estao disponiveis apenas no painel host', 'info');
+    applyCoHostState(true, { notifyUser: true });
   }
   if (msg.type === 'demovidoCoHost') {
-    showToast('Voce nao e mais co-host desta sala', 'info');
+    applyCoHostState(false, { notifyUser: true });
   }
 }
 

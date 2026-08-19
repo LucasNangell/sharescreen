@@ -15,6 +15,7 @@
     "test:smoke": "node scripts/smoke-test.js",
     "test:quality": "node scripts/quality-manager-smoke.js",
     "test:audio-policy": "node scripts/audio-policy-smoke.js",
+    "test:cohost": "node scripts/cohost-smoke.js",
     "cert": "node scripts/generate-cert.js",
     "cert:prod": "node scripts/generate-cert.js",
     "start": "node server/index.js",
