@@ -189,6 +189,16 @@
   display: none !important;
 }
 
+.preview-float-stack .preview-activate-audio {
+  position: static;
+  transform: none;
+  margin-top: 0.25rem;
+}
+
+.preview-activate-audio[hidden] {
+  display: none !important;
+}
+
 .live-annotation-canvas {
   position: absolute;
   inset: 0;

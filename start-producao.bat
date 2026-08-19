@@ -3,20 +3,26 @@ chcp 65001 >nul
 title ShareScreen - Producao (10.1.1.73)
 cd /d "%~dp0"
 
-set SHARESCREEN_SERVER_HOST=10.1.1.73
-set ANNOUNCED_IP=10.1.1.73
-set PUBLIC_URL=https://cgrafsysvm.camara.leg.br
-REM IP publico para candidatos ICE (espectadores externos). Obrigatorio se DNS aponta para 10.1.1.73.
-set PUBLIC_ANNOUNCED_IP=200.219.133.192
-set TRUST_PROXY=1
-
-REM TURN — relay para espectadores externos (rode scripts\start-turn.bat em paralelo)
-set TURN_USERNAME=sharescreen
-set TURN_PASSWORD=ShareScreenTurn2026!
-
-set SHARESCREEN_DEV=
-set "SHARESCREEN_RECORDINGS_DIR=\\cgrafsysvm\ApogeeFiles\Gravaçoes Treinamento"
+if not exist "%~dp0scripts\env-producao.cmd" (
+    echo [ERRO] scripts\env-producao.cmd ausente.
+    pause
+    exit /b 1
+)
+call "%~dp0scripts\env-producao.cmd"
 set "DEBUG_LOG=%~dp0debug-b07cf8.log"
+
+sc query ShareScreenLAN >nul 2>&1
+if not errorlevel 1 (
+    sc query ShareScreenLAN | findstr /I /C:"RUNNING" /C:"START_PENDING" >nul
+    if not errorlevel 1 (
+        echo [ERRO] O servico Windows ShareScreenLAN ja esta em execucao.
+        echo        Nao inicie start-producao.bat em paralelo — isso mataria o Node do servico.
+        echo        No servidor use: reiniciar-servico-producao.bat
+        echo        Ou: nssm restart ShareScreenLAN
+        pause
+        exit /b 1
+    )
+)
 
 where node >nul 2>&1
 if errorlevel 1 (

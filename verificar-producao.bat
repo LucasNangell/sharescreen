@@ -104,6 +104,17 @@ if not exist "scripts\liberar-portas.ps1" (
     exit /b 1
 )
 
+if not exist "scripts\env-producao.cmd" (
+    echo [ERRO] scripts\env-producao.cmd ausente.
+    echo        Rode preparar-deploy.bat no PC de desenvolvimento e copie o pacote de novo.
+    pause
+    exit /b 1
+)
+
+if not exist "scripts\install-servico-producao.ps1" (
+    echo [AVISO] scripts\install-servico-producao.ps1 ausente — instalacao NSSM nao estara disponivel.
+)
+
 if not exist "node_modules\better-sqlite3\build\Release\better_sqlite3.node" (
     echo [ERRO] better-sqlite3 nativo ausente.
     echo        Rode preparar-deploy.bat no PC de desenvolvimento e copie o pacote de novo.
@@ -123,7 +134,16 @@ del "data\.write-probe" >nul 2>&1
 
 echo [OK] Todos os arquivos necessarios estao presentes.
 echo.
-echo Inicie o servidor com: start-producao.bat
+sc query ShareScreenLAN >nul 2>&1
+if errorlevel 1 (
+    echo Servico ShareScreenLAN: nao instalado.
+    echo   Primeira vez: install-servico-producao.bat como Administrador
+    echo   Fallback:     start-producao.bat
+) else (
+    sc query ShareScreenLAN | findstr /I /C:"STATE"
+    echo   Reiniciar: reiniciar-servico-producao.bat
+    echo   Nao use start-producao.bat enquanto o servico estiver RUNNING.
+)
 echo URLs Nginx: http://cgrafsysvm/host/  e  http://cgrafsysvm/meet/
 echo.
 pause

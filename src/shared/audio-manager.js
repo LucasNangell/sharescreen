@@ -27,13 +27,17 @@ export function saveCapturePrefs(prefs) {
 
 /** Desbloqueia AudioContext após gesto do usuário (autoplay policy). */
 export function installAudioUnlock(onUnlock) {
-  const unlock = () => {
-    onUnlock?.();
-    document.removeEventListener('pointerdown', unlock, true);
-    document.removeEventListener('keydown', unlock, true);
+  const unlock = async () => {
+    try {
+      const done = await onUnlock?.();
+      if (done === true) {
+        document.removeEventListener('pointerdown', unlock, true);
+        document.removeEventListener('keydown', unlock, true);
+      }
+    } catch (_) {}
   };
-  document.addEventListener('pointerdown', unlock, { once: true, capture: true });
-  document.addEventListener('keydown', unlock, { once: true, capture: true });
+  document.addEventListener('pointerdown', unlock, { capture: true });
+  document.addEventListener('keydown', unlock, { capture: true });
 }
 
 export function buildMicrophoneConstraints(deviceId = '', { disableAutoGainControl = false } = {}) {
@@ -56,35 +60,121 @@ export async function requestMicrophonePermission(onLog) {
   onLog?.('Permissão de microfone concedida');
 }
 
+export function buildMicrophoneDeviceChoices(devices = []) {
+  return [
+    { deviceId: '', label: 'Microfone padrão do sistema' },
+    ...(devices || []).map((d, i) => ({
+      deviceId: d.deviceId || '',
+      label: String(d.label || '').trim() || `Microfone ${i + 1}`
+    }))
+  ];
+}
+
+/**
+ * Traduz a entrada virtual `default` do Chrome para o deviceId concreto do dispositivo
+ * padrão do sistema, para que a captura não dependa de constraint vazia.
+ */
+export function resolveDefaultMicrophoneDeviceId(devices = []) {
+  const list = devices || [];
+  if (!list.length) return '';
+  const virtualDefault = list.find((d) => d.deviceId === 'default');
+  if (virtualDefault?.groupId) {
+    const concrete = list.find(
+      (d) => d.deviceId !== 'default' && d.groupId === virtualDefault.groupId
+    );
+    if (concrete) return concrete.deviceId;
+  }
+  const firstConcrete = list.find((d) => d.deviceId && d.deviceId !== 'default');
+  return firstConcrete?.deviceId || list[0].deviceId || '';
+}
+
+export function describeMicrophoneAccessIssue({
+  isSecureContext = true,
+  permissionError = null,
+  deviceCount = 0
+} = {}) {
+  if (!isSecureContext) {
+    return 'Contexto inseguro — abra em HTTPS ou localhost para listar microfones (Chrome bloqueia HTTP).';
+  }
+  if (permissionError && !deviceCount) {
+    return 'Permissão de microfone bloqueada — permita o acesso nas configurações do navegador.';
+  }
+  return null;
+}
+
 export async function listMicrophoneDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   return devices
     .filter((d) => d.kind === 'audioinput' && d.deviceId)
     .map((d, i) => ({
       deviceId: d.deviceId,
+      groupId: d.groupId || '',
       label: d.label?.trim() || `Microfone ${i + 1}`
     }));
 }
 
-export async function populateMicrophoneSelect(selectEl, { deviceId = '', onLog } = {}) {
-  if (!selectEl) return [];
-  await requestMicrophonePermission(onLog);
-  const devices = await listMicrophoneDevices();
-  selectEl.innerHTML = '';
+function ensureDefaultMicrophoneOption(selectEl) {
+  if (!selectEl) return;
+  if ([...selectEl.options].some((o) => o.value === '')) return;
   const padrao = document.createElement('option');
   padrao.value = '';
   padrao.textContent = 'Microfone padrão do sistema';
-  selectEl.appendChild(padrao);
-  for (const d of devices) {
+  selectEl.insertBefore(padrao, selectEl.firstChild);
+}
+
+/** @returns {Promise<{ devices: Array, deviceId: string }>} deviceId resolvido para captura. */
+export async function populateMicrophoneSelect(
+  selectEl,
+  { deviceId = '', onLog, skipPermissionProbe = false } = {}
+) {
+  if (!selectEl) return { devices: [], deviceId: '' };
+  const previous = selectEl.value;
+  ensureDefaultMicrophoneOption(selectEl);
+
+  const secure =
+    typeof window === 'undefined' ? true : window.isSecureContext !== false;
+  const insecureHint = describeMicrophoneAccessIssue({ isSecureContext: secure });
+  if (insecureHint && !secure) onLog?.(insecureHint, 'warn');
+
+  let permissionError = null;
+  if (!skipPermissionProbe) {
+    try {
+      await requestMicrophonePermission(onLog);
+    } catch (e) {
+      permissionError = e;
+      onLog?.(e?.message || 'Permissão de microfone recusada', 'warn');
+    }
+  }
+
+  let devices = [];
+  try {
+    devices = await listMicrophoneDevices();
+  } catch (_) {}
+
+  const choices = buildMicrophoneDeviceChoices(devices);
+  const keepValue = deviceId || previous || '';
+  selectEl.innerHTML = '';
+  for (const choice of choices) {
     const opt = document.createElement('option');
-    opt.value = d.deviceId;
-    opt.textContent = d.label;
+    opt.value = choice.deviceId;
+    opt.textContent = choice.label;
     selectEl.appendChild(opt);
   }
-  if (deviceId && [...selectEl.options].some((o) => o.value === deviceId)) {
-    selectEl.value = deviceId;
+  const hasOption = (value) => [...selectEl.options].some((o) => o.value === value);
+  if (keepValue && hasOption(keepValue)) {
+    selectEl.value = keepValue;
+  } else {
+    const resolvedDefault = resolveDefaultMicrophoneDeviceId(devices);
+    selectEl.value = resolvedDefault && hasOption(resolvedDefault) ? resolvedDefault : '';
   }
-  return devices;
+
+  const blockedHint = describeMicrophoneAccessIssue({
+    isSecureContext: secure,
+    permissionError,
+    deviceCount: devices.length
+  });
+  if (blockedHint) onLog?.(blockedHint, 'warn');
+  return { devices, deviceId: selectEl.value || '' };
 }
 
 export async function acquireMicrophoneTrack(deviceId, onLog, options = {}) {
@@ -272,8 +362,11 @@ export function setupMicrophonePicker({
   savedDeviceId = '',
   onLog,
   onError,
-  onSelectChange
+  onSelectChange,
+  onResolved,
+  hasLiveTrack = null
 }) {
+  let lastSavedId = savedDeviceId || '';
   const sync = async () => {
     if (!checkbox?.checked) {
       wrap?.setAttribute('hidden', '');
@@ -281,13 +374,39 @@ export function setupMicrophonePicker({
     }
     wrap?.removeAttribute('hidden');
     try {
-      await populateMicrophoneSelect(select, { deviceId: savedDeviceId, onLog });
+      const skipPermissionProbe = typeof hasLiveTrack === 'function' ? !!hasLiveTrack() : false;
+      const result = await populateMicrophoneSelect(select, {
+        deviceId: lastSavedId,
+        onLog,
+        skipPermissionProbe
+      });
+      const resolved = result?.deviceId || '';
+      if (resolved !== lastSavedId) {
+        lastSavedId = resolved;
+        onResolved?.(resolved);
+      }
     } catch (e) {
       onError?.(e.message);
     }
   };
   checkbox?.addEventListener('change', sync);
   refreshBtn?.addEventListener('click', () => sync());
-  select?.addEventListener('change', () => onSelectChange?.());
-  sync();
+  select?.addEventListener('change', () => {
+    lastSavedId = select?.value || '';
+    onSelectChange?.();
+  });
+  const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : null;
+  if (mediaDevices?.addEventListener) {
+    mediaDevices.addEventListener('devicechange', () => {
+      sync().catch(() => {});
+    });
+  }
+  // A primeira enumeração é assíncrona; quem publica áudio deve aguardar `ready`
+  // para não capturar com deviceId vazio enquanto o <select> ainda está vazio.
+  const ready = sync().catch(() => {});
+  return {
+    refresh: sync,
+    ready,
+    getDeviceId: () => select?.value || lastSavedId || ''
+  };
 }

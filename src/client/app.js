@@ -79,6 +79,7 @@ const els = {
   watchingLabel: $('watching-label'),
   erro: $('erro-box'),
   btnClientMic: $('btn-client-mic'),
+  btnActivateAudio: $('btn-activate-audio'),
   drawCanvas: $('live-annotation-canvas'),
   annotationToolbar: $('annotation-toolbar'),
   annotationToolbarToggle: $('annotation-toolbar-toggle'),
@@ -165,15 +166,19 @@ let syncClientAudioPromise = null;
 let syncClientAudioPending = false;
 let lastAudioSources = [];
 let lastAppliedAudioSig = '';
+const ownPeerIds = new Set();
 let fontesAudioDebounceTimer = null;
 let hostPeerId = null;
 let meetBridgeLiveMode = false;
+let sharedRoomMode = false;
 let audioHealthTimer = null;
 let deferScreenShareOnJoin = false;
 let skipJoinPublishOnJoin = false;
 let pendingPostPublishRemoteWork = null;
 let clientDisplayStream = null;
 let clientMicTrack = null;
+let clientMicPicker = null;
+const MIC_PICKER_READY_TIMEOUT_MS = 4000;
 let clientJoinInProgress = false;
 let bootstrapping = false;
 let joinInFlight = false;
@@ -452,14 +457,18 @@ const capturePrefs = loadCapturePrefs();
 if (els.chkSystemAudio) els.chkSystemAudio.checked = capturePrefs.systemAudio !== false;
 if (els.chkMicrophone) els.chkMicrophone.checked = !!capturePrefs.microphone;
 
-setupMicrophonePicker({
+clientMicPicker = setupMicrophonePicker({
   checkbox: els.chkMicrophone,
   wrap: els.micWrap,
   select: els.micSelect,
   refreshBtn: els.btnRefreshMics,
   savedDeviceId: capturePrefs.microphoneDeviceId || '',
   onLog: setStatus,
-  onError: (m) => showErro(m)
+  onError: (m) => showErro(m),
+  onResolved: () => saveCapturePrefs(getCapturePrefsFromUi()),
+  hasLiveTrack: () =>
+    clientMicTrack?.readyState === 'live' ||
+    media?.getLocalMicrophoneTrack?.()?.readyState === 'live'
 });
 
 els.micSelect?.addEventListener('change', () => {
@@ -472,8 +481,16 @@ els.chkMicrophone?.addEventListener('change', () => {
   if (!els.chkMicrophone?.checked) releaseClientMicTrack();
   updateClientMicUi();
   attachVuMeterIfNeeded();
+  if (sessionReady && media) {
+    syncClientMicPublication().catch((e) => errors.handle(e, 'audio-prefs'));
+  }
 });
-els.chkSystemAudio?.addEventListener('change', () => saveCapturePrefs(getCapturePrefsFromUi()));
+els.chkSystemAudio?.addEventListener('change', () => {
+  saveCapturePrefs(getCapturePrefsFromUi());
+  if (sessionReady && media) {
+    syncClientMicPublication().catch((e) => errors.handle(e, 'audio-prefs'));
+  }
+});
 
 setupMicrophonePicker({
   checkbox: els.settingsChkMic,
@@ -482,7 +499,10 @@ setupMicrophonePicker({
   refreshBtn: els.settingsBtnRefreshMics,
   savedDeviceId: capturePrefs.microphoneDeviceId || '',
   onLog: setStatus,
-  onError: (m) => showErro(m)
+  onError: (m) => showErro(m),
+  hasLiveTrack: () =>
+    clientMicTrack?.readyState === 'live' ||
+    media?.getLocalMicrophoneTrack?.()?.readyState === 'live'
 });
 
 function clientHasMicEnabled() {
@@ -518,12 +538,15 @@ async function onClientMicClick() {
   if (!els.btnClientMic) return;
   try {
     if (clientMicAutoplayNeeded) {
-      await roomAudioMonitor?.resume();
+      const confirmed = await roomAudioMonitor?.resume();
       roomAudioMonitor?.connectOutput(els.audio);
-      await els.audio?.play();
-      clientMicAutoplayNeeded = false;
+      await els.audio?.play?.().catch(() => {});
+      if (confirmed || roomAudioMonitor?.isPlaybackConfirmed?.()) {
+        clientMicAutoplayNeeded = false;
+      }
       updateClientMicUi();
-      showToast('Audio ativado', 'success');
+      updateActivateAudioUi();
+      showToast(clientMicAutoplayNeeded ? 'Clique novamente para ativar o audio' : 'Audio ativado', clientMicAutoplayNeeded ? 'warn' : 'success');
       return;
     }
     if (!media?.hasPublishedMicrophone?.() || !peerId) return;
@@ -587,7 +610,10 @@ async function openSettingsModal() {
   try {
     await populateMicrophoneSelect(els.settingsMicSelect, {
       deviceId: prefs.microphoneDeviceId || '',
-      onLog: setStatus
+      onLog: setStatus,
+      skipPermissionProbe:
+        clientMicTrack?.readyState === 'live' ||
+        media?.getLocalMicrophoneTrack?.()?.readyState === 'live'
     });
     if (prefs.microphoneDeviceId) {
       els.settingsMicSelect.value = prefs.microphoneDeviceId;
@@ -625,9 +651,8 @@ async function saveSettingsModal() {
   applyCapturePrefsToUi(prefs);
   saveCapturePrefs(prefs);
   closeSettingsModal();
-  if (sessionReady && media && !viewerOnly) {
-    media
-      .syncPublishedAudio({ ...prefs, meetBridgeLiveMode })
+  if (sessionReady && media) {
+    syncClientMicPublication()
       .then(() => {
         attachVuMeterIfNeeded();
         updateClientMicUi();
@@ -636,9 +661,21 @@ async function saveSettingsModal() {
   }
 }
 
+function updateActivateAudioUi() {
+  const btn = els.btnActivateAudio;
+  if (!btn) return;
+  const blocked =
+    !!roomAudioMonitor?.isAutoplayBlocked?.() ||
+    clientMicAutoplayNeeded ||
+    (roomAudioMonitor && !roomAudioMonitor.isPlaybackConfirmed?.());
+  const hasChannels = (roomAudioMonitor?.channelCount || 0) > 0;
+  btn.hidden = !(blocked && hasChannels);
+}
+
 function onRemoteAudioAutoplayBlocked() {
   clientMicAutoplayNeeded = true;
   updateClientMicUi();
+  updateActivateAudioUi();
 }
 
 
@@ -646,7 +683,9 @@ function onRemoteAudioAutoplayBlocked() {
 function clientAudioNormalizeOptions() {
   return {
     excludePeerId: peerId,
-    excludeSourceTypes: meetBridgeLiveMode ? ["system"] : []
+    ownPeerIds: [...ownPeerIds],
+    excludeSourceTypes: meetBridgeLiveMode ? ["system"] : [],
+    ownProducerIds: media?.getOwnAudioProducerIds?.() || []
   };
 }
 
@@ -664,6 +703,16 @@ async function applyMeetBridgeLiveMode(ativo, { forceSync = true } = {}) {
     await syncClientAudioMonitor(lastAudioSources, { force: true }).catch((e) =>
       errors.handle(e, "audio-sync")
     );
+  }
+}
+
+async function applySharedRoomMode(ativo) {
+  const next = !!ativo;
+  if (next === sharedRoomMode) return;
+  sharedRoomMode = next;
+  media?.setSharedRoomMode?.(sharedRoomMode);
+  if (sharedRoomMode) {
+    showToast('Modo sala compartilhada ativo — apenas o falante dominante transmite mic', 'info');
   }
 }
 
@@ -725,7 +774,7 @@ function startAudioHealthWatchdog() {
     const expected = expectedAudioSourceCount();
     if (!expected) return;
     const active = countActiveAudioChannels(roomAudioMonitor);
-    if (active < expected) {
+    if (active < expected || roomAudioMonitor?.isAutoplayBlocked?.() || !roomAudioMonitor?.isPlaybackConfirmed?.()) {
       repairAllAudioIfNeeded().catch(() => {});
     }
   }, 5000);
@@ -742,14 +791,22 @@ function ensureClientAudioMonitor() {
   if (!roomAudioMonitor) {
     roomAudioMonitor = new HostAudioMonitor(media, {
       excludePeerId: peerId,
+      ownPeerIds: [...ownPeerIds],
       excludeSourceTypes: meetBridgeLiveMode ? ['system'] : [],
       pinnedPeerIds: hostPeerId ? [hostPeerId] : [],
-      onAutoplayBlocked: onRemoteAudioAutoplayBlocked
+      allowDualPeerAudio: true,
+      onAutoplayBlocked: onRemoteAudioAutoplayBlocked,
+      onStaleProducer: () => {
+        try {
+          signaling?.send('solicitarEstado', {});
+        } catch (_) {}
+      }
     });
     roomAudioMonitor.connectOutput(els.audio);
     roomAudioMonitor.setManualMuted(mutedClients);
   } else if (peerId) {
     roomAudioMonitor.excludePeerId = String(peerId);
+    roomAudioMonitor.setOwnPeerIds?.([...ownPeerIds]);
     if (hostPeerId) roomAudioMonitor.setPinnedPeerIds([hostPeerId]);
   }
   return roomAudioMonitor;
@@ -768,11 +825,14 @@ async function syncClientAudioMonitor(sources, { force = false } = {}) {
       await media.ensureRecvTransport(media._audioRecvTag());
       const monitor = ensureClientAudioMonitor();
       if (!monitor) return;
+      if (Array.isArray(sources) && sources.length) {
+        lastAudioSources = sources;
+      }
+      sources = null;
       const list = normalizeRemoteAudioSources(
-        sources?.length ? sources : lastAudioSources,
+        lastAudioSources,
         clientAudioNormalizeOptions()
       );
-      if (sources?.length) lastAudioSources = sources;
       const sig = audioSourcesSignature(list);
       const expected = list.length;
       const active = countActiveAudioChannels(monitor);
@@ -796,11 +856,16 @@ async function syncClientAudioMonitor(sources, { force = false } = {}) {
       await monitor.recoverOutputIfSilent?.();
       monitor.connectOutput(els.audio);
       await monitor.resume();
-      if (monitor.isAutoplayBlocked?.() || (monitor.channelCount > 0 && els.audio?.paused)) {
+      if (monitor.isAutoplayBlocked?.() || (monitor.channelCount > 0 && !monitor.isPlaybackConfirmed?.())) {
         onRemoteAudioAutoplayBlocked();
       } else if (!monitor.channelCount) {
         clientMicAutoplayNeeded = false;
         updateClientMicUi();
+        updateActivateAudioUi();
+      } else {
+        clientMicAutoplayNeeded = false;
+        updateClientMicUi();
+        updateActivateAudioUi();
       }
       setStatus(`Audio remoto: ${monitor.channelCount} fonte(s)`);
       if (monitor.channelCount > 0) {
@@ -839,6 +904,16 @@ function releaseClientMicTrack() {
     clientMicTrack.stop();
   } catch (_) {}
   clientMicTrack = null;
+}
+
+/** A enumeração inicial é assíncrona: capturar antes dela usa o microfone errado. */
+function waitClientMicPickerReady() {
+  const ready = clientMicPicker?.ready;
+  if (!ready) return Promise.resolve();
+  return Promise.race([
+    ready,
+    new Promise((resolve) => setTimeout(resolve, MIC_PICKER_READY_TIMEOUT_MS))
+  ]);
 }
 
 async function ensureClientMicTrack(deviceId = '') {
@@ -880,6 +955,8 @@ async function teardownClientSession({ keepDisplayStream = false, keepMicTrack =
     signaling = null;
   }
   peerId = null;
+  lastAudioSources = [];
+  lastAppliedAudioSig = '';
   sessionStarted = false;
   sessionReady = false;
   joinInFlight = false;
@@ -987,6 +1064,8 @@ async function ensurePublisherSession(flowGen = publisherFlowGeneration) {
       media = null;
       mediaPublisher = null;
       peerId = null;
+      lastAudioSources = [];
+      lastAppliedAudioSig = '';
       sessionStarted = false;
       sessionReady = false;
       joinInFlight = false;
@@ -1091,8 +1170,13 @@ function showAudioStep() {
   if (els.micWrap) els.micWrap.hidden = !els.chkMicrophone?.checked;
   populateMicrophoneSelect(els.micSelect, {
     deviceId: loadCapturePrefs().microphoneDeviceId || '',
-    onLog: setStatus
-  }).catch(() => {});
+    onLog: setStatus,
+    skipPermissionProbe:
+      clientMicTrack?.readyState === 'live' ||
+      media?.getLocalMicrophoneTrack?.()?.readyState === 'live'
+  })
+    .then(() => saveCapturePrefs(getCapturePrefsFromUi()))
+    .catch(() => {});
 }
 
 function hideOverlay() {
@@ -1184,6 +1268,11 @@ async function captureScreenFirst({ autoTransmitAfterCapture = false } = {}) {
 }
 
 async function runPublisherFlowBody(t0, flowGen) {
+  if (!isPublisherFlowCurrent(flowGen)) {
+    return;
+  }
+
+  await waitClientMicPickerReady();
   if (!isPublisherFlowCurrent(flowGen)) {
     return;
   }
@@ -1571,7 +1660,7 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
   if (sessionStarted && signaling?.connected && media?.hasVideoProducer?.()) {
     hideOverlay();
     signaling.send('atualizarNome', { nome });
-    media.syncPublishedAudio({ ...getCapturePrefsFromUi(), meetBridgeLiveMode }).catch((e) => errors.handle(e, 'audio-prefs'));
+    syncClientMicPublication().catch((e) => errors.handle(e, 'audio-prefs'));
     return;
   }
 
@@ -1610,6 +1699,7 @@ async function attachVuMeterIfNeeded() {
   vu.detach();
   if (!els.chkMicrophone?.checked) return;
   try {
+    await waitClientMicPickerReady();
     const track =
       media?.getLocalAudioTrack?.() ||
       (await ensureClientMicTrack(els.micSelect?.value || ''));
@@ -1693,14 +1783,68 @@ function updateClientStateAfterPublish() {
   updateClientDrawUi();
 }
 
+function getClientPublishPrefs() {
+  const prefs = getCapturePrefsFromUi();
+  return {
+    ...prefs,
+    meetBridgeLiveMode,
+    prefetchedMicTrack: clientMicTrack?.readyState === 'live' ? clientMicTrack : undefined
+  };
+}
+
+async function syncClientMicPublication() {
+  if (!media) return false;
+  const prefs = getClientPublishPrefs();
+  await media.ensureSendTransport();
+  if (prefs.microphone) {
+    const fallback = pendingMicrophoneFilterPrefs || CLIENT_MIC_PUBLISH_DEFAULTS;
+    await media.ensureMicPublishFilters(fallback);
+    if (!clientMicTrack || clientMicTrack.readyState !== 'live') {
+      try {
+        clientMicTrack = await ensureClientMicTrack(prefs.microphoneDeviceId || '');
+        prefs.prefetchedMicTrack = clientMicTrack;
+      } catch (err) {
+        errors.handle(err, 'mic-publish');
+        return false;
+      }
+    }
+  }
+
+  const displayStream =
+    clientDisplayStream ||
+    (media.localScreenStream?.getVideoTracks?.().some((t) => t.readyState === 'live')
+      ? media.localScreenStream
+      : null);
+
+  if (displayStream) {
+    await media.syncPublishedAudio(prefs, displayStream);
+  } else {
+    const result = await media.ensureMicrophonePublication(prefs);
+    if (media.hasPublishedSystemAudio()) await media.stopSystemAudio();
+    if (prefs.microphone && !result.ok && result.reason !== 'disabled') {
+      const message =
+        result.reason === 'permission'
+          ? 'Microfone nao publicado - verifique permissao do navegador'
+          : result.reason === 'device'
+            ? 'Microfone nao encontrado'
+            : 'Falha ao publicar microfone';
+      showToast(message, 'warn');
+    }
+  }
+
+  updateClientMicUi();
+  return media.hasPublishedMicrophone() || !prefs.microphone;
+}
+
 async function publishClientMedia(publishPrefs) {
-  if (media?.hasVideoProducer?.()) {
-    debugClientSessionLog('H10', 'client:publishClientMedia', 'skip-already-published', {
+  const alreadyVideo = media?.hasVideoProducer?.();
+  if (alreadyVideo) {
+    debugClientSessionLog('H10', 'client:publishClientMedia', 'video-already-published', {
       producerId: media.producers?.video?.id?.slice(0, 8) || null
     });
+    await syncClientMicPublication();
     return;
   }
-  // #region agent log
   debugClientSessionLog('H1', 'client:publishClientMedia', 'start', {
     hasMedia: !!media,
     hasStream: hasPendingDisplayStream(),
@@ -1708,14 +1852,11 @@ async function publishClientMedia(publishPrefs) {
     mic: !!publishPrefs?.microphone,
     system: !!publishPrefs?.systemAudio
   });
-  // #endregion
   if (!media || !hasPendingDisplayStream()) {
-    // #region agent log
     debugClientSessionLog('H1', 'client:publishClientMedia', 'early-return-no-stream', {
       hasMedia: !!media,
       hasStream: hasPendingDisplayStream()
     });
-    // #endregion
     throw new Error('Captura de tela indisponivel — selecione a tela novamente');
   }
   mediaPublisher = mediaPublisher || new MediaPublisher(media, signaling);
@@ -1731,25 +1872,14 @@ async function publishClientMedia(publishPrefs) {
     throw new Error('Falha ao publicar video - tente novamente');
   }
 
-  if (publishPrefs.microphone || publishPrefs.systemAudio) {
-    if (publishPrefs.microphone) {
-      const fallback = pendingMicrophoneFilterPrefs || CLIENT_MIC_PUBLISH_DEFAULTS;
-      await media.ensureMicPublishFilters(fallback);
-    }
-    await media.syncPublishedAudio(
-      { ...publishPrefs, meetBridgeLiveMode },
-      clientDisplayStream
-    );
-  }
+  await syncClientMicPublication();
 
   const readyAck = await mediaPublisher.confirmMediaReady();
-  // #region agent log
   debugClientSessionLog('H3', 'client:publishClientMedia', 'midiaPronta-result', {
     readyAck,
     hasVideoProducer: media.hasVideoProducer(),
     producerId: media.producers?.video?.id?.slice(0, 8) || null
   });
-  // #endregion
   if (!readyAck?.ok) {
     throw new Error(readyAck?.erro || 'Servidor nao confirmou midia pronta');
   }
@@ -1778,6 +1908,9 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
 
   if (snapshot.meetBridgeLiveMode !== undefined) {
     await applyMeetBridgeLiveMode(snapshot.meetBridgeLiveMode, { forceSync: sessionReady });
+  }
+  if (snapshot.sharedRoomMode !== undefined) {
+    await applySharedRoomMode(snapshot.sharedRoomMode);
   }
 
   if (parsed.mutedPeerIds) {
@@ -1995,6 +2128,7 @@ async function executeJoinAndStart() {
 
     const payload = await entrouPromise;
     peerId = payload.peerId;
+    if (peerId) ownPeerIds.add(String(peerId));
     signaling.markAuthenticated(true);
 
     setStatus('Preparando midia...');
@@ -2003,6 +2137,7 @@ async function executeJoinAndStart() {
       applyMicPublishChain: true,
       onLog: (m, l) => setStatus(m)
     });
+    media.setOwnPeerId(peerId);
     await media.loadDevice(payload.rtpCapabilities);
     media.setVideoQuality(mergeServerQuality(payload.videoQuality, loadPresetId()));
     await media.ensureRecvTransport();
@@ -2020,9 +2155,9 @@ async function executeJoinAndStart() {
         ? { ...joinPrefs, prefetchedMicTrack: clientMicTrack }
         : joinPrefs;
 
-    if (!viewerOnly) {
+    await media.ensureSendTransport();
+    if (joinPrefs.microphone) {
       assertSecureContext();
-      await media.ensureSendTransport();
     }
 
     sessionStarted = true;
@@ -2063,6 +2198,7 @@ async function executeJoinAndStart() {
       clientSession.setPhase(SessionPhase.JOINING);
       setStatus('Conectado - publicando tela...');
     }
+    await syncClientMicPublication();
     skipJoinPublishOnJoin = false;
     deferScreenShareOnJoin = false;
     updateClientDrawUi();
@@ -2107,6 +2243,8 @@ async function rejoinSession() {
   }
   media = null;
   peerId = null;
+  lastAudioSources = [];
+  lastAppliedAudioSig = '';
 
   const entrouPromise = signaling.onceType('entrou', () => true, 45000);
   if (!signaling?.connected) {
@@ -2129,6 +2267,7 @@ async function rejoinSession() {
 
   const payload = await entrouPromise;
   peerId = payload.peerId;
+  if (peerId) ownPeerIds.add(String(peerId));
   signaling.markAuthenticated(true);
 
   media = new MediaClient(signaling, {
@@ -2145,9 +2284,7 @@ async function rejoinSession() {
     await media.ensureMicPublishFilters(CLIENT_MIC_PUBLISH_DEFAULTS);
   }
 
-  if (!viewerOnly) {
-    await media.ensureSendTransport();
-  }
+  await media.ensureSendTransport();
 
   sessionStarted = true;
   sessionReady = true;
@@ -2168,6 +2305,8 @@ async function rejoinSession() {
     updateClientMicUi();
   }
 
+  await syncClientMicPublication();
+  startAudioHealthWatchdog();
   await schedulePostJoinWork();
   await finalizeAfterPublish();
   } finally {
@@ -2264,6 +2403,22 @@ async function handleServerMessage(msg) {
     await applyMeetBridgeLiveMode(!!msg.payload?.ativo);
     return;
   }
+  if (msg.type === 'modoSalaCompartilhadaAtualizado') {
+    await applySharedRoomMode(!!msg.payload?.ativo);
+    if (msg.payload?.dominantSpeakerPeerId) {
+      media?.handleDominantSpeaker?.({
+        peerId: msg.payload.dominantSpeakerPeerId,
+        sharedRoomMode: !!msg.payload.ativo
+      });
+    }
+    return;
+  }
+  if (msg.type === 'falanteDominante') {
+    if (sharedRoomMode) {
+      media?.handleDominantSpeaker?.(msg.payload || {});
+    }
+    return;
+  }
   if (msg.type === 'filtroAudioAtualizado') {
     pendingMicrophoneFilterPrefs = msg.payload?.prefs || {};
     if (media) {
@@ -2310,6 +2465,7 @@ async function handleServerMessage(msg) {
   if (msg.type === 'fontesAudio') {
     const sources = msg.payload?.sources || [];
     lastAudioSources = sources;
+    roomAudioMonitor?.clearInvalidProducers?.();
     if (!sessionReady) {
       pendingAudioSources = sources;
       return;
@@ -2479,13 +2635,23 @@ verifyServerBuild({
   }
 });
 
-installAudioUnlock(() => {
-  roomAudioMonitor?.resume();
+async function unlockClientRemoteAudio() {
+  const confirmed = await roomAudioMonitor?.resume();
   els.audio?.play?.().catch(() => {});
-  if (roomAudioMonitor && !roomAudioMonitor.isAutoplayBlocked?.()) {
-    clientMicAutoplayNeeded = false;
-    updateClientMicUi();
-  }
   vu.resume();
   attachVuMeterIfNeeded();
-});
+  if (media?.hasPendingMicFilterRestore?.()) {
+    await media.recoverMicPublicationIfNeeded().catch((e) => errors.handle(e, 'mic-publish-recover'));
+  }
+  if (confirmed || roomAudioMonitor?.isPlaybackConfirmed?.()) {
+    clientMicAutoplayNeeded = false;
+    updateClientMicUi();
+    updateActivateAudioUi();
+    return true;
+  }
+  updateActivateAudioUi();
+  return false;
+}
+
+installAudioUnlock(() => unlockClientRemoteAudio());
+els.btnActivateAudio?.addEventListener('click', () => unlockClientRemoteAudio());

@@ -30,12 +30,12 @@ export async function fetchCurrentUser() {
   }
 }
 
-export async function login(username, password) {
+export async function login(username) {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     ...FETCH_OPTS,
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username })
   });
   return parseJsonResponse(res);
 }
@@ -48,17 +48,14 @@ export async function logout() {
 export function ensureLoginModalElements(ids = {}) {
   const modal = document.getElementById(ids.modal || 'login-modal');
   const usernameInput = document.getElementById(ids.username || 'login-username');
-  const passwordInput = document.getElementById(ids.password || 'login-password');
   const submitBtn = document.getElementById(ids.submit || 'btn-login-submit');
   const errorEl = document.getElementById(ids.error || 'login-error');
-  return { modal, usernameInput, passwordInput, submitBtn, errorEl };
+  return { modal, usernameInput, submitBtn, errorEl };
 }
 
 export async function requireAuthSession(options = {}) {
-  const { modal, usernameInput, passwordInput, submitBtn, errorEl } = ensureLoginModalElements(
-    options.ids || {}
-  );
-  if (!modal || !usernameInput || !passwordInput || !submitBtn) {
+  const { modal, usernameInput, submitBtn, errorEl } = ensureLoginModalElements(options.ids || {});
+  if (!modal || !usernameInput || !submitBtn) {
     throw new Error('Tela de login indisponível');
   }
 
@@ -82,20 +79,18 @@ export async function requireAuthSession(options = {}) {
     const cleanup = () => {
       submitBtn.removeEventListener('click', onSubmit);
       usernameInput.removeEventListener('keydown', onKeydown);
-      passwordInput.removeEventListener('keydown', onKeydown);
     };
 
     const onSubmit = async () => {
       const username = usernameInput.value.trim();
-      const password = passwordInput.value;
-      if (!username || !password) {
-        showError('Informe usuário e senha');
+      if (!username) {
+        showError('Informe seu nome');
         return;
       }
       submitBtn.disabled = true;
       showError('');
       try {
-        const result = await login(username, password);
+        const result = await login(username);
         if (!result.ok) {
           showError(result.erro || 'Falha no login');
           return;
@@ -122,7 +117,6 @@ export async function requireAuthSession(options = {}) {
     usernameInput.focus();
     submitBtn.addEventListener('click', onSubmit);
     usernameInput.addEventListener('keydown', onKeydown);
-    passwordInput.addEventListener('keydown', onKeydown);
   });
 }
 

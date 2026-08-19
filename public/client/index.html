@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ShareScreen — Client</title>
+  <link rel="icon" type="image/png" href="/shared/icons/logo.png" />
+  <link rel="apple-touch-icon" href="/shared/icons/logo.png" />
+  <link rel="manifest" href="/meet/manifest.webmanifest" />
+  <meta name="theme-color" content="#000000" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -318,8 +322,33 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-07-07T20-02-31-5oxqvw";
+var BUILD_ID="2026-08-18T20-04-12-disabt";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -367,25 +396,21 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-07T20-02-31-5oxqvw" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-07-07T20-02-31-5oxqvw" />
-  <link rel="stylesheet" href="style.css?v=2026-07-07T20-02-31-5oxqvw" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-07-07T20-02-31-5oxqvw" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-18T20-04-12-disabt" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-08-18T20-04-12-disabt" />
+  <link rel="stylesheet" href="style.css?v=2026-08-18T20-04-12-disabt" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-18T20-04-12-disabt" />
 </head>
 <body class="app-client">
   <div id="login-modal" class="modal-backdrop" hidden>
     <div class="modal-panel" role="dialog" aria-labelledby="login-title">
       <h1 id="login-title">Entrar no ShareScreen</h1>
-      <p>Use seu usuário e senha. Qualquer usuário cadastrado pode usar o painel host ou o client.</p>
+      <p>Informe seu nome para entrar no painel host ou no client.</p>
       <p class="hint-text">Painel host: <a href="/host/">/host</a> · Client: <a href="/client/">/client</a></p>
       <div id="login-error" class="hint-text" style="color:var(--color-danger,#c62828)" hidden></div>
       <div class="field">
-        <label for="login-username">Usuário</label>
-        <input id="login-username" type="text" maxlength="64" autocomplete="username" />
-      </div>
-      <div class="field">
-        <label for="login-password">Senha</label>
-        <input id="login-password" type="password" maxlength="128" autocomplete="current-password" />
+        <label for="login-username">Nome</label>
+        <input id="login-username" type="text" maxlength="64" autocomplete="name" />
       </div>
       <button type="button" id="btn-login-submit" class="btn btn-primary" style="width:100%;margin-top:1rem">Entrar</button>
     </div>
@@ -418,7 +443,7 @@ try{
 
       <label class="check-row">
         <input id="chk-viewer-only" type="checkbox" />
-        Entrar apenas como espectador (sem compartilhar tela)
+        Entrar sem compartilhar tela (microfone continua ativo)
       </label>
       </div>
 
@@ -472,12 +497,14 @@ try{
             <path d="M8 5a4 4 0 0 1 7.5-1"/>
           </svg>
         </button>
+        <button type="button" id="btn-activate-audio" class="preview-activate-audio" hidden>Ativar áudio</button>
       </div>
       <button type="button" id="btn-fullscreen" class="preview-float-btn preview-fullscreen-btn" aria-label="Tela cheia" title="Tela cheia">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
       </button>
       <video id="video-remoto" autoplay playsinline muted></video>
       <audio id="audio-remoto" autoplay playsinline></audio>
+      <div id="remote-audio-sinks" hidden aria-hidden="true"></div>
 
       <div id="state-sharing" class="client-banner" hidden>Transmitindo — aguardando seleção do host</div>
       <div id="state-selected" class="client-banner client-banner-active" hidden>Sua tela está sendo exibida para todos</div>
@@ -644,30 +671,6 @@ try{
               </div>
             </details>
 
-            <details class="settings-subdetails" id="details-audio">
-              <summary class="settings-subsummary">
-                <span>Áudio</span>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon-sub">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </summary>
-              <div class="subdetails-content prefs-section">
-                <label class="check-row">
-                  <input id="host-chk-system-audio" type="checkbox" />
-                  Áudio da aba/janela
-                </label>
-                <label class="check-row">
-                  <input id="host-chk-microphone" type="checkbox" checked />
-                  Microfone
-                </label>
-                <div id="host-mic-picker-wrap" class="mic-picker" hidden>
-                  <label for="host-mic-select">Microfone</label>
-                  <select id="host-mic-select"></select>
-                  <button type="button" id="host-btn-refresh-mics" class="btn btn-ghost btn-sm">Atualizar</button>
-                </div>
-              </div>
-            </details>
-
             <details class="settings-subdetails" id="details-recording">
               <summary class="settings-subsummary">
                 <span>Gravação</span>
@@ -712,7 +715,7 @@ try{
         <label for="settings-nome-input">Nome deste computador</label>
         <input id="settings-nome-input" type="text" maxlength="64" autocomplete="off" />
       </div>
-      <p class="hint-text">Preferências de áudio aplicadas na próxima vez que você compartilhar a tela.</p>
+      <p class="hint-text">Preferências de áudio aplicadas imediatamente.</p>
       <label class="check-row">
         <input id="settings-chk-system-audio" type="checkbox" />
         <span>Áudio da aba/janela <small title="Disponível ao compartilhar aba ou janela — não em tela inteira">(marque também no diálogo do Chrome/Edge)</small></span>
@@ -810,6 +813,11 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-07-07T20-02-31-5oxqvw"></script>
+  <script src="app.bundle.js?v=2026-08-18T20-04-12-disabt"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/meet/sw.js', { scope: '/meet/' }).catch(function () {});
+    }
+  </script>
 </body>
 </html>

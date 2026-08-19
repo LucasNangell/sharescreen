@@ -2,6 +2,7 @@ import {
   createUser,
   findUserByUsername,
   findUserById,
+  findOrCreateUserByUsername,
   createSession,
   getSession,
   revokeSession,
@@ -155,19 +156,16 @@ export function resolveSessionUser(req) {
   return rowToAuthUser(user);
 }
 
-export function loginUser(username, password) {
+export function loginUser(username) {
   const trimmed = String(username || '').trim();
-  if (!trimmed || !password) return { ok: false, erro: 'Usuário e senha são obrigatórios' };
-  const user = findUserByUsername(trimmed);
-  if (!user || !user.is_active) return { ok: false, erro: 'Credenciais inválidas' };
-  if (!verifyPassword(password, user.password_hash)) {
-    return { ok: false, erro: 'Credenciais inválidas' };
-  }
-  const session = createSession(user.id, SESSION_TTL_MS);
+  if (!trimmed) return { ok: false, erro: 'Nome é obrigatório' };
+  const ensured = findOrCreateUserByUsername(trimmed);
+  if (!ensured.ok) return ensured;
+  const session = createSession(ensured.user.id, SESSION_TTL_MS);
   return {
     ok: true,
     sessionId: session.id,
-    user: rowToAuthUser(user)
+    user: rowToAuthUser(ensured.user)
   };
 }
 

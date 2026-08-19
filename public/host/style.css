@@ -867,8 +867,35 @@
   color: rgba(255, 255, 255, 0.45);
 }
 
-#btn-activate-audio,
 .btn-recompartilhar {
+  display: none !important;
+}
+
+#remote-audio-sinks {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.preview-activate-audio {
+  position: absolute;
+  bottom: var(--space-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.preview-activate-audio[hidden] {
   display: none !important;
 }
 
@@ -1262,6 +1289,11 @@
 
 .source-vu-column.is-active .source-vu-fill {
   background: linear-gradient(to top, var(--color-success), var(--color-warning));
+}
+
+.source-vu-column.is-dominant-speaker .source-vu-fill {
+  background: linear-gradient(to top, #4da3ff, #9fd0ff);
+  box-shadow: 0 0 6px rgba(77, 163, 255, 0.55);
 }
 
 .source-mute-btn {

@@ -23,6 +23,14 @@ if not exist "%DESTINO%" (
     mkdir "%DESTINO%" 2>nul
 )
 
+echo [AVISO] Se o servico ShareScreenLAN estiver rodando no cgrafsysvm,
+echo         PARE-O no proprio servidor ANTES desta copia.
+echo         No servidor: nssm stop ShareScreenLAN
+echo         Arquivos nativos (better_sqlite3.node, mediasoup-worker.exe)
+echo         ficam travados com o Node no ar.
+echo         Este script NAO envia nenhum comando remoto de stop/start.
+echo.
+
 echo Liberando portas no servidor local (se este for o host)...
 call :kill_port 3443
 call :kill_port 3080
@@ -39,7 +47,9 @@ if %RC% GEQ 8 (
 
 echo.
 echo [OK] Deploy concluido.
-echo No servidor: verificar-producao.bat  depois  start-producao.bat
+echo No servidor: verificar-producao.bat
+echo   Se o servico NSSM ja existe: reiniciar-servico-producao.bat
+echo   Se ainda nao instalou o servico: start-producao.bat  (fallback manual)
 echo.
 pause
 exit /b 0

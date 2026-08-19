@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import Database from 'better-sqlite3';
 import { logger } from './logger.js';
+import { hashPassword } from './password.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
@@ -638,6 +639,24 @@ export function updateUserPasswordHashByUsername(username, passwordHash) {
   if (writeResult?.readonly) return { ok: false, erro: writeResult.erro };
   if (!writeResult?.changes) return { ok: false, erro: 'Usuário não encontrado' };
   return { ok: true, user: findUserByUsername(trimmed) };
+}
+
+export function findOrCreateUserByUsername(username) {
+  const trimmed = String(username || '').trim();
+  if (!trimmed || trimmed.length > 64) return { ok: false, erro: 'Nome inválido' };
+  const existing = findUserByUsername(trimmed);
+  if (existing) {
+    if (!existing.is_active) return { ok: false, erro: 'Usuário inativo' };
+    return { ok: true, user: existing, created: false };
+  }
+  const result = createUser({
+    username: trimmed,
+    passwordHash: hashPassword(randomUUID()),
+    role: 'user',
+    displayName: trimmed
+  });
+  if (!result.ok) return result;
+  return { ok: true, user: result.user, created: true };
 }
 
 export function createSession(userId, ttlMs) {

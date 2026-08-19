@@ -8,6 +8,12 @@ import { logger } from './logger.js';
 import { getLowerThirdForDisplayName } from './client-db.js';
 import { getClientIpFromWs } from './client-ip.js';
 import { debugSessionLog } from './debug-session-log.js';
+import {
+  ensureActiveSpeakerObserver,
+  setDominantSpeakerHandler,
+  trackMicProducer,
+  untrackMicProducer
+} from './active-speaker.js';
 
 const _agentDebugLogPath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -64,6 +70,10 @@ function producerSlot(kind, appData = {}) {
 
 const AUDIO_PRODUCER_SLOTS = ['microphone', 'system', 'mixed'];
 
+function liveProducerId(producer) {
+  return producer && !producer.closed ? producer.id || null : null;
+}
+
 const AUDIO_SOURCE_PRIORITY = {
   microphone: 0,
   system: 1,
@@ -71,7 +81,7 @@ const AUDIO_SOURCE_PRIORITY = {
 };
 
 function enforceDualPublishPolicy(peer, newSlot, room) {
-  const policy = config.audio?.dualPublishPolicy || 'mic-wins';
+  const policy = config.audio?.dualPublishPolicy || 'allow-both';
   if (policy === 'allow-both' || !AUDIO_PRODUCER_SLOTS.includes(newSlot)) return null;
 
   const newPri = AUDIO_SOURCE_PRIORITY[newSlot] ?? 2;
@@ -158,12 +168,12 @@ export class Peer {
   }
 
   getProducerIds() {
-    const microphone = this.producers.microphone?.id ?? null;
-    const system = this.producers.system?.id ?? null;
-    const mixed = this.producers.mixed?.id ?? null;
+    const microphone = liveProducerId(this.producers.microphone);
+    const system = liveProducerId(this.producers.system);
+    const mixed = liveProducerId(this.producers.mixed);
     const audio = microphone || system || mixed;
     return {
-      video: this.producers.video?.id ?? null,
+      video: liveProducerId(this.producers.video),
       audio,
       microphone,
       system,
@@ -233,6 +243,9 @@ export class RoomManager {
     this.mutedPeerIds = new Set();
     this._lastAudioSourcesSig = '';
     this.meetBridgeLiveMode = false;
+    this.sharedRoomMode = !!config.audio?.sharedRoomMode;
+    this.dominantSpeakerPeerId = null;
+    this.dominantSpeakerProducerId = null;
     this.roomVersion = 0;
     this._emittingRoomState = false;
     this._roomStateDirty = false;
@@ -240,6 +253,61 @@ export class RoomManager {
     /** @type {object[]} */
     this.whiteboardElements = [];
     this._whiteboardSourcePeerId = null;
+    this._initActiveSpeakerBridge();
+  }
+
+  _initActiveSpeakerBridge() {
+    ensureActiveSpeakerObserver().catch((err) => {
+      logger.warn('[active-speaker] inicialização adiada', { err: err?.message });
+    });
+    setDominantSpeakerHandler((info) => {
+      this._onDominantSpeakerChanged(info);
+    });
+  }
+
+  _onDominantSpeakerChanged(info) {
+    const peerId = info?.peerId ? String(info.peerId) : null;
+    const producerId = info?.producerId ? String(info.producerId) : null;
+    if (peerId === this.dominantSpeakerPeerId && producerId === this.dominantSpeakerProducerId) {
+      return;
+    }
+    this.dominantSpeakerPeerId = peerId;
+    this.dominantSpeakerProducerId = producerId;
+    if (!this.sharedRoomMode) {
+      this.markRoomStateDirty();
+      return;
+    }
+    this.broadcastToRoom({
+      type: 'falanteDominante',
+      payload: {
+        peerId,
+        producerId,
+        volume: info?.volume ?? null,
+        sharedRoomMode: true
+      }
+    });
+  }
+
+  setSharedRoomMode(ativo) {
+    this.sharedRoomMode = !!ativo;
+    this.broadcastToRoom({
+      type: 'modoSalaCompartilhadaAtualizado',
+      payload: {
+        ativo: this.sharedRoomMode,
+        dominantSpeakerPeerId: this.dominantSpeakerPeerId,
+        dominantSpeakerProducerId: this.dominantSpeakerProducerId
+      }
+    });
+    if (this.sharedRoomMode && this.dominantSpeakerPeerId) {
+      this.broadcastToRoom({
+        type: 'falanteDominante',
+        payload: {
+          peerId: this.dominantSpeakerPeerId,
+          producerId: this.dominantSpeakerProducerId,
+          sharedRoomMode: true
+        }
+      });
+    }
   }
 
   getMediaReady(peer) {
@@ -528,6 +596,8 @@ export class RoomManager {
       transmissionPaused: this.transmissionPaused,
       controleExibicao: [...this.displayControllerIds],
       meetBridgeLiveMode: this.meetBridgeLiveMode,
+      sharedRoomMode: this.sharedRoomMode,
+      dominantSpeakerPeerId: this.dominantSpeakerPeerId,
       mutedPeerIds: [...this.mutedPeerIds],
       whiteboard: this.buildWhiteboardStatePayload(),
       rtpCapabilities: getRtpCapabilities()
@@ -748,6 +818,8 @@ export class RoomManager {
       controleExibicao: [...this.displayControllerIds],
       audioSources: this.getAudioSources(),
       meetBridgeLiveMode: this.meetBridgeLiveMode,
+      sharedRoomMode: this.sharedRoomMode,
+      dominantSpeakerPeerId: this.dominantSpeakerPeerId,
       rtpCapabilities: getRtpCapabilities()
     };
   }
@@ -809,6 +881,8 @@ export class RoomManager {
       transmissionPaused: this.transmissionPaused,
       controleExibicao: [...this.displayControllerIds],
       meetBridgeLiveMode: this.meetBridgeLiveMode,
+      sharedRoomMode: this.sharedRoomMode,
+      dominantSpeakerPeerId: this.dominantSpeakerPeerId,
       rtpCapabilities: getRtpCapabilities(),
       mutedPeerIds: [...this.mutedPeerIds],
       whiteboard: this.buildWhiteboardStatePayload()
@@ -1005,6 +1079,9 @@ export class RoomManager {
   closeProducer(peer, slot) {
     const producer = peer.producers[slot];
     if (producer && !producer.closed) {
+      if (slot === 'microphone') {
+        untrackMicProducer(producer.id).catch(() => {});
+      }
       producer.close();
     }
     peer.producers[slot] = null;
@@ -1395,6 +1472,9 @@ export class RoomManager {
         this._onSelectedVideoLost(peer);
       }
       if (AUDIO_PRODUCER_SLOTS.includes(slot)) {
+        if (slot === 'microphone') {
+          untrackMicProducer(producer.id).catch(() => {});
+        }
         logger.info('[audio] producer fechado', {
           peerId: peer.id.slice(0, 8),
           source: slot,
@@ -1428,6 +1508,9 @@ export class RoomManager {
         source: slot,
         producerId: producer.id.slice(0, 8)
       });
+      if (slot === 'microphone') {
+        trackMicProducer(producer, peer.id).catch(() => {});
+      }
       this.broadcastAudioSources();
     }
 
@@ -1450,12 +1533,28 @@ export class RoomManager {
 
   async consume(peer, { producerId, rtpCapabilities, consumerTag = 'default' }) {
     const owner = this._findProducerOwner(producerId);
-    if (owner && owner.id === peer.id) {
+    if (!owner) {
+      logger.warn('Producer indisponivel para consumo', {
+        peerId: peer?.id,
+        producerId
+      });
+      throw new Error('Producer indisponivel');
+    }
+    if (owner.id === peer.id) {
+      logger.warn('Tentativa de consumir o proprio producer', {
+        peerId: peer.id,
+        producerId
+      });
       throw new Error('Nao e possivel consumir o proprio producer');
     }
     const router = getRouter();
     if (!router.canConsume({ producerId, rtpCapabilities })) {
-      throw new Error('NÃ£o Ã© possÃ­vel consumir este producer com as capacidades atuais');
+      logger.warn('Producer incompativel com capacidades do consumidor', {
+        peerId: peer.id,
+        producerId,
+        ownerId: owner.id
+      });
+      throw new Error('Nao e possivel consumir este producer com as capacidades atuais');
     }
     const transport = peer.recvTransports.get(consumerTag) || peer.recvTransport;
     if (!transport) {

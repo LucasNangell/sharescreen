@@ -86,7 +86,16 @@ function staticAssetHeaders(res, filePath) {
     applyNoStoreHeaders(res);
     return;
   }
-  if (name.endsWith('.css') || name.endsWith('.js')) {
+  if (name === 'sw.js') {
+    applyNoStoreHeaders(res);
+    return;
+  }
+  if (name.endsWith('.webmanifest')) {
+    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+    return;
+  }
+  if (name.endsWith('.css') || name.endsWith('.js') || name.endsWith('.png')) {
     res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
   }
 }
@@ -191,8 +200,8 @@ function createApp() {
 
   app.post('/api/auth/login', (req, res) => {
     applyNoStoreHeaders(res);
-    const { username, password } = req.body || {};
-    const result = loginUser(username, password);
+    const { username } = req.body || {};
+    const result = loginUser(username);
     if (!result.ok) {
       res.status(401).json(result);
       return;
@@ -679,10 +688,19 @@ async function main() {
     });
   }
 
-  process.on('SIGINT', async () => {
-    logger.info('Encerrando servidor...');
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info('Encerrando servidor...', { signal });
     await closeMediasoup();
     process.exit(0);
+  };
+  process.on('SIGINT', () => {
+    shutdown('SIGINT');
+  });
+  process.on('SIGTERM', () => {
+    shutdown('SIGTERM');
   });
 }
 

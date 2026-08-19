@@ -18,6 +18,7 @@ import { normalizeRemoteAudioSources, audioSourcesSignature, audioTraceSync, aud
 import {
   CLIENT_MIC_PUBLISH_DEFAULTS,
   HOST_MIC_PUBLISH_DEFAULTS,
+  SHARED_ROOM_MIC_PRESET,
   hasActiveMicrophoneFilter,
   normalizeMicrophoneFilterPrefs
 } from '../shared/mic-dsp.js';
@@ -108,6 +109,9 @@ const els = {
   chkMeetBridgeLive: $('chk-meet-bridge-live'),
   btnRecMeetBridgePreset: $('btn-rec-meet-bridge-preset'),
   recMeetBridgeHint: $('rec-meet-bridge-hint'),
+  chkSharedRoomMode: $('chk-shared-room-mode'),
+  btnSharedRoomPreset: $('btn-shared-room-preset'),
+  sharedRoomHint: $('shared-room-hint'),
   recDefaultAudioHint: $('rec-default-audio-hint'),
   btnRecClearDefaultAudio: $('btn-rec-clear-default-audio'),
   controlesAudio: $('controles-audio'),
@@ -121,6 +125,7 @@ const els = {
   hostMicGainSlider: $('host-mic-gain-slider'),
   hostMicGainVal: $('host-mic-gain-val'),
   btnHostMic: $('btn-host-mic'),
+  btnActivateAudio: $('btn-activate-audio'),
   drawCanvas: $('live-annotation-canvas'),
   annotationToolbar: $('annotation-toolbar'),
   annotationToolbarToggle: $('annotation-toolbar-toggle'),
@@ -176,10 +181,19 @@ let hostAudioMonitor = null;
 let syncAudioMonitorPromise = null;
 let syncAudioMonitorPending = false;
 let hostMicAutoplayNeeded = false;
+let hostMicPublishDegraded = false;
+let lastHostMicDegraded = false;
+let hostMicPublishWatchdogTimer = null;
+let hostMicPicker = null;
+const MIC_PICKER_READY_TIMEOUT_MS = 4000;
 let lastAudioSources = [];
 let lastAppliedAudioSig = '';
+let hasServerAudioList = false;
+const ownPeerIds = new Set();
 let fontesAudioDebounceTimer = null;
 let meetBridgeLiveMode = false;
+let sharedRoomMode = false;
+let dominantSpeakerPeerId = null;
 let pendingRoomSnapshot = null;
 let lastAppliedSnapshotKey = '';
 let lastAppliedActiveVideoKey = '';
@@ -513,6 +527,8 @@ function debugPopoutLog(hypothesisId, location, message, data = {}) {
 }
 
 function debug3a36beLog(hypothesisId, location, message, data = {}) {
+  // Telemetria local de debug — desativada por padrão (evita ERR_CONNECTION_REFUSED no console).
+  if (typeof window === 'undefined' || !window.__SHARESCREEN_DEBUG__) return;
   // #region agent log
   fetch('http://127.0.0.1:7342/ingest/d6eaae2d-26c4-4be2-9f68-b438f53e5451', {
     method: 'POST',
@@ -611,7 +627,7 @@ function applyHostQuality(presetId) {
   showToast(`Qualidade: ${getPreset(presetId).label}`, 'info');
 }
 
-setupMicrophonePicker({
+hostMicPicker = setupMicrophonePicker({
   checkbox: els.hostChkMic,
   wrap: els.hostMicWrap,
   select: els.hostMicSelect,
@@ -619,7 +635,9 @@ setupMicrophonePicker({
   savedDeviceId: hostCapturePrefs.microphoneDeviceId || '',
   onLog: log,
   onError: (m) => errors.handle(new Error(m), 'microfone'),
-  onSelectChange: () => onHostAudioPrefsChange()
+  onSelectChange: () => onHostAudioPrefsChange(),
+  onResolved: () => saveCapturePrefs(getHostCapturePrefs()),
+  hasLiveTrack: () => media?.getLocalMicrophoneTrack?.()?.readyState === 'live'
 });
 els.hostChkMic?.addEventListener('change', () => onHostAudioPrefsChange());
 els.hostChkSystem?.addEventListener('change', () => onHostAudioPrefsChange());
@@ -647,9 +665,18 @@ async function onHostAudioPrefsChange() {
     if (prefs.microphone) {
       await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
     }
-    await media.syncPublishedAudio(prefs);
+    const result = await media.ensureMicrophonePublication(prefs);
+    if (prefs.systemAudio !== false && media.localScreenStream) {
+      await media.publishSystemAudioFromDisplay(media.localScreenStream);
+    } else if (media.hasPublishedSystemAudio()) {
+      await media.stopSystemAudio();
+    }
     syncLocalHostVu();
-    if (prefs.microphone && !media.hasPublishedMicrophone()) {
+    refreshHostMicDeviceList();
+    syncHostMicPublishHealthUi();
+    if (prefs.microphone && !result.ok && result.reason !== 'disabled') {
+      showToast('Microfone nao publicado - verifique permissao do navegador', 'warn');
+    } else if (prefs.microphone && !media.hasPublishedMicrophone()) {
       showToast('Microfone nao publicado - verifique permissao do navegador', 'warn');
     } else if (!prefs.microphone && prefs.systemAudio === false) {
       showToast('Audio desativado', 'info');
@@ -1099,28 +1126,99 @@ function hostHasMicEnabled() {
   return !!getHostCapturePrefs().microphone;
 }
 
+function refreshHostMicDeviceList() {
+  hostMicPicker?.refresh?.().catch(() => {});
+}
+
+/** A enumeração inicial é assíncrona: publicar antes dela captura o microfone errado. */
+function waitHostMicPickerReady() {
+  const ready = hostMicPicker?.ready;
+  if (!ready) return Promise.resolve();
+  return Promise.race([
+    ready,
+    new Promise((resolve) => setTimeout(resolve, MIC_PICKER_READY_TIMEOUT_MS))
+  ]);
+}
+
+function syncHostMicPublishHealthUi({ toast = false } = {}) {
+  const health = media?.getMicPublishHealth?.();
+  const degraded = !!(media?.isMicPublishDegraded?.() || health?.action === 'republish-raw');
+  hostMicPublishDegraded = degraded;
+  if (toast && degraded && !lastHostMicDegraded) {
+    showToast('Microfone publicado sem audio - clique em Ativar audio', 'warn');
+  }
+  lastHostMicDegraded = degraded;
+  updateHostMicUi();
+  updateActivateAudioUi();
+}
+
+function startHostMicPublishWatchdog() {
+  stopHostMicPublishWatchdog();
+  hostMicPublishWatchdogTimer = setInterval(() => {
+    if (!hostReady || !media?.hasPublishedMicrophone?.()) return;
+    recoverHostMicPublication({ fromWatchdog: true }).catch(() => {});
+  }, 5000);
+}
+
+function stopHostMicPublishWatchdog() {
+  if (!hostMicPublishWatchdogTimer) return;
+  clearInterval(hostMicPublishWatchdogTimer);
+  hostMicPublishWatchdogTimer = null;
+}
+
+async function recoverHostMicPublication({ fromWatchdog = false } = {}) {
+  if (!media || !hostHasMicEnabled()) return false;
+  const before = media.getMicPublishHealth?.();
+  const needsRecover =
+    media.isMicPublishDegraded?.() ||
+    media.hasPendingMicFilterRestore?.() ||
+    before?.action === 'republish-raw' ||
+    before?.action === 'republish';
+  if (fromWatchdog && !needsRecover) {
+    syncHostMicPublishHealthUi();
+    return true;
+  }
+  try {
+    const result = await media.recoverMicPublicationIfNeeded?.();
+    const ok = result?.ok !== false && !media.isMicPublishDegraded?.();
+    syncHostMicPublishHealthUi({ toast: !ok });
+    refreshHostMicDeviceList();
+    syncLocalHostVu();
+    return ok;
+  } catch (e) {
+    errors.handle(e, 'mic-publish-recover');
+    syncHostMicPublishHealthUi({ toast: true });
+    return false;
+  }
+}
+
 function updateHostMicUi() {
   const btn = els.btnHostMic;
   if (!btn) return;
   const micPublished = media?.hasPublishedMicrophone?.();
-  const show = micPublished || hostMicAutoplayNeeded;
+  const degraded = hostMicPublishDegraded || !!media?.isMicPublishDegraded?.();
+  const show = micPublished || hostMicAutoplayNeeded || degraded;
   btn.hidden = !show;
   if (!show) return;
   const muted = media?.isPublishedAudioMuted?.() ?? false;
-  btn.classList.toggle('is-muted', muted || hostMicAutoplayNeeded);
+  btn.classList.toggle('is-muted', muted || hostMicAutoplayNeeded || degraded);
   btn.setAttribute('aria-pressed', String(muted));
   btn.title = hostMicAutoplayNeeded
     ? 'Ativar audio'
-    : muted
-      ? 'Ativar microfone'
-      : 'Silenciar microfone';
+    : degraded
+      ? 'Microfone publicado sem audio - clique para reativar'
+      : muted
+        ? 'Ativar microfone'
+        : 'Silenciar microfone';
   btn.setAttribute(
     'aria-label',
     hostMicAutoplayNeeded
       ? 'Ativar audio'
-      : muted
-        ? 'Ativar microfone'
-        : 'Silenciar microfone'
+      : degraded
+        ? 'Microfone publicado sem audio - clique para reativar'
+        : muted
+          ? 'Ativar microfone'
+          : 'Silenciar microfone'
   );
   syncLocalHostVu();
 }
@@ -1128,12 +1226,8 @@ function updateHostMicUi() {
 async function onHostMicClick() {
   if (!els.btnHostMic) return;
   try {
-    if (hostMicAutoplayNeeded) {
-      await hostAudioMonitor?.resume();
-      hostAudioMonitor?.connectOutput(els.previewAudio);
-      await els.previewAudio?.play();
-      hostMicAutoplayNeeded = false;
-      updateHostMicUi();
+    if (hostMicAutoplayNeeded || hostMicPublishDegraded || media?.isMicPublishDegraded?.()) {
+      await unlockHostRemoteAudio();
       return;
     }
     if (!media?.hasPublishedMicrophone?.()) return;
@@ -1209,10 +1303,21 @@ function syncLocalHostVu() {
   });
 }
 
+function updateDominantSpeakerIndicators() {
+  const dominant = dominantSpeakerPeerId ? String(dominantSpeakerPeerId) : null;
+  for (const [peerId, refs] of cardVuElements) {
+    const id = String(peerId);
+    const arr = Array.isArray(refs) ? refs : [refs];
+    for (const vu of arr) {
+      vu.column?.classList.toggle('is-dominant-speaker', !!dominant && id === dominant);
+    }
+  }
+}
+
 function updateCardVuMeters(levels) {
   let selectedLevel = 0;
   let selectedActive = false;
-  for (const [peerId, { level, active }] of levels) {
+  for (const [peerId, { level, active, speaking }] of levels) {
     if (hostPeerId && String(peerId) === String(hostPeerId)) continue;
     const id = String(peerId);
     if (estado.selecionado && String(estado.selecionado.id) === id) {
@@ -1226,6 +1331,11 @@ function updateCardVuMeters(levels) {
     for (const refs of arr) {
       refs.fill.style.height = `${pct}%`;
       refs.column.classList.toggle('is-active', active);
+      refs.column.classList.toggle('is-speaking', !!speaking);
+      refs.column.classList.toggle(
+        'is-dominant-speaker',
+        !!dominantSpeakerPeerId && id === String(dominantSpeakerPeerId)
+      );
     }
   }
   if (estado.selecionado && String(estado.selecionado.id) !== String(hostPeerId)) {
@@ -1233,9 +1343,22 @@ function updateCardVuMeters(levels) {
   }
 }
 
+function updateActivateAudioUi() {
+  const btn = els.btnActivateAudio;
+  if (!btn) return;
+  const blocked =
+    !!hostAudioMonitor?.isAutoplayBlocked?.() ||
+    hostMicAutoplayNeeded ||
+    (hostAudioMonitor && !hostAudioMonitor.isPlaybackConfirmed?.());
+  const hasChannels = (hostAudioMonitor?.channelCount || 0) > 0;
+  const publishDegraded = hostMicPublishDegraded || !!media?.isMicPublishDegraded?.();
+  btn.hidden = !((blocked && hasChannels) || publishDegraded);
+}
+
 function onHostRemoteAudioAutoplayBlocked() {
   hostMicAutoplayNeeded = true;
   updateHostMicUi();
+  updateActivateAudioUi();
 }
 
 function ensureHostAudioMonitor() {
@@ -1243,12 +1366,18 @@ function ensureHostAudioMonitor() {
   if (!hostAudioMonitor) {
     hostAudioMonitor = new HostAudioMonitor(media, {
       excludePeerId: hostPeerId,
+      ownPeerIds: [...ownPeerIds],
       excludeSourceTypes: meetBridgeLiveMode ? ['system'] : [],
-      onAutoplayBlocked: onHostRemoteAudioAutoplayBlocked
+      allowDualPeerAudio: true,
+      onAutoplayBlocked: onHostRemoteAudioAutoplayBlocked,
+      onStaleProducer: () => {
+        requestRoomStateSync().catch(() => {});
+      }
     });
     hostAudioMonitor.onLevels = updateCardVuMeters;
   } else if (hostPeerId) {
     hostAudioMonitor.excludePeerId = String(hostPeerId);
+    hostAudioMonitor.setOwnPeerIds?.([...ownPeerIds]);
   }
   return hostAudioMonitor;
 }
@@ -1269,6 +1398,7 @@ function mergeLastAudioSourcesFromEstado(payload = {}) {
 
 function resolveHostAudioSources() {
   const fromServer = normalizeRemoteAudioSources(lastAudioSources, hostAudioNormalizeOptions());
+  if (hasServerAudioList) return fromServer;
   if (fromServer.length) return fromServer;
   return buildHostAudioSources();
 }
@@ -1276,7 +1406,9 @@ function resolveHostAudioSources() {
 function hostAudioNormalizeOptions() {
   return {
     excludePeerId: hostPeerId,
-    excludeSourceTypes: meetBridgeLiveMode ? ['system'] : []
+    ownPeerIds: [...ownPeerIds],
+    excludeSourceTypes: meetBridgeLiveMode ? ['system'] : [],
+    ownProducerIds: media?.getOwnAudioProducerIds?.() || []
   };
 }
 
@@ -1332,8 +1464,9 @@ async function syncHostAudioMonitor(sources = null, { force = false } = {}) {
       if (!monitor) return;
       monitor.setMasterVolume(Number(els.volumeSlider?.value || 100) / 100);
       monitor.setManualMuted(mutedClients);
-      if (sources?.length) {
+      if (Array.isArray(sources)) {
         lastAudioSources = sources;
+        hasServerAudioList = true;
       }
       const audioSources = resolveHostAudioSources();
       const sig = audioSourcesSignature(audioSources);
@@ -1366,11 +1499,16 @@ async function syncHostAudioMonitor(sources = null, { force = false } = {}) {
       if (els.controlesAudio) {
         els.controlesAudio.hidden = !hasAnyClientAudio() && monitor.channelCount === 0;
       }
-      if (monitor.isAutoplayBlocked?.() || (els.previewAudio?.paused && monitor.channelCount > 0)) {
+      if (monitor.isAutoplayBlocked?.() || (monitor.channelCount > 0 && !monitor.isPlaybackConfirmed?.())) {
         onHostRemoteAudioAutoplayBlocked();
       } else if (!monitor.channelCount) {
         hostMicAutoplayNeeded = false;
         updateHostMicUi();
+        updateActivateAudioUi();
+      } else {
+        hostMicAutoplayNeeded = false;
+        updateHostMicUi();
+        updateActivateAudioUi();
       }
       syncLocalHostVu();
       if (monitor.channelCount > 0) {
@@ -2006,6 +2144,12 @@ async function applyRoomSnapshot(snapshot, { includeMedia = true } = {}) {
   if (snapshot.meetBridgeLiveMode !== undefined) {
     applyMeetBridgeLiveModeFromRoom(snapshot.meetBridgeLiveMode);
   }
+  if (snapshot.sharedRoomMode !== undefined) {
+    applySharedRoomModeFromRoom(snapshot.sharedRoomMode);
+  }
+  if (snapshot.dominantSpeakerPeerId !== undefined) {
+    applyDominantSpeakerFromRoom(snapshot.dominantSpeakerPeerId);
+  }
 
   if (parsed.mutedPeerIds?.length) {
     mutedClients.clear();
@@ -2030,15 +2174,17 @@ async function applyRoomSnapshot(snapshot, { includeMedia = true } = {}) {
   });
 
   if (!hostReady || joinInProgress) {
-    if (parsed.audioSources?.length) {
+    if (Array.isArray(parsed.audioSources)) {
       lastAudioSources = parsed.audioSources;
+      hasServerAudioList = true;
       pendingHostAudioSync = parsed.audioSources;
     }
     return;
   }
 
-  if (parsed.audioSources?.length) {
+  if (Array.isArray(parsed.audioSources)) {
     lastAudioSources = parsed.audioSources;
+    hasServerAudioList = true;
   }
 
   if (!includeMedia) return;
@@ -2068,6 +2214,7 @@ async function requestRoomStateSync() {
 async function iniciarCompartilhamentoHost() {
   try {
     assertSecureContext();
+    await waitHostMicPickerReady();
     saveCapturePrefs(getHostCapturePrefs());
     setStatus('Selecione a tela para compartilhar...');
     await media.ensureSendTransport();
@@ -2075,11 +2222,13 @@ async function iniciarCompartilhamentoHost() {
     const prefs = getHostCapturePrefs();
     if (prefs.microphone && !media.hasPublishedMicrophone()) {
       await applyHostMicPublishGain(loadHostMicPublishGain(getDefaultHostMicPublishGain()));
-      await media.publishMicrophone(prefs);
+      await media.ensureMicrophonePublication(prefs);
     }
     signaling.send('status', { status: 'transmitindo' });
     ui.set({ isSharing: true });
     updateHostMicUi();
+    refreshHostMicDeviceList();
+    syncHostMicPublishHealthUi({ toast: true });
     if (prefs.microphone && !media.hasPublishedMicrophone()) {
       showToast('Marque Microfone no painel e conceda permissao ao navegador', 'warn');
     }
@@ -2185,10 +2334,10 @@ async function pararGravacao() {
 
 function applyVolumeFromSlider() {
   const vol = Number(els.volumeSlider?.value || 100) / 100;
-  hostAudioMonitor?.setMasterVolume(audioMuted ? 0 : vol);
+  hostAudioMonitor?.setMasterVolume(vol);
+  hostAudioMonitor?.setMasterMuted?.(audioMuted);
   if (els.previewAudio) {
     els.previewAudio.volume = audioMuted ? 0 : vol;
-    els.previewAudio.muted = !!audioMuted;
   }
 }
 
@@ -2337,6 +2486,28 @@ function handleMessage(msg) {
     }
     return;
   }
+  if (msg.type === 'modoSalaCompartilhadaDefinido') {
+    if (msg.payload?.ativo !== undefined) {
+      applySharedRoomModeFromRoom(msg.payload.ativo);
+    }
+    return;
+  }
+  if (msg.type === 'modoSalaCompartilhadaAtualizado') {
+    if (msg.payload?.ativo !== undefined) {
+      applySharedRoomModeFromRoom(msg.payload.ativo);
+    }
+    if (msg.payload?.dominantSpeakerPeerId !== undefined) {
+      applyDominantSpeakerFromRoom(msg.payload.dominantSpeakerPeerId);
+    }
+    return;
+  }
+  if (msg.type === 'falanteDominante') {
+    if (sharedRoomMode) {
+      applyDominantSpeakerFromRoom(msg.payload?.peerId || null);
+      media?.handleDominantSpeaker?.(msg.payload || {});
+    }
+    return;
+  }
   if (msg.type === 'clientesSilenciados') {
     const mutedIds = msg.payload?.mutedPeerIds || [];
     mutedClients.clear();
@@ -2392,6 +2563,12 @@ function handleMessage(msg) {
     if (msg.payload?.meetBridgeLiveMode !== undefined) {
       applyMeetBridgeLiveModeFromRoom(msg.payload.meetBridgeLiveMode);
     }
+    if (msg.payload?.sharedRoomMode !== undefined) {
+      applySharedRoomModeFromRoom(msg.payload.sharedRoomMode);
+    }
+    if (msg.payload?.dominantSpeakerPeerId !== undefined) {
+      applyDominantSpeakerFromRoom(msg.payload.dominantSpeakerPeerId);
+    }
     mergeLastAudioSourcesFromEstado(msg.payload || {});
     syncHostAudioMonitor(msg.payload?.audioSources?.length ? msg.payload.audioSources : null).catch((e) =>
       errors.handle(e, 'audio-monitor')
@@ -2421,6 +2598,8 @@ function handleMessage(msg) {
         String(s.peerId || s.id) !== String(hostPeerId)
     );
     lastAudioSources = sources;
+    hasServerAudioList = true;
+    hostAudioMonitor?.clearInvalidProducers?.();
     if (fontesAudioDebounceTimer) clearTimeout(fontesAudioDebounceTimer);
     fontesAudioDebounceTimer = setTimeout(() => {
       fontesAudioDebounceTimer = null;
@@ -2535,6 +2714,11 @@ async function joinHost({ autoShare = true } = {}) {
   lastAppliedActiveVideoKey = '';
   lastAppliedRoomVersion = 0;
   pendingRoomSnapshot = null;
+  lastAudioSources = [];
+  lastAppliedAudioSig = '';
+  pendingHostAudioSync = null;
+  hasServerAudioList = false;
+  estado = { clients: [], selecionado: null, controleExibicao: [] };
   signaling?.markAuthenticated(false);
   updateHostMicUi();
   debugHostLog('F', 'joinHost start', { gen, autoShare });
@@ -2542,6 +2726,7 @@ async function joinHost({ autoShare = true } = {}) {
   try {
     await hostAudioMonitor?.dispose();
     hostAudioMonitor = null;
+    stopHostMicPublishWatchdog();
     await media?.dispose();
     media = null;
 
@@ -2558,6 +2743,7 @@ async function joinHost({ autoShare = true } = {}) {
     if (gen !== joinGeneration) return;
 
     hostPeerId = entrou.peerId;
+    if (hostPeerId) ownPeerIds.add(String(hostPeerId));
     hostToken = entrou.hostToken || hostToken;
     signaling.markAuthenticated(true);
     debugHostLog('F', 'joinHost entrou', { gen, hostPeerId });
@@ -2581,6 +2767,10 @@ async function joinHost({ autoShare = true } = {}) {
     if (gen !== joinGeneration) return;
 
     media.setVideoQuality(quality);
+    media.setOwnPeerId(hostPeerId);
+    if (entrou.videoQuality?.sharedRoomMode) {
+      applySharedRoomModeFromRoom(true);
+    }
     syncHostMicGainUi(loadHostMicPublishGain(Number(quality.hostMicPublishGain ?? 1.4)));
     recorder.setHostToken(hostToken);
 
@@ -2601,13 +2791,20 @@ async function joinHost({ autoShare = true } = {}) {
     }
 
     if (gen !== joinGeneration) return;
+    await waitHostMicPickerReady();
+    if (gen !== joinGeneration) return;
     const joinPrefs = getHostCapturePrefs();
     if (joinPrefs.microphone) {
       try {
         await media.ensureSendTransport();
         await loadHostMicPresetFromStorage();
-        await media.publishMicrophone(joinPrefs);
+        const result = await media.ensureMicrophonePublication(joinPrefs);
+        if (!result.ok && result.reason !== 'disabled') {
+          showToast('Microfone nao publicado - verifique permissao do navegador', 'warn');
+        }
         syncLocalHostVu();
+        refreshHostMicDeviceList();
+        syncHostMicPublishHealthUi({ toast: true });
       } catch (e) {
         errors.handle(e, 'mic-join');
       }
@@ -2617,6 +2814,7 @@ async function joinHost({ autoShare = true } = {}) {
     syncHostAudioMonitor().catch((e) => errors.handle(e, 'audio-monitor'));
     signaling.send('definirQualidade', { presetId: loadPresetId() });
     startStatsPolling();
+    startHostMicPublishWatchdog();
   } finally {
     if (gen === joinGeneration) {
       joinInProgress = false;
@@ -2744,6 +2942,7 @@ async function bootstrap() {
       joinInProgress = false;
       hostPeerId = null;
       hostReady = false;
+      stopHostMicPublishWatchdog();
       lastAppliedRoomVersion = 0;
       signaling?.markAuthenticated(false);
       signaling?.clearPending();
@@ -4037,6 +4236,25 @@ document.addEventListener('click', (e) => {
   closeFsSourceMenu();
 });
 
+async function unlockHostRemoteAudio() {
+  const confirmed = await hostAudioMonitor?.resume();
+  els.previewAudio?.play?.().catch(() => {});
+  if (confirmed || hostAudioMonitor?.isPlaybackConfirmed?.()) {
+    hostMicAutoplayNeeded = false;
+  }
+  if (hostHasMicEnabled() && media) {
+    await recoverHostMicPublication();
+  }
+  updateHostMicUi();
+  updateActivateAudioUi();
+  const publishOk = !media?.isMicPublishDegraded?.();
+  const playbackOk =
+    !hostAudioMonitor ||
+    hostAudioMonitor.channelCount === 0 ||
+    !!hostAudioMonitor.isPlaybackConfirmed?.();
+  return publishOk && playbackOk;
+}
+
 els.btnHostMic?.addEventListener('click', () => onHostMicClick());
 
 window.addEventListener('sharescreen-ended', async () => {
@@ -4056,6 +4274,7 @@ window.addEventListener('beforeunload', () => {
   clearInterval(hostLockTimer);
   releaseHostLock();
   localHostVuStop?.();
+  stopHostMicPublishWatchdog();
   stopRecordingCapture();
   hostAudioMonitor?.dispose();
   media?.dispose();
@@ -4178,6 +4397,47 @@ function sendMeetBridgeLiveMode(ativo) {
   }
 }
 
+function syncSharedRoomUi() {
+  if (els.chkSharedRoomMode) {
+    els.chkSharedRoomMode.checked = sharedRoomMode;
+  }
+  if (els.sharedRoomHint) {
+    els.sharedRoomHint.hidden = !sharedRoomMode;
+  }
+}
+
+function applySharedRoomModeFromRoom(ativo) {
+  sharedRoomMode = !!ativo;
+  syncSharedRoomUi();
+  media?.setSharedRoomMode?.(sharedRoomMode);
+}
+
+function applyDominantSpeakerFromRoom(peerId) {
+  dominantSpeakerPeerId = peerId ? String(peerId) : null;
+  updateDominantSpeakerIndicators();
+}
+
+function sendSharedRoomMode(ativo) {
+  sharedRoomMode = !!ativo;
+  syncSharedRoomUi();
+  media?.setSharedRoomMode?.(sharedRoomMode);
+  if (signaling && hostReady) {
+    signaling.send('definirModoSalaCompartilhada', { ativo: sharedRoomMode });
+  }
+}
+
+async function applySharedRoomPresetToClients() {
+  sendSharedRoomMode(true);
+  const preset = normalizeMicrophoneFilterPrefs(SHARED_ROOM_MIC_PRESET);
+  for (const client of estado.clients || []) {
+    if (!client?.id || String(client.id) === String(hostPeerId)) continue;
+    hostAudioMonitor?.setFilterPrefs?.(client.id, preset);
+    sendAudioFiltersToClient(client, preset, { force: true });
+  }
+  await media?.setMicrophoneFilterPrefs?.(preset).catch(() => {});
+  showToast('Preset Sala compartilhada aplicado', 'success');
+}
+
 function getRecordingAudioPrefs() {
   return {
     excludeOwnSystem: localStorage.getItem(STORAGE_REC_EXCLUDE_OWN_SYSTEM) === '1',
@@ -4194,6 +4454,7 @@ function syncRecordingAudioPrefsUi() {
     els.recSelectedPeerOnly.checked = prefs.selectedPeerOnly;
   }
   syncMeetBridgeLiveUi();
+  syncSharedRoomUi();
 }
 
 function setRecordingAudioPref(key, value) {
@@ -4213,6 +4474,12 @@ function setupRecordingAudioPrefs() {
   });
   els.chkMeetBridgeLive?.addEventListener('change', () => {
     sendMeetBridgeLiveMode(!!els.chkMeetBridgeLive.checked);
+  });
+  els.chkSharedRoomMode?.addEventListener('change', () => {
+    sendSharedRoomMode(!!els.chkSharedRoomMode.checked);
+  });
+  els.btnSharedRoomPreset?.addEventListener('click', () => {
+    applySharedRoomPresetToClients().catch((e) => errors.handle(e, 'shared-room-preset'));
   });
   els.btnRecMeetBridgePreset?.addEventListener('click', () => {
     setRecordingAudioPref(STORAGE_REC_EXCLUDE_OWN_SYSTEM, true);
@@ -4340,14 +4607,8 @@ if (isHost) {
   setupRecordingAudioPrefs();
   setupSettingsInteraction();
 
-  installAudioUnlock(() => {
-    hostAudioMonitor?.resume();
-    els.previewAudio?.play?.().catch(() => {});
-    if (hostAudioMonitor && !hostAudioMonitor.isAutoplayBlocked?.()) {
-      hostMicAutoplayNeeded = false;
-      updateHostMicUi();
-    }
-  });
+  installAudioUnlock(() => unlockHostRemoteAudio());
+  els.btnActivateAudio?.addEventListener('click', () => unlockHostRemoteAudio());
 }
 
 let activeContextClient = null;
@@ -4486,28 +4747,10 @@ function saveAudioFiltersPresetDebounced(name, prefs, kind = 'client', userId = 
   }, 1000);
 }
 
-function normalizeAudioFilterPrefsForClient(prefs = {}) {
-  return {
-    gain: Number(prefs.gain !== undefined ? prefs.gain : 1),
-    bass: Number(prefs.bass || 0),
-    treble: Number(prefs.treble || 0),
-    highpass: !!prefs.highpass,
-    highpassFreq: Number(prefs.highpassFreq || 80),
-    peaking: !!prefs.peaking,
-    peakingFreq: Number(prefs.peakingFreq || 3000),
-    peakingGain: Number(prefs.peakingGain !== undefined ? prefs.peakingGain : 3),
-    compressor: !!prefs.compressor,
-    noiseGate: !!prefs.noiseGate,
-    noiseGateThreshold: Number(prefs.noiseGateThreshold !== undefined ? prefs.noiseGateThreshold : -45),
-    micSensitivity: !!prefs.micSensitivity,
-    micCaptureDistance: Number(prefs.micCaptureDistance || 6)
-  };
-}
-
 function sendAudioFiltersToClient(client, prefs, { force = false } = {}) {
   if (!client?.id || !signaling || !hostReady) return;
   if (String(client.id) === String(hostPeerId)) return;
-  const normalized = normalizeAudioFilterPrefsForClient(prefs);
+  const normalized = normalizeMicrophoneFilterPrefs(prefs);
   const key = JSON.stringify(normalized);
   const id = String(client.id);
   if (!force && sentAudioFilterKeys.get(id) === key) return;
@@ -4607,6 +4850,28 @@ function populateAudioFiltersUi(prefs) {
   const sensitivityEnabled = $('audio-sensitivity-enabled');
   if (sensitivityEnabled) sensitivityEnabled.checked = !!prefs.micSensitivity;
 
+  const speechGateEnabled = $('audio-speech-gate-enabled');
+  if (speechGateEnabled) {
+    speechGateEnabled.checked = prefs.speechGate === 'soft' || prefs.speechGate === 'hard';
+  }
+
+  const mlNsEnabled = $('audio-ml-ns-enabled');
+  if (mlNsEnabled) mlNsEnabled.checked = !!prefs.noiseSuppressionMl;
+
+  const nearFieldEnabled = $('audio-nearfield-enabled');
+  if (nearFieldEnabled) {
+    nearFieldEnabled.checked = prefs.nearFieldGate === 'soft' || prefs.nearFieldGate === 'strict';
+  }
+
+  const nearFieldThreshold = $('audio-nearfield-threshold');
+  if (nearFieldThreshold) {
+    nearFieldThreshold.value = prefs.nearFieldThreshold !== undefined ? prefs.nearFieldThreshold : 0.5;
+    const nearFieldThresholdVal = $('audio-nearfield-threshold-val');
+    if (nearFieldThresholdVal) {
+      nearFieldThresholdVal.textContent = Number(nearFieldThreshold.value).toFixed(2);
+    }
+  }
+
   const hpFreq = $('audio-hp-frequency');
   if (hpFreq) {
     hpFreq.value = prefs.highpassFreq || 80;
@@ -4657,7 +4922,11 @@ function readAudioFilterPrefsFromUi() {
     noiseGate: !!$('audio-gate-enabled')?.checked,
     noiseGateThreshold: Number($('audio-gate-threshold')?.value || -45),
     micSensitivity: !!$('audio-sensitivity-enabled')?.checked,
-    micCaptureDistance: Number($('audio-capture-distance')?.value || 6)
+    micCaptureDistance: Number($('audio-capture-distance')?.value || 6),
+    speechGate: $('audio-speech-gate-enabled')?.checked ? 'soft' : 'off',
+    noiseSuppressionMl: !!$('audio-ml-ns-enabled')?.checked,
+    nearFieldGate: $('audio-nearfield-enabled')?.checked ? 'soft' : 'off',
+    nearFieldThreshold: Number($('audio-nearfield-threshold')?.value || 0.5)
   };
 }
 
@@ -4757,6 +5026,14 @@ $('audio-peak-gain')?.addEventListener('input', (e) => {
   previewAudioFiltersFromUi();
 });
 $('audio-comp-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
+$('audio-speech-gate-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
+$('audio-ml-ns-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
+$('audio-nearfield-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
+$('audio-nearfield-threshold')?.addEventListener('input', (e) => {
+  const el = $('audio-nearfield-threshold-val');
+  if (el) el.textContent = Number(e.target.value).toFixed(2);
+  previewAudioFiltersFromUi();
+});
 $('audio-sensitivity-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
 $('audio-gate-enabled')?.addEventListener('change', previewAudioFiltersFromUi);
 $('audio-gate-threshold')?.addEventListener('input', (e) => {
@@ -4794,6 +5071,12 @@ $('btn-audio-filters-reset')?.addEventListener('click', () => {
   const peakGainVal = $('audio-peak-gain-val'); if (peakGainVal) peakGainVal.textContent = '3 dB';
 
   const comp = $('audio-comp-enabled'); if (comp) comp.checked = false;
+
+  const speechGate = $('audio-speech-gate-enabled'); if (speechGate) speechGate.checked = false;
+  const mlNs = $('audio-ml-ns-enabled'); if (mlNs) mlNs.checked = false;
+  const nearField = $('audio-nearfield-enabled'); if (nearField) nearField.checked = false;
+  const nearFieldThresh = $('audio-nearfield-threshold'); if (nearFieldThresh) nearFieldThresh.value = 0.5;
+  const nearFieldThreshVal = $('audio-nearfield-threshold-val'); if (nearFieldThreshVal) nearFieldThreshVal.textContent = '0.50';
 
   const sensitivity = $('audio-sensitivity-enabled'); if (sensitivity) sensitivity.checked = false;
 
@@ -4835,6 +5118,7 @@ export function teardownCoHost() {
   if (!isCoHostInstance) return;
   isCoHostInstance = false;
   hostReady = false;
+  stopHostMicPublishWatchdog();
   if (signaling) signaling.removeListener(coHostHandleMessage);
   dockControlsPopout();
   if (els.sidebar) els.sidebar.hidden = true;
@@ -4863,17 +5147,12 @@ export function initCoHost(clientSignaling, clientMedia, clientPeerId) {
   setupRecordingAudioPrefs();
   setupSettingsInteraction();
 
-  installAudioUnlock(() => {
-    hostAudioMonitor?.resume();
-    els.previewAudio?.play?.().catch(() => {});
-    if (hostAudioMonitor && !hostAudioMonitor.isAutoplayBlocked?.()) {
-      hostMicAutoplayNeeded = false;
-      updateHostMicUi();
-    }
-  });
+  installAudioUnlock(() => unlockHostRemoteAudio());
+  els.btnActivateAudio?.addEventListener('click', () => unlockHostRemoteAudio());
 
   signaling.addListener(coHostHandleMessage);
   requestRoomStateSync().catch((e) => errors.handle(e, 'cohost-state'));
+  startHostMicPublishWatchdog();
 }
 
 const isHostPage = window.location.pathname.includes('/host');

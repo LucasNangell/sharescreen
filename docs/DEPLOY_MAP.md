@@ -15,12 +15,14 @@ A aplicação possui scripts prontos (.bat) para facilitar a execução no Windo
   * Habilita a geracao e escuta de source maps no frontend, mantendo o guard de cache nas paginas Host/Client.
 
 ### 2. Produção (PROD)
-* **Comando:** Executar [start-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/start-producao.bat) ou `npm start`.
+* **Comando (fallback manual):** Executar [start-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/start-producao.bat) ou `npm start`.
+* **Comando (contínuo):** no cgrafsysvm, `install-servico-producao.bat` registra o serviço NSSM `ShareScreenLAN` (NSSM já instalado no servidor). Sobe no boot (Delayed Auto Start) e reinicia após queda.
 * **Comportamento:**
   * Escuta no IP oficial `10.1.1.73` e porta `3443`.
+  * Variáveis vêm de [scripts/env-producao.cmd](file:///e:/Projetos/Trabalho/Screen%20Share/scripts/env-producao.cmd) (mesmo bloco para o bat e para o serviço).
   * Grava arquivos na pasta de rede configurada em `SHARESCREEN_RECORDINGS_DIR` (UNC `\\cgrafsysvm\...`).
   * Bloqueia rotas administrativas e exige token nos uploads.
-  * Executa o utilitário PowerShell `scripts/liberar-portas.ps1` para matar processos travados nas portas `3443` e `3080`.
+  * O bat interativo executa `scripts/liberar-portas.ps1` nas portas `3443` e `3080`. O serviço NSSM **não** mata portas; se o serviço já estiver RUNNING, `start-producao.bat` recusa iniciar.
 
 ---
 
@@ -45,7 +47,7 @@ Para subir novas atualizações para o servidor de produção, siga a sequência
    * Consolida todos os arquivos necessários para o servidor rodar dentro da pasta temporária `pacote-servidor/`.
 2. **Deploy via Rede:** Execute o arquivo [deploy-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/deploy-producao.bat).
    * Ele realiza uma cópia sincronizada via `robocopy` da pasta `pacote-servidor/` para a pasta de produção `\\cgrafsysvm\Sistemas CGraf\Screen Share`.
-3. **Verificação no Servidor:** No servidor de produção, execute [verificar-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/verificar-producao.bat) para garantir integridade e em seguida o [start-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/start-producao.bat) para subir o serviço.
+3. **Verificação no Servidor:** No servidor de produção, execute [verificar-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/verificar-producao.bat). Primeira vez: [install-servico-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/install-servico-producao.bat) como Administrador. Deploys seguintes: parar o serviço no servidor, copiar, [reiniciar-servico-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/reiniciar-servico-producao.bat). Fallback manual: [start-producao.bat](file:///e:/Projetos/Trabalho/Screen%20Share/start-producao.bat) somente se o serviço não estiver RUNNING.
 
 ---
 

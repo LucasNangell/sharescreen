@@ -7,6 +7,65 @@ import { makeCacheGuardScript } from './cache-guard-snippet.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 
+function copyDirRecursive(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(from, to);
+    } else {
+      fs.copyFileSync(from, to);
+    }
+  }
+}
+
+function copyBrandIcons() {
+  const src = path.join(root, 'logo.png');
+  const destDir = path.join(root, 'public/shared/icons');
+  const dest = path.join(destDir, 'logo.png');
+  if (!fs.existsSync(src)) {
+    console.warn('logo.png ausente na raiz — favicon/PWA nao atualizado');
+    return;
+  }
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(src, dest);
+  console.log('Copiado logo.png para public/shared/icons/logo.png');
+}
+
+function copyAudioMlAssets() {
+  const sharedDir = path.join(root, 'public/shared');
+  const vadSrc = path.join(root, 'node_modules/@ricky0123/vad-web/dist');
+  const vadDest = path.join(sharedDir, 'vad');
+  const ortSrc = path.join(root, 'node_modules/onnxruntime-web/dist');
+  const rnSrc = path.join(root, 'node_modules/@timephy/rnnoise-wasm/dist');
+  const rnDest = path.join(sharedDir, 'rnnoise');
+
+  fs.mkdirSync(sharedDir, { recursive: true });
+
+  const vadFiles = [
+    'vad.worklet.bundle.min.js',
+    'silero_vad_legacy.onnx',
+    'silero_vad_v5.onnx'
+  ];
+  fs.mkdirSync(vadDest, { recursive: true });
+  for (const file of vadFiles) {
+    const from = path.join(vadSrc, file);
+    if (fs.existsSync(from)) fs.copyFileSync(from, path.join(vadDest, file));
+  }
+
+  const ortFiles = fs
+    .readdirSync(ortSrc)
+    .filter((name) => name.startsWith('ort-wasm') && (name.endsWith('.wasm') || name.endsWith('.mjs')));
+  for (const file of ortFiles) {
+    fs.copyFileSync(path.join(ortSrc, file), path.join(vadDest, file));
+  }
+
+  copyDirRecursive(rnSrc, rnDest);
+  console.log('Assets de audio ML copiados para public/shared/vad e public/shared/rnnoise');
+}
+
 const isProd = process.argv.includes('--prod') || process.env.NODE_ENV === 'production';
 
 const common = {
@@ -33,6 +92,18 @@ await esbuild.build({
   ...common,
   entryPoints: [path.join(root, 'src/host/app.js')],
   outfile: path.join(root, 'public/host/app.bundle.js')
+});
+
+await esbuild.build({
+  bundle: true,
+  format: 'esm',
+  platform: 'browser',
+  target: ['chrome90', 'edge90', 'firefox90'],
+  minify: isProd,
+  sourcemap: !isProd,
+  logLevel: 'info',
+  entryPoints: [path.join(root, 'src/shared/audio-ml-entry.js')],
+  outfile: path.join(root, 'public/shared/audio-ml.bundle.js')
 });
 
 const buildId =
@@ -92,4 +163,6 @@ for (const htmlPath of htmlPages) {
 }
 
 console.log('Bundles gerados: public/client e public/host');
+copyBrandIcons();
+copyAudioMlAssets();
 console.log(`Build ID: ${buildId}`);

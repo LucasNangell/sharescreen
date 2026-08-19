@@ -59,7 +59,10 @@ $itens = @(
     'package.json',
     'package-lock.json',
     'start-producao.bat',
-    'verificar-producao.bat'
+    'verificar-producao.bat',
+    'install-servico-producao.bat',
+    'uninstall-servico-producao.bat',
+    'reiniciar-servico-producao.bat'
 )
 
 foreach ($item in $itens) {
@@ -113,12 +116,15 @@ PACOTE PRONTO PARA O SERVIDOR
 Copie TODO o conteudo desta pasta para:
   C:\Sistemas CGraf\Screen Share
 
-No servidor (so precisa Node.js 18+ instalado):
+No servidor (Node.js 18+ e NSSM ja instalados):
   1. verificar-producao.bat
-  2. start-producao.bat
+  2. Primeira vez: install-servico-producao.bat (como Administrador)
+  3. Deploys seguintes: nssm stop ShareScreenLAN, copiar, reiniciar-servico-producao.bat
+  Fallback manual (so se o servico NAO estiver rodando): start-producao.bat
 
 Nao execute npm install no servidor.
 A pasta data\ do servidor NAO e sobrescrita pelo deploy (robocopy /XD data).
+Este pacote NAO inclui nssm.exe — use o NSSM ja instalado no cgrafsysvm.
 "@
 Set-Content -Path (Join-Path $dest 'LEIA-ME-SERVIDOR.txt') -Value $readme -Encoding UTF8
 

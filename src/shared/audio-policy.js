@@ -33,7 +33,7 @@ export function resolvePublishAudioSources(
   prefs = {},
   {
     displaySurface = null,
-    dualPublishPolicy = 'mic-wins',
+    dualPublishPolicy = 'allow-both',
     meetBridgeLiveMode = false
   } = {}
 ) {
@@ -70,10 +70,17 @@ export function resolvePlaybackSources(
     excludePeerId = null,
     excludeSourceTypes = [],
     antiEcho = true,
-    allowDualPeerAudio = false
+    allowDualPeerAudio = false,
+    ownPeerIds = [],
+    ownProducerIds = []
   } = {}
 ) {
-  let list = normalizeRemoteAudioSources(sources, { excludePeerId, excludeSourceTypes });
+  let list = normalizeRemoteAudioSources(sources, {
+    excludePeerId,
+    excludeSourceTypes,
+    ownPeerIds,
+    ownProducerIds
+  });
   if (antiEcho && !allowDualPeerAudio) {
     list = pickAntiEchoSources(list, { allowDualPeerAudio });
   }
@@ -125,6 +132,6 @@ export async function applyTabCaptureAudioHints(stream) {
 }
 
 export function dualPublishPolicyFromQuality(quality = {}) {
-  const policy = quality.dualPublishPolicy || 'mic-wins';
+  const policy = quality.dualPublishPolicy || 'allow-both';
   return DUAL_PUBLISH_POLICIES.includes(policy) ? policy : 'mic-wins';
 }

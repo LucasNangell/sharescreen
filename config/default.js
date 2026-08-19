@@ -62,13 +62,16 @@ const config = {
     enabled: true,
     systemAudioDefault: false,
     microphoneDefault: true,
-    dualPublishPolicy: 'mic-wins',
+    dualPublishPolicy: 'allow-both',
     maxBitrate: 128_000,
     micAudioBitrate: 48_000,
     systemAudioBitrate: 96_000,
     hostMicPublishGain: 1.2,
     hostMicCompressor: true,
-    hostMicPeaking: true
+    hostMicPeaking: true,
+    sharedRoomMode: false,
+    activeSpeakerEnabled: true,
+    mlNoiseSuppressionDefault: false
   },
 
   certDir: 'certs',
@@ -171,10 +174,13 @@ export function getVideoQualityForClients() {
     maxAudioBitrate: config.audio?.maxBitrate ?? 128_000,
     micAudioBitrate: config.audio?.micAudioBitrate ?? 48_000,
     systemAudioBitrate: config.audio?.systemAudioBitrate ?? 96_000,
-    dualPublishPolicy: config.audio?.dualPublishPolicy || 'mic-wins',
+    dualPublishPolicy: config.audio?.dualPublishPolicy || 'allow-both',
     hostMicPublishGain: config.audio?.hostMicPublishGain ?? 1.2,
     hostMicCompressor: config.audio?.hostMicCompressor !== false,
     hostMicPeaking: config.audio?.hostMicPeaking !== false,
+    sharedRoomMode: config.audio?.sharedRoomMode === true,
+    activeSpeakerEnabled: config.audio?.activeSpeakerEnabled !== false,
+    mlNoiseSuppressionDefault: config.audio?.mlNoiseSuppressionDefault === true,
     stunServers: config.stunServers,
     turnServers: config.turnServers,
     turnEnabled: config.turnServers.length > 0

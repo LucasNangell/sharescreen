@@ -24,8 +24,19 @@ import {
   hasActiveMicrophoneFilter,
   closeMicrophoneFilterGraph,
   createMicrophoneFilterGraph,
-  microphoneFilterPrefsSignature
+  microphoneFilterPrefsSignature,
+  resumeMicrophoneFilterGraph,
+  micGraphIsRunning
 } from './mic-dsp.js';
+
+/** Acima deste ganho o portão é considerado aberto (o modo `soft` atenua para 0.16). */
+const MIC_GATE_OPEN_MIN = 0.5;
+const MIC_FILTER_RESTORE_MAX_ATTEMPTS = 3;
+import {
+  evaluateMicPublishHealth,
+  rmsFromAnalyser,
+  sampleTrackRms
+} from './mic-publish-health.js';
 
 /**
  * Sess?fio mediasoup: transports, produce, consume, cleanup e baixa lat?fincia.
@@ -68,6 +79,120 @@ export class MediaClient {
     this._mediaOps = Promise.resolve();
     this._videoMediaOps = Promise.resolve();
     this._audioMediaOps = Promise.resolve();
+    this.ownPeerId = null;
+    this.sharedRoomMode = false;
+    this._dominantSpeakerPeerId = null;
+    this._dominantEnableTimer = null;
+    this._micCaptureAgcOff = null;
+    this._micCaptureDeviceId = '';
+    this._micPublishDegraded = null;
+    this._lastMicPublishHealth = 'ok';
+    this._micHealthCheckScheduled = false;
+    this._micFiltersDropped = false;
+    this._micFiltersRestoreAttempts = 0;
+  }
+
+  /** Publicação caiu para trilha crua e ainda há filtros pedidos que podem ser restaurados. */
+  hasPendingMicFilterRestore() {
+    return (
+      this._micFiltersDropped &&
+      this._micFiltersRestoreAttempts < MIC_FILTER_RESTORE_MAX_ATTEMPTS
+    );
+  }
+
+  /** Conta tentativas frustradas de publicar com DSP para não recapturar em laço. */
+  _setMicFiltersDropped(dropped) {
+    if (dropped) {
+      this._micFiltersDropped = true;
+      this._micFiltersRestoreAttempts += 1;
+      return;
+    }
+    this._micFiltersDropped = false;
+    this._micFiltersRestoreAttempts = 0;
+  }
+
+  getMicPublishHealth() {
+    const graph = this._micFilterGraph;
+    const ctxState = graph?.ctx?.state || 'none';
+    const published = this.hasPublishedMicrophone();
+    let action = 'ok';
+    if (!published) action = 'republish';
+    else if (this._micPublishDegraded === 'ctx-suspended' || this._micPublishDegraded === 'silent-graph') {
+      action = 'republish-raw';
+    } else if (graph && ctxState !== 'running') {
+      action = 'republish-raw';
+    } else if (this._micPublishDegraded === 'no-input') {
+      action = 'no-input';
+    }
+    return {
+      published,
+      degraded: this._micPublishDegraded,
+      ctxState,
+      graphPresent: !!graph,
+      action
+    };
+  }
+
+  isMicPublishDegraded() {
+    const health = this.getMicPublishHealth();
+    return health.action === 'republish-raw' || health.action === 'republish';
+  }
+
+  getOwnAudioProducerIds() {
+    return ['microphone', 'system', 'mixed']
+      .map((slot) => this.producers[slot])
+      .filter((producer) => producer && !producer.closed && producer.id)
+      .map((producer) => producer.id);
+  }
+
+  setOwnPeerId(peerId) {
+    this.ownPeerId = peerId ? String(peerId) : null;
+    this._applyDominantSpeakerDucking();
+  }
+
+  setSharedRoomMode(enabled) {
+    const next = !!enabled;
+    if (next === this.sharedRoomMode) return;
+    this.sharedRoomMode = next;
+    this._applyDominantSpeakerDucking();
+  }
+
+  handleDominantSpeaker(payload = {}) {
+    const peerId = payload?.peerId ? String(payload.peerId) : null;
+    if (peerId === this._dominantSpeakerPeerId) return;
+    this._dominantSpeakerPeerId = peerId;
+    this._applyDominantSpeakerDucking();
+  }
+
+  _applyDominantSpeakerDucking() {
+    const track = this.getLocalMicrophoneTrack();
+    if (!track) return;
+    if (this._dominantEnableTimer) {
+      clearTimeout(this._dominantEnableTimer);
+      this._dominantEnableTimer = null;
+    }
+    if (this._publishedMicMuted) {
+      track.enabled = false;
+      return;
+    }
+    if (!this.sharedRoomMode || !this.ownPeerId) {
+      track.enabled = true;
+      return;
+    }
+    const dominant = this._dominantSpeakerPeerId;
+    if (!dominant || String(dominant) === String(this.ownPeerId)) {
+      this._dominantEnableTimer = setTimeout(() => {
+        this._dominantEnableTimer = null;
+        const t = this.getLocalMicrophoneTrack();
+        if (!t || this._publishedMicMuted || !this.sharedRoomMode) return;
+        const currentDominant = this._dominantSpeakerPeerId;
+        if (!currentDominant || String(currentDominant) === String(this.ownPeerId)) {
+          t.enabled = true;
+        }
+      }, 300);
+      return;
+    }
+    track.enabled = false;
   }
 
   _audioProducer(source) {
@@ -100,7 +225,13 @@ export class MediaClient {
   setPublishedAudioMuted(muted) {
     this._publishedMicMuted = !!muted;
     const track = this.getLocalMicrophoneTrack();
-    if (track) track.enabled = !muted;
+    if (track) {
+      if (muted) {
+        track.enabled = false;
+      } else {
+        this._applyDominantSpeakerDucking();
+      }
+    }
     return this._publishedMicMuted;
   }
 
@@ -401,6 +532,10 @@ export class MediaClient {
     if (key === 'microphone') {
       closeMicrophoneFilterGraph(this._micFilterGraph);
       this._micFilterGraph = null;
+      this._micPublishDegraded = null;
+      this._lastMicPublishHealth = 'ok';
+      this._micFiltersDropped = false;
+      this._micFiltersRestoreAttempts = 0;
     }
     if (key === 'microphone' && stopMicTrack) {
       if (this._micTrack) {
@@ -409,6 +544,8 @@ export class MediaClient {
         } catch (_) {}
         this._micTrack = null;
       }
+      this._micCaptureAgcOff = null;
+      this._micCaptureDeviceId = '';
       this._stopLocalMicTracks();
     }
   }
@@ -453,10 +590,173 @@ export class MediaClient {
     return true;
   }
 
-  async publishMicrophone(capturePrefs) {
+  _canReuseMicTrack(track, { deviceId = '', agcOff = false } = {}) {
+    if (!track || track.readyState !== 'live') return false;
+    const settings = track.getSettings?.() || {};
+    const knownAgcOff = this._micCaptureAgcOff;
+    const trackAgcOff =
+      knownAgcOff != null ? knownAgcOff : settings.autoGainControl === false;
+    if (!!trackAgcOff !== !!agcOff) return false;
+    const wantId = deviceId || '';
+    const activeId = settings.deviceId || '';
+    if (wantId && activeId && wantId !== activeId) return false;
+    return true;
+  }
+
+  async _samplePublishedMicEnergy(durationMs = 1200) {
+    const producer = this.producers.microphone;
+    const track = producer?.track;
+    if (!track || track.readyState !== 'live') return 0;
+    const statsPromise = (async () => {
+      if (!producer?.getStats) return 0;
+      const end = Date.now() + durationMs;
+      let max = 0;
+      while (Date.now() < end) {
+        try {
+          const stats = await producer.getStats();
+          for (const report of stats.values()) {
+            const level = Number(report.audioLevel);
+            if (Number.isFinite(level)) max = Math.max(max, level);
+          }
+        } catch (_) {}
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      return max;
+    })();
+    const analyserPromise = sampleTrackRms(track, durationMs);
+    const [fromStats, fromAnalyser] = await Promise.all([statsPromise, analyserPromise]);
+    if (fromAnalyser == null && !(fromStats > 0)) return null;
+    return Math.max(fromStats || 0, fromAnalyser || 0);
+  }
+
+  _sampleRawMicEnergy() {
+    const graph = this._micFilterGraph;
+    if (graph?.meterAnalyser) return rmsFromAnalyser(graph.meterAnalyser);
+    if (!graph && this._micTrack?.readyState === 'live') return 0;
+    return 0;
+  }
+
+  /**
+   * Mede a saída real do grafo (pós-ganho) apenas nos instantes em que o portão está
+   * aberto, além da energia pré-portão. Sem isso um portão fechado — que é justamente
+   * o comportamento esperado de VAD/proximidade — pareceria um grafo mudo.
+   */
+  async _sampleMicGraphWindow(durationMs = 1200) {
+    const graph = this._micFilterGraph;
+    if (!graph?.outputAnalyser) return null;
+    const end = Date.now() + Math.max(200, durationMs);
+    let outputEnergy = 0;
+    let rawEnergy = 0;
+    let gateOpenObserved = false;
+    let measured = false;
+    while (Date.now() < end) {
+      if (graph.ctx?.state !== 'running') break;
+      const gateOpen =
+        !graph.gateActive ||
+        Number(graph.gateGainNode?.gain?.value ?? 1) > MIC_GATE_OPEN_MIN;
+      rawEnergy = Math.max(rawEnergy, rmsFromAnalyser(graph.meterAnalyser));
+      if (gateOpen) {
+        gateOpenObserved = true;
+        outputEnergy = Math.max(outputEnergy, rmsFromAnalyser(graph.outputAnalyser));
+      }
+      measured = true;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (!measured) return null;
+    return { outputEnergy, rawEnergy, gateOpenObserved, gateActive: !!graph.gateActive };
+  }
+
+  async _republishRawMicrophone() {
+    const track = this._micTrack;
+    if (!track || track.readyState !== 'live') return false;
+    const wantedFilters = hasActiveMicrophoneFilter(this._resolvePublishMicFilterPrefs());
+    closeMicrophoneFilterGraph(this._micFilterGraph);
+    this._micFilterGraph = null;
+    const ok = await this._publishAudioTrack(track, 'microphone');
+    if (ok) {
+      this._micPublishDegraded = null;
+      this._lastMicPublishHealth = 'ok';
+      this._setMicFiltersDropped(wantedFilters);
+      this.onLog('Microfone publicado sem filtros (recuperacao)', 'warn');
+      audioTrace('mic-publish-recover', { reason: 'raw', filtersDropped: wantedFilters });
+    }
+    return ok;
+  }
+
+  /** Refaz a publicação com DSP depois de um fallback para trilha crua. */
+  async _restoreMicFilterPublication() {
+    if (!this.hasPendingMicFilterRestore()) return false;
+    audioTrace('mic-publish-restore-filters', {
+      attempt: this._micFiltersRestoreAttempts + 1
+    });
+    return this._publishMicrophoneUnlocked({ ...this.capturePrefs, microphone: true });
+  }
+
+  _scheduleMicPublishHealthCheck() {
+    if (this._micHealthCheckScheduled) return;
+    this._micHealthCheckScheduled = true;
+    setTimeout(() => {
+      this._micHealthCheckScheduled = false;
+      this._runAudioMediaOp(async () => {
+        if (!this.hasPublishedMicrophone() || this._publishedMicMuted) return;
+        await this._verifyAndRecoverMicPublish();
+      }).catch(() => {});
+    }, 0);
+  }
+
+  async _verifyAndRecoverMicPublish() {
+    if (this._publishedMicMuted) return;
+    const graph = this._micFilterGraph;
+    if (graph && !micGraphIsRunning(graph)) {
+      const resumed = await resumeMicrophoneFilterGraph(graph);
+      if (!resumed) {
+        this._micPublishDegraded = 'ctx-suspended';
+        this._lastMicPublishHealth = 'republish-raw';
+        audioTrace('mic-publish-recover', { reason: 'ctx-suspended' });
+        await this._republishRawMicrophone();
+        return;
+      }
+    }
+
+    const sampled = await this._sampleMicGraphWindow(1200);
+    const publishedEnergy = sampled
+      ? sampled.outputEnergy
+      : await this._samplePublishedMicEnergy(1200);
+    const rawEnergy = sampled ? sampled.rawEnergy : this._sampleRawMicEnergy();
+    const gateActive = sampled ? sampled.gateActive : false;
+    const gateOpenObserved = sampled ? sampled.gateOpenObserved : true;
+    const action = evaluateMicPublishHealth({
+      producerLive: this.hasPublishedMicrophone(),
+      publishedEnergy,
+      rawEnergy,
+      ctxState: this._micFilterGraph?.ctx?.state || 'none',
+      graphPresent: !!this._micFilterGraph,
+      gateActive,
+      gateOpenObserved
+    });
+    this._lastMicPublishHealth = action;
+    audioTrace('mic-publish-health', {
+      action,
+      publishedEnergy,
+      rawEnergy,
+      gateActive,
+      gateOpenObserved,
+      ctxState: this._micFilterGraph?.ctx?.state || 'none'
+    });
+    if (action === 'republish-raw') {
+      this._micPublishDegraded = 'silent-graph';
+      await this._republishRawMicrophone();
+    } else if (action === 'ok') {
+      this._micPublishDegraded = null;
+    } else if (action === 'no-input') {
+      this._micPublishDegraded = null;
+    }
+  }
+
+  async _publishMicrophoneUnlocked(capturePrefs, { skipDsp = false, skipHealth = false } = {}) {
     this.setCapturePrefs(capturePrefs);
     if (!capturePrefs?.microphone) {
-      return this.stopMicrophone();
+      return this._stopMicrophoneUnlocked();
     }
 
     await this.ensureSendTransport();
@@ -464,29 +764,55 @@ export class MediaClient {
     const publishPrefs = this._resolvePublishMicFilterPrefs();
     const needsAgcOff = this.applyMicPublishChain && hasActiveMicrophoneFilter(publishPrefs);
     const micCaptureOptions = needsAgcOff ? { disableAutoGainControl: true } : {};
+    const wantDeviceId = capturePrefs.microphoneDeviceId || '';
 
-    let track =
-      needsAgcOff ? null : capturePrefs.prefetchedMicTrack || this._micTrack || null;
+    const candidates = [capturePrefs.prefetchedMicTrack, this._micTrack].filter(Boolean);
+    let track = candidates.find((candidate) =>
+      this._canReuseMicTrack(candidate, { deviceId: wantDeviceId, agcOff: needsAgcOff })
+    ) || null;
+
+    let previousToStop = null;
     if (!track || track.readyState !== 'live') {
-      track = await acquireMicrophoneTrack(
-        capturePrefs.microphoneDeviceId || '',
-        this.onLog,
-        micCaptureOptions
-      );
+      previousToStop = this._micTrack;
+      track = await acquireMicrophoneTrack(wantDeviceId, this.onLog, micCaptureOptions);
+      this._micCaptureAgcOff = needsAgcOff;
     }
+    this._micCaptureDeviceId = wantDeviceId;
 
     this._micTrack = track;
     if (!this.localMicTracks.includes(track)) {
       this.localMicTracks.push(track);
     }
 
-    const prepared = createMicrophoneFilterGraph(track, publishPrefs);
+    let prepared;
+    if (skipDsp) {
+      prepared = { track, graph: null };
+    } else {
+      prepared = await createMicrophoneFilterGraph(track, publishPrefs);
+    }
     const previousGraph = this._micFilterGraph;
     const ok = await this._publishAudioTrack(prepared.track, 'microphone');
     if (ok) {
-      this._micFilterGraph = prepared.graph;
+      this._micFilterGraph = prepared.graph || null;
       closeMicrophoneFilterGraph(previousGraph);
+      this._setMicFiltersDropped(!prepared.graph && hasActiveMicrophoneFilter(publishPrefs));
+      if (prepared.degraded) {
+        this._micPublishDegraded = prepared.degraded;
+        audioTrace('mic-publish-degraded', { reason: prepared.degraded });
+      } else {
+        this._micPublishDegraded = null;
+      }
       this.onLog(prepared.graph ? 'Microfone publicado com filtros' : 'Microfone publicado', 'info');
+      if (
+        previousToStop &&
+        previousToStop !== track &&
+        previousToStop !== capturePrefs.prefetchedMicTrack
+      ) {
+        try { previousToStop.stop(); } catch (_) {}
+      }
+      if (!skipHealth && !this._publishedMicMuted) {
+        this._scheduleMicPublishHealthCheck();
+      }
     } else {
       closeMicrophoneFilterGraph(prepared.graph);
       throw new Error('Falha ao publicar microfone no servidor');
@@ -494,16 +820,103 @@ export class MediaClient {
     return ok;
   }
 
-  async setMicrophoneFilterPrefs(prefs) {
-    const next = normalizeMicrophoneFilterPrefs(prefs || {});
-    const nextSig = microphoneFilterPrefsSignature(next);
-    const changed = nextSig !== this._micFilterPrefsSig;
-    this._micFilterPrefs = next;
-    this._micFilterPrefsSig = nextSig;
-    if (this.capturePrefs?.microphone && this._micTrack?.readyState === 'live' && changed) {
-      return this.publishMicrophone({ ...this.capturePrefs, microphone: true });
+  async _stopMicrophoneUnlocked() {
+    await this._closeAudioProducerBySource('microphone', { stopMicTrack: true });
+    this.onLog('Microfone encerrado', 'info');
+    return false;
+  }
+
+  async _ensureMicrophonePublicationUnlocked(prefs = {}, { force = false } = {}) {
+    const capturePrefs = { ...this.capturePrefs, ...prefs };
+    this.setCapturePrefs(capturePrefs);
+    if (!capturePrefs.microphone) {
+      if (this.hasPublishedMicrophone()) await this._stopMicrophoneUnlocked();
+      return { ok: false, reason: 'disabled' };
     }
-    return true;
+    try {
+      const wantDeviceId = capturePrefs.microphoneDeviceId || '';
+      const graphOk = !this._micFilterGraph || micGraphIsRunning(this._micFilterGraph);
+      if (
+        !force &&
+        !this._micPublishDegraded &&
+        !this.hasPendingMicFilterRestore() &&
+        graphOk &&
+        this.hasPublishedMicrophone() &&
+        this._micTrack?.readyState === 'live'
+      ) {
+        const activeId =
+          this._micCaptureDeviceId || this._micTrack.getSettings?.().deviceId || '';
+        if (wantDeviceId === activeId) {
+          return { ok: true, reason: null };
+        }
+      }
+      await this.ensureSendTransport();
+      const ok = await this._publishMicrophoneUnlocked({ ...capturePrefs, microphone: true });
+      return { ok: !!ok, reason: ok ? null : 'produce' };
+    } catch (err) {
+      const name = String(err?.name || '');
+      const reason =
+        name === 'NotFoundError' || name === 'OverconstrainedError'
+          ? 'device'
+          : name === 'NotAllowedError' || name === 'NotReadableError' || name === 'SecurityError'
+            ? 'permission'
+            : 'produce';
+      this.onLog(err?.message || 'Falha ao publicar microfone', 'error');
+      return { ok: false, reason, error: err };
+    }
+  }
+
+  async publishMicrophone(capturePrefs) {
+    return this._runAudioMediaOp(() => this._publishMicrophoneUnlocked(capturePrefs));
+  }
+
+  async ensureMicrophonePublication(prefs = {}, { force = false } = {}) {
+    return this._runAudioMediaOp(() => this._ensureMicrophonePublicationUnlocked(prefs, { force }));
+  }
+
+  async recoverMicPublicationIfNeeded() {
+    return this._runAudioMediaOp(async () => {
+      if (!this.capturePrefs?.microphone) return { ok: false, reason: 'disabled' };
+      if (this._micFilterGraph) {
+        const resumed = await resumeMicrophoneFilterGraph(this._micFilterGraph);
+        if (resumed) {
+          this._micPublishDegraded = null;
+          this._lastMicPublishHealth = 'ok';
+          return { ok: true, reason: 'resumed' };
+        }
+      }
+      if (this.hasPendingMicFilterRestore()) {
+        const restored = await this._restoreMicFilterPublication();
+        if (restored && this._micFilterGraph) {
+          return { ok: true, reason: 'filters-restored' };
+        }
+      }
+      const health = this.getMicPublishHealth();
+      if (health.action === 'ok' || health.action === 'no-input') {
+        return { ok: true, reason: health.action };
+      }
+      if (health.action === 'republish-raw' && this._micTrack?.readyState === 'live') {
+        this._micPublishDegraded = this._micPublishDegraded || 'ctx-suspended';
+        const ok = await this._republishRawMicrophone();
+        return { ok, reason: ok ? 'raw' : 'produce' };
+      }
+      return this._ensureMicrophonePublicationUnlocked(this.capturePrefs, { force: true });
+    });
+  }
+
+  async setMicrophoneFilterPrefs(prefs) {
+    return this._runAudioMediaOp(async () => {
+      const next = normalizeMicrophoneFilterPrefs(prefs || {});
+      const nextSig = microphoneFilterPrefsSignature(next);
+      const changed = nextSig !== this._micFilterPrefsSig;
+      this._micFilterPrefs = next;
+      this._micFilterPrefsSig = nextSig;
+      if (changed) this._micFiltersRestoreAttempts = 0;
+      if (this.capturePrefs?.microphone && this._micTrack?.readyState === 'live' && changed) {
+        return this._publishMicrophoneUnlocked({ ...this.capturePrefs, microphone: true });
+      }
+      return true;
+    });
   }
 
   async ensureMicPublishFilters(fallbackPrefs = null) {
@@ -515,18 +928,20 @@ export class MediaClient {
   }
 
   applyAudioPolicyFromServer(payload = {}) {
-    const closed = payload?.closed || payload?.blocked;
-    if (closed === 'microphone') return this.stopMicrophone();
-    if (closed === 'system') return this.stopSystemAudio();
-    if (payload?.blocked === 'system') return this.stopSystemAudio();
-    if (payload?.blocked === 'microphone') return this.stopMicrophone();
-    return Promise.resolve(false);
+    return this._runAudioMediaOp(async () => {
+      const closed = payload?.closed || payload?.blocked;
+      if (closed === 'microphone' || payload?.blocked === 'microphone') {
+        return this._stopMicrophoneUnlocked();
+      }
+      if (closed === 'system' || payload?.blocked === 'system') {
+        return this.stopSystemAudio();
+      }
+      return false;
+    });
   }
 
   async stopMicrophone() {
-    await this._closeAudioProducerBySource('microphone', { stopMicTrack: true });
-    this.onLog('Microfone encerrado', 'info');
-    return false;
+    return this._runAudioMediaOp(() => this._stopMicrophoneUnlocked());
   }
 
   async publishSystemAudioFromDisplay(displayStream = null) {
@@ -558,7 +973,7 @@ export class MediaClient {
   }
 
   /** Sincroniza microfone e áudio do sistema conforme prefs (sem mixar). */
-  async syncPublishedAudio(capturePrefs, displayStream = null) {
+  async _syncPublishedAudioUnlocked(capturePrefs, displayStream = null) {
     this.setCapturePrefs(capturePrefs);
     const resolved = this._resolvedPublishPrefs(capturePrefs, displayStream);
     if (resolved.blockedReason === 'mic-wins' && capturePrefs.systemAudio !== false) {
@@ -572,9 +987,9 @@ export class MediaClient {
     let sysOk = true;
 
     if (resolved.microphone) {
-      micOk = await this.publishMicrophone({ ...capturePrefs, microphone: true });
+      micOk = await this._publishMicrophoneUnlocked({ ...capturePrefs, microphone: true });
     } else if (this.hasPublishedMicrophone()) {
-      await this.stopMicrophone();
+      await this._stopMicrophoneUnlocked();
     }
 
     const screenStream = displayStream ?? this.localScreenStream ?? null;
@@ -585,6 +1000,10 @@ export class MediaClient {
     }
 
     return micOk || sysOk;
+  }
+
+  async syncPublishedAudio(capturePrefs, displayStream = null) {
+    return this._runAudioMediaOp(() => this._syncPublishedAudioUnlocked(capturePrefs, displayStream));
   }
 
   async ensureAudioPublished(capturePrefs) {
@@ -789,6 +1208,15 @@ export class MediaClient {
 
       const onErro = (msg) => {
         if (msg.type !== 'erro') return;
+        const payloadProducerId = msg.payload?.producerId;
+        if (payloadProducerId) {
+          if (payloadProducerId !== producerId) return;
+          cleanup();
+          reject(new Error(msg.payload?.mensagem || 'Erro ao consumir midia'));
+          return;
+        }
+        const tipo = msg.payload?.tipo;
+        if (tipo && tipo !== 'consumir') return;
         const text = String(msg.payload?.mensagem || '').toLowerCase();
         const consumeRelated =
           text.includes('consumir') ||
@@ -797,7 +1225,7 @@ export class MediaClient {
           text.includes('transport');
         if (!consumeRelated) return;
         cleanup();
-        reject(new Error(msg.payload?.mensagem || 'Erro ao consumir m?fidia'));
+        reject(new Error(msg.payload?.mensagem || 'Erro ao consumir midia'));
       };
 
       const cleanup = () => {

@@ -201,6 +201,8 @@ export async function createWebRtcTransport(peerId) {
 }
 
 export async function closeMediasoup() {
+  const { closeActiveSpeakerObserver } = await import('./active-speaker.js');
+  await closeActiveSpeakerObserver();
   if (router) {
     router.close();
     router = null;

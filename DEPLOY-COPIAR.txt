@@ -8,12 +8,30 @@ NO PC DE DESENVOLVIMENTO (com internet):
 
 NO SERVIDOR cgrafsysvm:
   1. Instale apenas Node.js 18 LTS (nao precisa npm install nem Visual Studio)
-  2. Copie TODO o conteudo de pacote-servidor\ para:
+  2. NSSM ja deve estar instalado (nao copie nssm.exe neste pacote)
+  3. Se o servico ShareScreenLAN estiver rodando, PARE-O neste servidor
+     (nssm stop ShareScreenLAN) ANTES de substituir arquivos
+  4. Copie TODO o conteudo de pacote-servidor\ para:
        C:\Sistemas CGraf\Screen Share
-     (substitua os arquivos antigos)
-  3. Execute: verificar-producao.bat
-  4. Execute: start-producao.bat
-  5. Firewall: TCP 3443, UDP 40000-40100
+     (substitua os arquivos antigos; pasta data\ e preservada)
+  5. Execute: verificar-producao.bat
+  6. Primeira vez: install-servico-producao.bat (como Administrador)
+     Deploys seguintes: reiniciar-servico-producao.bat
+     Fallback manual (servico parado/ausente): start-producao.bat
+  7. Firewall: TCP 3443, UDP 40000-40100
+
+COMANDOS NSSM (no servidor, se preferir colar a mao):
+  nssm install ShareScreenLAN "C:\Program Files\nodejs\node.exe" "server\index.js"
+  nssm set ShareScreenLAN AppDirectory "C:\Sistemas CGraf\Screen Share"
+  nssm set ShareScreenLAN Start SERVICE_DELAYED_AUTO_START
+  nssm set ShareScreenLAN DependOnService Tcpip LanmanWorkstation
+  nssm start ShareScreenLAN
+  (demais nssm set: ver DEPLOY-PRODUCAO.md)
+
+  nssm status ShareScreenLAN
+  nssm stop ShareScreenLAN
+  nssm restart ShareScreenLAN
+  nssm remove ShareScreenLAN confirm
 
 OBRIGATORIO na copia:
   - node_modules\  (pasta inteira, inclui mediasoup-worker.exe)
@@ -22,12 +40,15 @@ OBRIGATORIO na copia:
   - certs\
   - server\
   - config\
+  - scripts\env-producao.cmd
+  - install-servico-producao.bat / uninstall / reiniciar
 
 NAO copiar do PC dev (opcional):
   - src\
   - web_data\
   - pacote-servidor\ (e a saida, nao a origem)
   - .git\
+  - nssm.exe (usar o NSSM ja instalado no servidor)
 
 Se mediasoup-worker.exe faltar, o servidor NAO sobe.
 Rode preparar-deploy.bat de novo no PC de desenvolvimento.

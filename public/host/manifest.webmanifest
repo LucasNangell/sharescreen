@@ -1,0 +1,30 @@
+{
+  "name": "CGraf Share Screen",
+  "short_name": "Share Screen",
+  "description": "Sistema de reunioes virtuais, Grafica da Camara dos Deputados",
+  "lang": "pt-BR",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "start_url": "/host/?pwa=cgraf-share-screen",
+  "scope": "/host/",
+  "id": "/host/?pwa=cgraf-share-screen",
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "icons": [
+    {
+      "src": "/shared/icons/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/shared/icons/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

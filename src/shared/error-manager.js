@@ -94,7 +94,25 @@ export function classifyServerMessage(msg) {
   if (text.includes('timeout') || text.includes('servidor indispon')) {
     return ErrorCodes.SERVER_UNAVAILABLE;
   }
+  if (
+    text.includes('consumir') ||
+    text.includes('producer') ||
+    text.includes('capacidades')
+  ) {
+    return ErrorCodes.MEDIASOUP_FAILED;
+  }
   return null;
+}
+
+export function isUnrecoverableConsumeError(msg) {
+  const text = String(msg || '').toLowerCase();
+  if (!text) return false;
+  if (text.includes('proprio producer') || text.includes('próprio producer')) return true;
+  if (text.includes('producer indisponivel') || text.includes('producer indisponível')) return true;
+  if (text.includes('capacidades') && (text.includes('consumir') || text.includes('producer'))) {
+    return true;
+  }
+  return false;
 }
 
 export function isTransientServerError(msg, { joinInProgress = false } = {}) {
@@ -103,6 +121,14 @@ export function isTransientServerError(msg, { joinInProgress = false } = {}) {
     return true;
   }
   if (text.includes('tipo de mensagem desconhecido')) return true;
+  if (
+    text.includes('producer indisponivel') ||
+    text.includes('producer indisponível') ||
+    text.includes('proprio producer') ||
+    text.includes('próprio producer')
+  ) {
+    return true;
+  }
   return false;
 }
 

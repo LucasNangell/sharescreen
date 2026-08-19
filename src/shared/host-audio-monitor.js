@@ -6,9 +6,11 @@ import { startTrackLevelMeter } from './audio-level-meter.js';
 import {
   audioChannelKey,
   audioTrace,
+  isOwnAudioSource,
   normalizeRemoteAudioSources
 } from './audio-sources.js';
 import { resolvePlaybackSources } from './audio-policy.js';
+import { isUnrecoverableConsumeError } from './error-manager.js';
 import {
   MIC_FILTER_DEFAULTS,
   combinedGateOpenThresholdDb,
@@ -92,11 +94,17 @@ function waitForPlayingTrack(track, timeoutMs = 8000) {
   });
 }
 
+const INVALID_PRODUCER_TTL_MS = 8000;
+
 export class HostAudioMonitor {
   constructor(media, options = {}) {
     this.media = media;
     this.opts = options;
     this.excludePeerId = options.excludePeerId ? String(options.excludePeerId) : null;
+    this.ownPeerIds = new Set(
+      [...(options.ownPeerIds || [])].map((id) => String(id)).filter(Boolean)
+    );
+    if (this.excludePeerId) this.ownPeerIds.add(this.excludePeerId);
     this.channels = new Map();
     this.outputEl = null;
     this.masterVolume = 1;
@@ -114,8 +122,54 @@ export class HostAudioMonitor {
       [...(options.pinnedPeerIds || [])].map((id) => String(id))
     );
     this.allChannelsRoutedToDest = false;
+    this.playbackDsp = options.playbackDsp === true;
     this.allowDualPeerAudio = options.allowDualPeerAudio === true;
     this.excludeSourceTypes = [...(options.excludeSourceTypes || [])];
+    this.masterMuted = false;
+    this._mixActive = false;
+    this.sinksContainer = null;
+    this._invalidProducerIds = new Map();
+    this._staleRefreshRequested = false;
+  }
+
+  setOwnPeerIds(peerIds = []) {
+    this.ownPeerIds = new Set([...(peerIds || [])].map((id) => String(id)).filter(Boolean));
+    if (this.excludePeerId) this.ownPeerIds.add(String(this.excludePeerId));
+  }
+
+  clearInvalidProducers() {
+    this._invalidProducerIds.clear();
+    this._staleRefreshRequested = false;
+  }
+
+  _playbackNormalizeOptions() {
+    return {
+      excludePeerId: this.excludePeerId,
+      ownPeerIds: [...this.ownPeerIds],
+      excludeSourceTypes: this.excludeSourceTypes,
+      allowDualPeerAudio: this.allowDualPeerAudio,
+      ownProducerIds: this._ownProducerIds()
+    };
+  }
+
+  _isInvalidProducer(producerId) {
+    if (!producerId) return false;
+    const expiresAt = this._invalidProducerIds.get(producerId);
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+      this._invalidProducerIds.delete(producerId);
+      return false;
+    }
+    return true;
+  }
+
+  _markInvalidProducer(producerId) {
+    if (!producerId) return;
+    this._invalidProducerIds.set(producerId, Date.now() + INVALID_PRODUCER_TTL_MS);
+    if (!this._staleRefreshRequested) {
+      this._staleRefreshRequested = true;
+      this.opts.onStaleProducer?.(producerId);
+    }
   }
 
   setExcludeSourceTypes(types = []) {
@@ -154,6 +208,7 @@ export class HostAudioMonitor {
         track.enabled = !silenced;
       }
       this._applyChannelFilters(ch);
+      this._applyChannelOutputState(ch);
     }
     this._refreshDirectOutput();
   }
@@ -165,7 +220,109 @@ export class HostAudioMonitor {
 
   setMasterVolume(volume) {
     this.masterVolume = Math.max(0, Math.min(1, volume));
-    if (this.outputEl) this.outputEl.volume = this.masterVolume;
+    this._applyMasterOutputState();
+  }
+
+  setMasterMuted(muted) {
+    this.masterMuted = !!muted;
+    this._applyMasterOutputState();
+  }
+
+  _ownProducerIds() {
+    return this.media?.getOwnAudioProducerIds?.() || [];
+  }
+
+  _isOwnSource(peerId, producerId) {
+    return isOwnAudioSource(
+      { peerId, producerId },
+      {
+        excludePeerId: this.excludePeerId,
+        ownPeerIds: [...this.ownPeerIds],
+        ownProducerIds: this._ownProducerIds()
+      }
+    );
+  }
+
+  /**
+   * Os filtros já são aplicados na origem (mic-dsp na publicação), então a escuta local
+   * é passthrough por padrão — reaplicar o DSP aqui faria o host ouvir dois passes e
+   * divergir do que os demais participantes recebem.
+   */
+  _channelWantsDsp(ch) {
+    if (!this.playbackDsp) return false;
+    if (!ch || ch.source === 'system') return false;
+    return this._hasAnyFilter(audioChannelKey(ch.peerId, ch.source));
+  }
+
+  _ensureSinksContainer() {
+    if (this.sinksContainer?.isConnected) return this.sinksContainer;
+    let el = document.getElementById('remote-audio-sinks');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'remote-audio-sinks';
+      el.hidden = true;
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    }
+    this.sinksContainer = el;
+    return el;
+  }
+
+  _createChannelAudioEl(ch, track) {
+    if (ch.audioEl) {
+      const stream = ch.stream || new MediaStream([track]);
+      if (!ch.stream) ch.stream = stream;
+      if (ch.audioEl.srcObject !== stream) ch.audioEl.srcObject = stream;
+      return ch.audioEl;
+    }
+    const stream = new MediaStream([track]);
+    ch.stream = stream;
+    const el = document.createElement('audio');
+    el.autoplay = true;
+    el.playsInline = true;
+    el.setAttribute('data-audio-channel', ch.channelKey || audioChannelKey(ch.peerId, ch.source));
+    el.srcObject = stream;
+    this._ensureSinksContainer().appendChild(el);
+    ch.audioEl = el;
+    return el;
+  }
+
+  _removeChannelAudioEl(ch) {
+    if (!ch?.audioEl) return;
+    try {
+      ch.audioEl.pause();
+      ch.audioEl.srcObject = null;
+      ch.audioEl.remove();
+    } catch (_) {}
+    ch.audioEl = null;
+  }
+
+  _applyChannelOutputState(ch) {
+    const el = ch.audioEl;
+    if (!el) return;
+    const peerMuted = this._isChannelMuted(ch.peerId);
+    const silent = this.masterMuted || peerMuted;
+    const wantsDsp = this._channelWantsDsp(ch);
+    if (wantsDsp) {
+      el.muted = true;
+      el.volume = 1;
+    } else {
+      el.muted = silent;
+      el.volume = silent ? 0 : this.masterVolume;
+    }
+    if (ch.consumer?.track) {
+      ch.consumer.track.enabled = !peerMuted;
+    }
+  }
+
+  _applyMasterOutputState() {
+    for (const ch of this.channels.values()) {
+      this._applyChannelOutputState(ch);
+    }
+    if (this.outputEl) {
+      this.outputEl.volume = this.masterMuted ? 0 : this.masterVolume;
+      this.outputEl.muted = this.masterMuted || !this._mixActive;
+    }
   }
 
   get channelCount() {
@@ -182,51 +339,137 @@ export class HostAudioMonitor {
   }
 
   async recoverOutputIfSilent() {
-    if (!this.channels.size) return;
-    this._rebuildAudioRoutes();
-    const mixedTrack = this.dest?.stream?.getAudioTracks?.()[0];
-    const hasLiveOutput =
-      mixedTrack?.readyState === 'live' ||
-      this.stream.getAudioTracks().some((t) => t.readyState === 'live');
-    if (!hasLiveOutput) {
-      this._ensureAudioContext();
-      if (this.ctx?.state === 'suspended') {
-        await this.ctx.resume().catch(() => {});
+    if (!this.channels.size) return { ok: true, silent: false };
+    this._ensureAudioContext();
+    if (this.ctx?.state === 'suspended') {
+      await this.ctx.resume().catch(() => {});
+    }
+    if (this._mixActive && this.ctx && this.ctx.state !== 'running') {
+      this._log('audio-context-blocked', { state: this.ctx.state });
+      for (const ch of this.channels.values()) {
+        this._clearChannelDsp(ch);
       }
       this._rebuildAudioRoutes();
+      this._autoplayBlocked = true;
+      this.opts.onAutoplayBlocked?.(new Error('AudioContext suspenso'));
     }
     this._refreshDirectOutput();
     await this._tryPlayOutput();
+    const health = await this.probePlaybackHealth();
+    audioTrace('playback-health', health);
+    if (!health.anyPlaying && health.channelCount > 0 && !this.masterMuted) {
+      this._autoplayBlocked = true;
+      this.opts.onAutoplayBlocked?.(new Error('Reproducao remota silenciosa'));
+    } else if (health.anyPlaying) {
+      this._autoplayBlocked = false;
+    }
+    return health;
+  }
+
+  isPlaybackConfirmed() {
+    if (this._autoplayBlocked) return false;
+    if (!this.channels.size) return true;
+    for (const ch of this.channels.values()) {
+      if (this._isChannelMuted(ch.peerId)) continue;
+      if (this._channelWantsDsp(ch)) {
+        if (this.ctx?.state !== 'running') return false;
+        if (this.outputEl?.paused) return false;
+        continue;
+      }
+      if (!ch.audioEl || ch.audioEl.paused) return false;
+    }
+    return true;
+  }
+
+  async probePlaybackHealth() {
+    const channels = [];
+    for (const ch of this.channels.values()) {
+      let packetsReceived = 0;
+      let totalAudioEnergy = 0;
+      try {
+        const stats = await ch.consumer?.getStats?.();
+        if (stats) {
+          for (const report of stats.values()) {
+            if (
+              report.type === 'inbound-rtp' &&
+              (report.kind === 'audio' || report.mediaType === 'audio')
+            ) {
+              packetsReceived = report.packetsReceived || 0;
+              totalAudioEnergy = report.totalAudioEnergy || 0;
+            }
+          }
+        }
+      } catch (_) {}
+      const el = ch.audioEl;
+      channels.push({
+        peerId: String(ch.peerId).slice(0, 8),
+        source: ch.source,
+        packetsReceived,
+        totalAudioEnergy,
+        paused: !!el?.paused,
+        muted: !!el?.muted,
+        volume: el?.volume,
+        trackEnabled: ch.consumer?.track?.enabled,
+        readyState: ch.consumer?.track?.readyState
+      });
+    }
+    const anyPlaying = [...this.channels.values()].some((ch) => {
+      if (this._isChannelMuted(ch.peerId) || this.masterMuted) return false;
+      if (this._channelWantsDsp(ch)) {
+        return !!(this.outputEl && !this.outputEl.paused && this.ctx?.state === 'running');
+      }
+      return !!(ch.audioEl && !ch.audioEl.paused && !ch.audioEl.muted && ch.audioEl.volume > 0);
+    });
+    return {
+      ctxState: this.ctx?.state || 'none',
+      mixActive: this._mixActive,
+      masterMuted: this.masterMuted,
+      autoplayBlocked: this._autoplayBlocked,
+      channelCount: this.channels.size,
+      anyPlaying,
+      channels
+    };
   }
 
   connectOutput(audioEl) {
     this.outputEl = audioEl;
-    if (audioEl && audioEl.srcObject !== this.stream) {
+    if (audioEl && this._mixActive && audioEl.srcObject !== this.stream) {
       audioEl.srcObject = this.stream;
     }
     this._refreshDirectOutput();
   }
 
   async resume() {
+    this._ensureAudioContext();
+    if (this.ctx?.state === 'suspended') {
+      await this.ctx.resume().catch(() => {});
+    }
     await this._refreshDirectOutput();
     await this._tryPlayOutput();
+    return this.isPlaybackConfirmed();
   }
 
   async _tryPlayOutput() {
-    const el = this.outputEl;
-    if (!el || !this.channels.size) return;
-    try {
-      await el.play();
-      if (this._autoplayBlocked) {
-        this._autoplayBlocked = false;
+    if (!this.channels.size) return;
+    const playEl = async (el) => {
+      if (!el) return true;
+      try {
+        await el.play();
+        return true;
+      } catch (err) {
+        if (err?.name === 'NotAllowedError' || /autoplay/i.test(String(err?.message || ''))) {
+          this._autoplayBlocked = true;
+          this._log('autoplay bloqueado', { channels: this.channels.size });
+          this.opts.onAutoplayBlocked?.(err);
+        }
+        return false;
       }
-    } catch (err) {
-      if (err?.name === 'NotAllowedError' || /autoplay/i.test(String(err?.message || ''))) {
-        this._autoplayBlocked = true;
-        this._log('autoplay bloqueado', { channels: this.channels.size });
-        this.opts.onAutoplayBlocked?.(err);
-      }
+    };
+    for (const ch of this.channels.values()) {
+      await playEl(ch.audioEl);
     }
+    if (this._mixActive) await playEl(this.outputEl);
+    if (this.isPlaybackConfirmed()) this._autoplayBlocked = false;
   }
 
   getOutputTrack() {
@@ -259,6 +502,7 @@ export class HostAudioMonitor {
     }
 
     if (!liveChannels.length) {
+      this._mixActive = false;
       this.allChannelsRoutedToDest = false;
       for (const t of [...this.stream.getAudioTracks()]) {
         this.stream.removeTrack(t);
@@ -266,32 +510,30 @@ export class HostAudioMonitor {
       return { tracksToPlay: [], mixedTrack: null };
     }
 
-    this._ensureAudioContext();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
-
+    let mixNeeded = false;
     for (const { ch, track } of liveChannels) {
-      const channelKey = audioChannelKey(ch.peerId, ch.source);
-      const wantsDsp = ch.source !== 'system' && this._hasAnyFilter(channelKey);
+      this._createChannelAudioEl(ch, track);
+      const wantsDsp = this._channelWantsDsp(ch);
       if (wantsDsp) {
+        mixNeeded = true;
+        this._ensureAudioContext();
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
         if (!ch.highpassNode) {
           this._clearChannelDsp(ch);
           this._setupChannelDsp(ch, track);
         }
-      } else {
-        if (ch.highpassNode) {
-          this._clearChannelDsp(ch);
-        }
-        if (!ch.sourceNode) {
-          this._setupChannelPassthrough(ch, track);
-        }
+      } else if (ch.highpassNode || ch.sourceNode) {
+        this._clearChannelDsp(ch);
       }
       this._applyChannelFilters(ch);
+      this._applyChannelOutputState(ch);
     }
 
-    this.allChannelsRoutedToDest = !!(this.ctx && this.dest);
-    const mixedTrack = this.dest?.stream?.getAudioTracks?.()[0] || null;
+    this._mixActive = mixNeeded && !!(this.ctx && this.dest && this.ctx.state !== 'closed');
+    this.allChannelsRoutedToDest = this._mixActive;
+    const mixedTrack = this._mixActive ? this.dest?.stream?.getAudioTracks?.()[0] || null : null;
     const tracksToPlay = mixedTrack?.readyState === 'live' ? [mixedTrack] : [];
 
     const currentTracks = this.stream.getAudioTracks();
@@ -312,20 +554,24 @@ export class HostAudioMonitor {
   _refreshDirectOutput() {
     this._rebuildAudioRoutes();
     const el = this.outputEl;
-    if (!el) return;
-    if (el.srcObject !== this.stream) {
-      el.srcObject = this.stream;
+    if (el) {
+      if (this._mixActive) {
+        if (el.srcObject !== this.stream) el.srcObject = this.stream;
+        el.volume = this.masterMuted ? 0 : this.masterVolume;
+        el.muted = this.masterMuted;
+      } else {
+        el.muted = true;
+      }
     }
-    el.muted = false;
-    el.volume = this.masterVolume;
+    this._applyMasterOutputState();
     this._tryPlayOutput();
   }
   _startLevelsLoop() {
     if (this._levelsRaf) return;
-    const tick = () => {
+      const tick = () => {
       const levels = new Map();
       for (const ch of this.channels.values()) {
-        if (ch.analyserNode) {
+        if (!ch.stopMeter && ch.analyserNode) {
           const fftSize = ch.analyserNode.fftSize;
           const timeBuf = new Uint8Array(fftSize);
           ch.analyserNode.getByteTimeDomainData(timeBuf);
@@ -373,6 +619,11 @@ export class HostAudioMonitor {
   }
 
   _ensureAudioContext() {
+    if (!this.playbackDsp) return;
+    if (this.ctx && this.ctx.state === 'closed') {
+      this.ctx = null;
+      this.dest = null;
+    }
     if (this.ctx) return;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -473,16 +724,10 @@ export class HostAudioMonitor {
     if (!this.ctx || !this.dest) return;
 
     try {
-      const stream = new MediaStream([track]);
-      ch.stream = stream; // Armazena a referência contra GC
+      const stream = ch.stream || new MediaStream([track]);
+      ch.stream = stream;
+      this._createChannelAudioEl(ch, track);
       ch.sourceNode = this.ctx.createMediaStreamSource(stream);
-
-      // Elemento dummy mutado para forçar a decodificação da track WebRTC no Chrome
-      const dummyEl = document.createElement('audio');
-      dummyEl.muted = true;
-      dummyEl.srcObject = stream;
-      dummyEl.play().catch(() => {});
-      ch.dummyEl = dummyEl;
 
       ch.highpassNode = this.ctx.createBiquadFilter();
       ch.highpassNode.type = 'highpass';
@@ -522,8 +767,8 @@ export class HostAudioMonitor {
       ch.bassNode.connect(ch.trebleNode);
       ch.trebleNode.connect(ch.peakingNode);
       ch.peakingNode.connect(ch.compressorNode);
+      ch.compressorNode.connect(ch.analyserNode);
       ch.compressorNode.connect(ch.gainNode);
-      ch.gainNode.connect(ch.analyserNode);
       ch.gainNode.connect(this.dest);
 
       this._applyChannelFilters(ch);
@@ -534,29 +779,8 @@ export class HostAudioMonitor {
   }
 
   _setupChannelPassthrough(ch, track) {
-    if (ch.sourceNode) return;
-
-    this._ensureAudioContext();
-    if (!this.ctx || !this.dest) return;
-
-    try {
-      const stream = new MediaStream([track]);
-      ch.stream = stream;
-      ch.sourceNode = this.ctx.createMediaStreamSource(stream);
-
-      const dummyEl = document.createElement('audio');
-      dummyEl.muted = true;
-      dummyEl.srcObject = stream;
-      dummyEl.play().catch(() => {});
-      ch.dummyEl = dummyEl;
-
-      ch.gainNode = this.ctx.createGain();
-      ch.gainNode.gain.value = this._isChannelMuted(ch.peerId) ? 0 : 1;
-      ch.sourceNode.connect(ch.gainNode);
-      ch.gainNode.connect(this.dest);
-    } catch (err) {
-      console.warn('[HostAudioMonitor] Erro ao configurar passthrough do canal:', err);
-    }
+    this._createChannelAudioEl(ch, track);
+    this._applyChannelOutputState(ch);
   }
 
   _applyChannelFilters(ch) {
@@ -613,10 +837,19 @@ export class HostAudioMonitor {
 
   _startNoiseGateLoop(ch) {
     if (ch.gateInterval) clearInterval(ch.gateInterval);
+    const channelKey = audioChannelKey(ch.peerId, ch.source);
+    const initialPrefs = this.getFilterPrefs(channelKey);
+    const initiallyActive =
+      ch.source !== 'system' && (initialPrefs.noiseGate || initialPrefs.micSensitivity);
+    if (!initiallyActive || !ch.analyserNode) {
+      ch.gateInterval = null;
+      return;
+    }
     let isOpen = true;
     let lastOpenAt = performance.now();
+    const timeBuf = new Uint8Array(ch.analyserNode.fftSize);
     ch.gateInterval = setInterval(() => {
-      if (!ch.gainNode || !this.ctx) return;
+      if (!ch.gainNode || !this.ctx || !ch.analyserNode) return;
 
       const isMuted = this._isChannelMuted(ch.peerId);
       if (isMuted) {
@@ -625,7 +858,6 @@ export class HostAudioMonitor {
         return;
       }
 
-      const channelKey = audioChannelKey(ch.peerId, ch.source);
       const prefs = this.getFilterPrefs(channelKey);
       const targetGain = prefs.gain !== undefined ? prefs.gain : 1.0;
       const gateActive =
@@ -637,10 +869,16 @@ export class HostAudioMonitor {
         return;
       }
 
+      ch.analyserNode.getByteTimeDomainData(timeBuf);
+      let sum = 0;
+      for (let i = 0; i < timeBuf.length; i++) {
+        const n = (timeBuf[i] - 128) / 128;
+        sum += n * n;
+      }
+      const rms = Math.sqrt(sum / timeBuf.length) || 0.000001;
+      const currentDb = 20 * Math.log10(rms);
       const openDb = combinedGateOpenThresholdDb(prefs);
       const closeDb = openDb - 8;
-      const currentLevel = Math.max(ch.rawLevel || 0, 0.000001);
-      const currentDb = 20 * Math.log10(currentLevel);
       const now = performance.now();
 
       if (currentDb >= openDb) {
@@ -662,11 +900,7 @@ export class HostAudioMonitor {
       }
     }
 
-    const list = resolvePlaybackSources(sources, {
-      excludePeerId: this.excludePeerId,
-      excludeSourceTypes: this.excludeSourceTypes,
-      allowDualPeerAudio: this.allowDualPeerAudio
-    });
+    const list = resolvePlaybackSources(sources, this._playbackNormalizeOptions());
 
     const wanted = new Map();
     for (const entry of list) {
@@ -677,6 +911,7 @@ export class HostAudioMonitor {
     const wantedProducerIds = new Set([...wanted.values()].map((e) => e.producerId));
 
     for (const [channelKey, entry] of wanted) {
+      if (this._isInvalidProducer(entry.producerId)) continue;
       const ch = this.channels.get(channelKey);
       if (
         ch &&
@@ -729,9 +964,9 @@ export class HostAudioMonitor {
   async syncPeerSources(peerId, sources) {
     if (!this.media || !peerId) return;
 
-    const list = normalizeRemoteAudioSources(sources, {
-      excludePeerId: this.excludePeerId
-    }).filter((entry) => String(entry.peerId) === String(peerId));
+    const list = normalizeRemoteAudioSources(sources, this._playbackNormalizeOptions()).filter(
+      (entry) => String(entry.peerId) === String(peerId)
+    );
 
     for (const entry of list) {
       const channelKey = audioChannelKey(entry.peerId, entry.source);
@@ -774,6 +1009,17 @@ export class HostAudioMonitor {
   }
 
   async _addChannel(channelKey, peerId, producerId, source = 'microphone', attempt = 0) {
+    if (this._isOwnSource(peerId, producerId)) {
+      this._log('canal proprio ignorado', {
+        peerId: String(peerId).slice(0, 8),
+        producerId: String(producerId).slice(0, 8),
+        source
+      });
+      return;
+    }
+    if (this._isInvalidProducer(producerId)) {
+      return;
+    }
     const existing = this.channels.get(channelKey);
     if (
       existing &&
@@ -836,6 +1082,8 @@ export class HostAudioMonitor {
         _onProducerClosed: onProducerClosed
       };
       this.channels.set(channelKey, ch);
+      this._createChannelAudioEl(ch, track);
+      this._applyChannelOutputState(ch);
 
       const wireMeter = () => this._startChannelMeter(ch);
       wireMeter();
@@ -847,6 +1095,16 @@ export class HostAudioMonitor {
 
       this._refreshDirectOutput();
     } catch (err) {
+      if (isUnrecoverableConsumeError(err?.message || err)) {
+        this._markInvalidProducer(producerId);
+        this._log('producer invalido ignorado', {
+          peerId: String(peerId).slice(0, 8),
+          producerId: String(producerId).slice(0, 8),
+          source,
+          error: err?.message || String(err)
+        });
+        return;
+      }
       const maxAttempts = 5;
       if (attempt < maxAttempts - 1) {
         const delayMs = 400 * (2 ** attempt);
@@ -877,6 +1135,7 @@ export class HostAudioMonitor {
     if (!ch) return;
     ch.stopMeter?.();
     this._clearChannelDsp(ch);
+    this._removeChannelAudioEl(ch);
 
     if (ch.consumer && ch._onProducerClosed) {
       try {

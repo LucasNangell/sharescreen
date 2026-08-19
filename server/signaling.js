@@ -173,10 +173,21 @@ export function attachSignaling(server) {
           peer = p;
         }, () => peer);
       } catch (err) {
-        logger.error('Erro na sinalização', { type: msg.type, error: err.message });
+        const producerId = msg.payload?.producerId;
+        const mensagem = err.message || 'Erro interno';
+        const transientConsume =
+          msg.type === 'consumir' &&
+          /indisponivel|proprio producer|capacidades/i.test(mensagem);
+        const meta = { type: msg.type, producerId, error: mensagem };
+        if (transientConsume) logger.warn('Erro na sinalização', meta);
+        else logger.error('Erro na sinalização', meta);
         enviar({
           type: 'erro',
-          payload: { mensagem: err.message || 'Erro interno' }
+          payload: {
+            mensagem,
+            tipo: msg.type,
+            producerId: producerId || undefined
+          }
         });
       }
     });
@@ -587,6 +598,14 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       const ativo = !!(msg.payload && msg.payload.ativo);
       room.setMeetBridgeLiveMode(ativo);
       enviar({ type: 'modoPonteMeetDefinido', payload: { ok: true, ativo } });
+      break;
+    }
+
+    case 'definirModoSalaCompartilhada': {
+      if (!isHostOrCoHost(peer)) throw new Error('Apenas o host/co-host pode definir modo sala compartilhada');
+      const ativo = !!(msg.payload && msg.payload.ativo);
+      room.setSharedRoomMode(ativo);
+      enviar({ type: 'modoSalaCompartilhadaDefinido', payload: { ok: true, ativo } });
       break;
     }
 

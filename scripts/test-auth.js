@@ -38,7 +38,7 @@ function request(path, { method = 'GET', body, cookie } = {}) {
 
 const login = await request('/api/auth/login', {
   method: 'POST',
-  body: JSON.stringify({ username: 'admin', password: 'changeme' })
+  body: JSON.stringify({ username: 'admin' })
 });
 const cookie = (login.headers['set-cookie'] || [])[0]?.split(';')[0] || '';
 const me = await request('/api/auth/me', { cookie });
