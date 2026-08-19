@@ -19616,6 +19616,8 @@
     widthEl: els.annotationWidth,
     clearEl: els.annotationClear,
     getCanClear: () => false,
+    coupleToolWithExpansion: true,
+    defaultTool: "stroke",
     onToolChange: () => {
       drawingSurface == null ? void 0 : drawingSurface.syncDrawUi();
     }

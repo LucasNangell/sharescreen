@@ -16390,18 +16390,38 @@
       permissions: { ...secondary.permissions || {}, ...primary.permissions || {} }
     };
   }
-  function mergeRoomClients(existing = [], incoming = []) {
-    const byId = /* @__PURE__ */ new Map();
-    for (const c of existing) {
-      if (c == null ? void 0 : c.id) byId.set(String(c.id), { ...c });
+  function hasAuthoritativeRoomRoster(snapshot = {}) {
+    return Array.isArray(snapshot.clients) || Array.isArray(snapshot.peers);
+  }
+  function reconcileRoomClients(existing = [], incoming = [], { allowRemovals = false } = {}) {
+    if (!allowRemovals) {
+      const byId = /* @__PURE__ */ new Map();
+      for (const c of existing) {
+        if (c == null ? void 0 : c.id) byId.set(String(c.id), { ...c });
+      }
+      for (const c of incoming) {
+        if (!(c == null ? void 0 : c.id)) continue;
+        const key = String(c.id);
+        const prev = byId.get(key);
+        byId.set(key, prev ? mergeRoomClientEntry(prev, c) : { ...c });
+      }
+      return [...byId.values()];
     }
+    const existingById = /* @__PURE__ */ new Map();
+    for (const c of existing) {
+      if (c == null ? void 0 : c.id) existingById.set(String(c.id), c);
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const next = [];
     for (const c of incoming) {
       if (!(c == null ? void 0 : c.id)) continue;
       const key = String(c.id);
-      const prev = byId.get(key);
-      byId.set(key, prev ? mergeRoomClientEntry(prev, c) : { ...c });
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const prev = existingById.get(key);
+      next.push(prev ? mergeRoomClientEntry(prev, c) : { ...c });
     }
-    return [...byId.values()];
+    return next;
   }
   function resolveRoomClients(snapshot = {}, parsed = null) {
     var _a54;
@@ -22531,13 +22551,10 @@
     }
     const existing = estado.clients || [];
     let roomClients = resolveRoomClients(snapshot, parsed);
-    if (version > lastAppliedRoomVersion) {
-      if (roomClients.length < existing.length) {
-        roomClients = mergeRoomClients(existing, roomClients);
-      }
-    } else if (version && version === lastAppliedRoomVersion && existing.length) {
-      roomClients = mergeRoomClients(existing, roomClients);
-    } else if (!version && lastAppliedRoomVersion > 0 && existing.length && roomClients.length < existing.length) {
+    const authoritative = hasAuthoritativeRoomRoster(snapshot);
+    if (version && authoritative) {
+      roomClients = reconcileRoomClients(existing, roomClients, { allowRemovals: true });
+    } else if (existing.length && roomClients.length < existing.length) {
       debug3a36beLog("B", "host:applyParticipantState", "versionless snapshot would shrink clients \u2014 merging", {
         source,
         lastAppliedRoomVersion,
@@ -22546,7 +22563,7 @@
         existingNames: existing.map((c) => c.displayName),
         incomingNames: roomClients.map((c) => c.displayName)
       });
-      roomClients = mergeRoomClients(existing, roomClients);
+      roomClients = reconcileRoomClients(existing, roomClients, { allowRemovals: false });
     }
     if (version) {
       lastAppliedRoomVersion = Math.max(lastAppliedRoomVersion, version);
@@ -22580,7 +22597,7 @@
     estado = enrichRoomSourcesState(
       {
         clients: roomClients,
-        selecionado: snapshot.selecionado ? { ...snapshot.selecionado, selecionado: true } : estado.selecionado,
+        selecionado: snapshot.selecionado ? { ...snapshot.selecionado, selecionado: true } : authoritative ? null : estado.selecionado,
         controleExibicao: snapshot.controleExibicao ?? estado.controleExibicao ?? []
       },
       transmission

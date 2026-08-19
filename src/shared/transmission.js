@@ -53,17 +53,48 @@ export function mergeRoomClientEntry(a, b) {
 
 /** Une listas de participantes por id sem duplicar entradas. */
 export function mergeRoomClients(existing = [], incoming = []) {
-  const byId = new Map();
-  for (const c of existing) {
-    if (c?.id) byId.set(String(c.id), { ...c });
+  return reconcileRoomClients(existing, incoming, { allowRemovals: false });
+}
+
+/** Snapshot de sala com roster completo (clients/peers do servidor). */
+export function hasAuthoritativeRoomRoster(snapshot = {}) {
+  return Array.isArray(snapshot.clients) || Array.isArray(snapshot.peers);
+}
+
+/**
+ * Reconcilia participantes locais com o snapshot.
+ * allowRemovals: só ids do incoming (saída de peer some); senão une sem apagar.
+ */
+export function reconcileRoomClients(existing = [], incoming = [], { allowRemovals = false } = {}) {
+  if (!allowRemovals) {
+    const byId = new Map();
+    for (const c of existing) {
+      if (c?.id) byId.set(String(c.id), { ...c });
+    }
+    for (const c of incoming) {
+      if (!c?.id) continue;
+      const key = String(c.id);
+      const prev = byId.get(key);
+      byId.set(key, prev ? mergeRoomClientEntry(prev, c) : { ...c });
+    }
+    return [...byId.values()];
   }
+
+  const existingById = new Map();
+  for (const c of existing) {
+    if (c?.id) existingById.set(String(c.id), c);
+  }
+  const seen = new Set();
+  const next = [];
   for (const c of incoming) {
     if (!c?.id) continue;
     const key = String(c.id);
-    const prev = byId.get(key);
-    byId.set(key, prev ? mergeRoomClientEntry(prev, c) : { ...c });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const prev = existingById.get(key);
+    next.push(prev ? mergeRoomClientEntry(prev, c) : { ...c });
   }
-  return [...byId.values()];
+  return next;
 }
 
 /** Monta lista de participantes/fontes a partir de clients, peers ou videoProducers. */

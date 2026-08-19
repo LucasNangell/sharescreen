@@ -1,6 +1,6 @@
 import { SignalingClient, ConnectionState, wsUrl } from '../shared/signaling-client.js';
 import { MediaClient } from '../shared/media-client.js';
-import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded, enrichRoomSourcesState, resolveRoomClients, mergeRoomClients } from '../shared/transmission.js';
+import { normalizeTransmission, hasActiveVideo, parseRoomSnapshot, roomSnapshotMediaKey, activeVideoTransmissionKey, remoteVideoConsumeNeeded, enrichRoomSourcesState, resolveRoomClients, reconcileRoomClients, hasAuthoritativeRoomRoster } from '../shared/transmission.js';
 import { loadCapturePrefs, saveCapturePrefs, setupMicrophonePicker, installAudioUnlock } from '../shared/audio-manager.js';
 import { RecordingClient, RecordingState } from '../shared/recording-client.js';
 import { RecordingCompositor } from '../shared/recording-compositor.js';
@@ -2116,13 +2116,10 @@ function applyParticipantState(snapshot, { source = 'unknown' } = {}) {
 
   const existing = estado.clients || [];
   let roomClients = resolveRoomClients(snapshot, parsed);
-  if (version > lastAppliedRoomVersion) {
-    if (roomClients.length < existing.length) {
-      roomClients = mergeRoomClients(existing, roomClients);
-    }
-  } else if (version && version === lastAppliedRoomVersion && existing.length) {
-    roomClients = mergeRoomClients(existing, roomClients);
-  } else if (!version && lastAppliedRoomVersion > 0 && existing.length && roomClients.length < existing.length) {
+  const authoritative = hasAuthoritativeRoomRoster(snapshot);
+  if (version && authoritative) {
+    roomClients = reconcileRoomClients(existing, roomClients, { allowRemovals: true });
+  } else if (existing.length && roomClients.length < existing.length) {
     // #region agent log
     debug3a36beLog('B', 'host:applyParticipantState', 'versionless snapshot would shrink clients — merging', {
       source,
@@ -2133,7 +2130,7 @@ function applyParticipantState(snapshot, { source = 'unknown' } = {}) {
       incomingNames: roomClients.map((c) => c.displayName)
     });
     // #endregion
-    roomClients = mergeRoomClients(existing, roomClients);
+    roomClients = reconcileRoomClients(existing, roomClients, { allowRemovals: false });
   }
 
   if (version) {
@@ -2173,7 +2170,7 @@ function applyParticipantState(snapshot, { source = 'unknown' } = {}) {
       clients: roomClients,
       selecionado: snapshot.selecionado
         ? { ...snapshot.selecionado, selecionado: true }
-        : estado.selecionado,
+        : (authoritative ? null : estado.selecionado),
       controleExibicao: snapshot.controleExibicao ?? estado.controleExibicao ?? []
     },
     transmission

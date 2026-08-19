@@ -358,6 +358,8 @@ annotationToolbar = createAnnotationToolbar({
   widthEl: els.annotationWidth,
   clearEl: els.annotationClear,
   getCanClear: () => false,
+  coupleToolWithExpansion: true,
+  defaultTool: 'stroke',
   onToolChange: () => {
     drawingSurface?.syncDrawUi();
   }
