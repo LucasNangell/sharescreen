@@ -178,6 +178,15 @@ function userScopedAudioName(userId) {
   return `__uid__:${String(userId || '').trim()}`;
 }
 
+export function resolveAudioFilterSubjectName(kind, name, userId = null) {
+  const subjectKind = normalizeAudioFilterKind(kind);
+  const trimmed = String(name || '').trim();
+  const uid = String(userId || '').trim();
+  if (!subjectKind) return '';
+  if (subjectKind === 'client' || !uid) return trimmed;
+  return userScopedAudioName(uid);
+}
+
 export function getLowerThirdsDir() {
   ensureDirs();
   return ltDir;
@@ -448,7 +457,27 @@ export function getAudioFilterPreset(kind, name, userId = null) {
   const uid = String(userId || '').trim();
   if (!subjectKind) return null;
   try {
-    if (uid) {
+    const lookupByName = () => {
+      if (!trimmed) return null;
+      const row = getDb()
+        .prepare(
+          `SELECT subject_kind, subject_name, prefs_json, updated_at, user_id
+       FROM audio_filter_presets
+       WHERE subject_kind = ? AND subject_name = ? COLLATE NOCASE`
+        )
+        .get(subjectKind, trimmed);
+      if (!row) return null;
+      return {
+        kind: row.subject_kind,
+        name: row.subject_name,
+        userId: row.user_id || null,
+        prefs: JSON.parse(row.prefs_json),
+        updatedAt: row.updated_at
+      };
+    };
+
+    const lookupByUser = () => {
+      if (!uid) return null;
       const byUser = getDb()
         .prepare(
           `SELECT subject_kind, subject_name, prefs_json, updated_at, user_id
@@ -456,32 +485,20 @@ export function getAudioFilterPreset(kind, name, userId = null) {
          WHERE subject_kind = ? AND user_id = ?`
         )
         .get(subjectKind, uid);
-      if (byUser) {
-        return {
-          kind: byUser.subject_kind,
-          name: trimmed || byUser.subject_name,
-          userId: byUser.user_id,
-          prefs: JSON.parse(byUser.prefs_json),
-          updatedAt: byUser.updated_at
-        };
-      }
-    }
-    if (!trimmed) return null;
-    const row = getDb()
-      .prepare(
-        `SELECT subject_kind, subject_name, prefs_json, updated_at, user_id
-       FROM audio_filter_presets
-       WHERE subject_kind = ? AND subject_name = ? COLLATE NOCASE`
-      )
-      .get(subjectKind, trimmed);
-    if (!row) return null;
-    return {
-      kind: row.subject_kind,
-      name: row.subject_name,
-      userId: row.user_id || null,
-      prefs: JSON.parse(row.prefs_json),
-      updatedAt: row.updated_at
+      if (!byUser) return null;
+      return {
+        kind: byUser.subject_kind,
+        name: trimmed || byUser.subject_name,
+        userId: byUser.user_id,
+        prefs: JSON.parse(byUser.prefs_json),
+        updatedAt: byUser.updated_at
+      };
     };
+
+    if (subjectKind === 'client') {
+      return lookupByName() || lookupByUser();
+    }
+    return lookupByUser() || lookupByName();
   } catch (err) {
     if (String(err?.message || '').includes('no such table')) return null;
     throw err;
@@ -498,7 +515,8 @@ export function saveAudioFilterPreset(kind, name, prefs, userId = null) {
 
   const now = Date.now();
   const prefsJson = JSON.stringify(prefs);
-  const subjectName = uid ? userScopedAudioName(uid) : trimmed;
+  const subjectName = resolveAudioFilterSubjectName(subjectKind, trimmed, uid);
+  if (!subjectName) return { ok: false, erro: 'Tipo ou nome inválido' };
   const writeResult = runDbWrite('saveAudioFilterPreset', () => {
     getDb()
       .prepare(

@@ -324,12 +324,13 @@ function createApp() {
 
   app.get('/api/audio-filter/:kind/:name', optionalAuth, (req, res) => {
     applyNoStoreHeaders(res);
-    const userId = String(req.query.userId || req.user?.id || '').trim() || null;
-    const preset = getAudioFilterPreset(
-      decodeURIComponent(req.params.kind || ''),
-      decodeURIComponent(req.params.name || ''),
-      userId
-    );
+    const kind = decodeURIComponent(req.params.kind || '');
+    const name = decodeURIComponent(req.params.name || '');
+    const userId =
+      String(kind).toLowerCase() === 'client'
+        ? null
+        : String(req.query.userId || req.user?.id || '').trim() || null;
+    const preset = getAudioFilterPreset(kind, name, userId);
     res.json({ ok: true, preset: preset || null });
   });
 
@@ -338,7 +339,10 @@ function createApp() {
     const kind = String(req.body?.kind || '').trim();
     const name = String(req.body?.name || '').trim();
     const prefs = req.body?.prefs;
-    const userId = String(req.body?.userId || req.user?.id || '').trim() || null;
+    const userId =
+      String(kind).toLowerCase() === 'client'
+        ? String(req.body?.userId || '').trim() || null
+        : String(req.body?.userId || req.user?.id || '').trim() || null;
     const result = saveAudioFilterPreset(kind, name, prefs, userId);
     if (!result.ok) {
       res.status(400).json(result);

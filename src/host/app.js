@@ -42,6 +42,7 @@ import { StudioCompositor, resolveCompositorDimensions } from '../shared/studio-
 import { createStudioTransformEditor } from '../shared/studio-transform-editor.js';
 import { requireAuthSession, fetchCurrentUser, authDisplayName, bindLogoutControl } from '../shared/auth-client.js';
 import { createRoomControls } from '../shared/room-controls.js';
+import { fetchClientAudioFilterPreset } from '../shared/audio-filter-presets.js';
 
 const STUDIO_COMPOSITOR_IN_MAIN = true;
 
@@ -350,7 +351,8 @@ async function fetchAudioFilterPresetApi(kind, name, userId = null) {
   const trimmed = String(name || '').trim();
   if (!trimmed && !userId) return null;
   try {
-    const params = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    const isClient = String(kind).toLowerCase() === 'client';
+    const params = !isClient && userId ? `?userId=${encodeURIComponent(userId)}` : '';
     const res = await fetch(
       `/api/audio-filter/${encodeURIComponent(kind)}/${encodeURIComponent(trimmed || '_')}${params}`,
       { credentials: 'same-origin' }
@@ -377,7 +379,10 @@ async function saveAudioFilterPresetApi(kind, name, prefs, userId = null) {
         kind,
         name: trimmed,
         prefs: normalizeMicrophoneFilterPrefs(prefs),
-        userId: userId || authUser?.id || null
+        userId:
+          String(kind).toLowerCase() === 'client'
+            ? userId || null
+            : userId || authUser?.id || null
       })
     });
     return await res.json();
@@ -4067,33 +4072,14 @@ function isSidebarPoppedOut() {
 }
 
 function ensurePopoutExpandButtonInSidebar() {
-  const sidebar = els.sidebar;
-  const actions = sidebar?.querySelector('.sidebar-actions');
-  if (!actions) return;
-  const doc = sidebar.ownerDocument;
-  let btn = doc.getElementById('btn-sidebar-popout-expand');
-  if (!btn) {
-    btn = doc.createElement('button');
-    btn.type = 'button';
-    btn.id = 'btn-sidebar-popout-expand';
-    btn.className = 'sidebar-icon-btn';
-    btn.setAttribute('aria-label', 'Expandir controles avançados');
-    btn.title = 'Expandir controles avançados';
-    btn.innerHTML = POPOUT_EXPAND_ICON;
-    btn.addEventListener('click', () => {
-      setPopoutControlsExpanded(!popoutControlsExpanded);
-      syncStudioPopoutChrome();
-    });
-    actions.insertBefore(btn, actions.firstChild);
-  }
-  syncPopoutExpandButtonInSidebar();
+  // WIP: oculto até o expandir do popout estar pronto.
+  removePopoutExpandButtonFromSidebar();
 }
 
 function syncPopoutExpandButtonInSidebar() {
   const btn = els.sidebar?.ownerDocument?.getElementById('btn-sidebar-popout-expand');
   if (!btn) return;
-  const show = isSidebarPoppedOut() && !popoutControlsExpanded;
-  btn.hidden = !show;
+  btn.hidden = true;
 }
 
 function removePopoutExpandButtonFromSidebar() {
@@ -5004,9 +4990,9 @@ async function syncPublishedAudioFiltersToClientsAsync(audioSources = []) {
 
     let stored = normalizeMicrophoneFilterPrefs(monitor.getFilterPrefs(id));
     if (displayName) {
-      const apiPreset = await fetchAudioFilterPresetApi('client', displayName, client?.userId || null);
-      if (apiPreset?.prefs) {
-        stored = normalizeMicrophoneFilterPrefs(apiPreset.prefs);
+      const apiPrefs = await fetchClientAudioFilterPreset(displayName);
+      if (apiPrefs) {
+        stored = apiPrefs;
         monitor.setFilterPrefs(id, stored);
       } else if (hasActiveMicrophoneFilter(stored)) {
         saveAudioFilterPresetApi('client', displayName, stored, client?.userId || null).catch(() => {});
@@ -5187,7 +5173,7 @@ function syncSelfMonitorUi() {
   if (section) section.hidden = false;
 }
 
-function openAudioFiltersModal(client) {
+async function openAudioFiltersModal(client) {
   if (!client) return;
   activeAudioFiltersClient = client;
   const targetingHost = isHostPeer(client);
@@ -5197,9 +5183,17 @@ function openAudioFiltersModal(client) {
     return;
   }
 
-  const prefs = targetingHost
-    ? normalizeMicrophoneFilterPrefs(hostMicFilterPrefs)
-    : getAppliedClientAudioFilterPrefs(client.id);
+  let prefs;
+  if (targetingHost) {
+    prefs = normalizeMicrophoneFilterPrefs(hostMicFilterPrefs);
+  } else {
+    const stored = await fetchClientAudioFilterPreset(client.displayName);
+    if (activeAudioFiltersClient !== client) return;
+    prefs = stored || getAppliedClientAudioFilterPrefs(client.id);
+    if (stored) {
+      monitor.setFilterPrefs(client.id, stored);
+    }
+  }
   originalAudioFilterPrefs = { ...prefs };
 
   const nameEl = $('audio-filters-client-name');
@@ -5335,7 +5329,7 @@ $('btn-audio-filters-reset')?.addEventListener('click', () => {
 $('ctx-audio')?.addEventListener('click', () => {
   const client = activeContextClient;
   closeContextMenu();
-  if (client) openAudioFiltersModal(client);
+  if (client) openAudioFiltersModal(client).catch((e) => errors.handle(e, 'audio-filters'));
 });
 
 $('ctx-rec-audio')?.addEventListener('click', () => {

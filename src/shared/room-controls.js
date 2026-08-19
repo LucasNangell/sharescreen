@@ -18,6 +18,7 @@ import {
   SHARED_ROOM_MIC_PRESET,
   normalizeMicrophoneFilterPrefs
 } from './mic-dsp.js';
+import { fetchClientAudioFilterPreset } from './audio-filter-presets.js';
 
 const MUTE_ICON_ON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c0 3.28-2.64 5.91-5.91 5.91S6.09 14.28 6.09 11H4.07c0 3.95 2.87 7.23 6.65 7.88v2.02h2.56v-2.02c3.78-.65 6.65-3.93 6.65-7.88h-2.02z"/></svg>';
 const MUTE_ICON_OFF = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
@@ -504,6 +505,18 @@ export function createRoomControls(options = {}) {
     };
   }
 
+  function audioFilterNameCacheKey(displayName) {
+    const name = String(displayName || '').trim().toLowerCase();
+    return name ? `name:${name}` : '';
+  }
+
+  function rememberAudioFilterPrefs(client, prefs) {
+    const key = JSON.stringify(normalizeMicrophoneFilterPrefs(prefs));
+    if (client?.id) sentAudioFilterKeys.set(String(client.id), key);
+    const nameKey = audioFilterNameCacheKey(client?.displayName);
+    if (nameKey) sentAudioFilterKeys.set(nameKey, key);
+  }
+
   function sendAudioFiltersToClient(client, prefs, { force = false } = {}) {
     if (!client?.id || !signaling()) return;
     if (String(client.id) === String(selfPeerId())) return;
@@ -511,13 +524,16 @@ export function createRoomControls(options = {}) {
     const key = JSON.stringify(normalized);
     const id = String(client.id);
     if (!force && sentAudioFilterKeys.get(id) === key) return;
-    sentAudioFilterKeys.set(id, key);
+    rememberAudioFilterPrefs(client, normalized);
     signaling().send('definirFiltroAudioClient', { peerId: client.id, prefs: normalized });
   }
 
-  function getAppliedClientAudioFilterPrefs(peerId) {
-    const id = String(peerId);
-    const sentKey = sentAudioFilterKeys.get(id);
+  function getAppliedClientAudioFilterPrefs(clientOrPeerId) {
+    const client = clientOrPeerId && typeof clientOrPeerId === 'object' ? clientOrPeerId : null;
+    const id = String(client?.id || clientOrPeerId || '');
+    const nameKey = audioFilterNameCacheKey(client?.displayName);
+    const sentKey =
+      (id && sentAudioFilterKeys.get(id)) || (nameKey && sentAudioFilterKeys.get(nameKey));
     if (sentKey) {
       try {
         return normalizeMicrophoneFilterPrefs(JSON.parse(sentKey));
@@ -539,14 +555,17 @@ export function createRoomControls(options = {}) {
     sendAudioFiltersToClient(client, prefs, { force: true });
   }
 
-  function openAudioFiltersModal(client) {
+  async function openAudioFiltersModal(client) {
     if (!client || !caps.audioFilters) return;
     if (isHostPeer(client) && hooks.openHostAudioFilters) {
       hooks.openHostAudioFilters(client);
       return;
     }
     activeAudioFiltersClient = client;
-    const prefs = getAppliedClientAudioFilterPrefs(client.id);
+    const stored = await fetchClientAudioFilterPreset(client.displayName);
+    if (activeAudioFiltersClient !== client) return;
+    const prefs = stored || getAppliedClientAudioFilterPrefs(client);
+    if (stored) rememberAudioFilterPrefs(client, stored);
     originalAudioFilterPrefs = { ...prefs };
     const nameEl = $id('audio-filters-client-name');
     if (nameEl) nameEl.textContent = client.displayName || '-';
@@ -769,11 +788,14 @@ export function createRoomControls(options = {}) {
     });
     on($id('ctx-audio'), 'click', () => {
       if (!activeContextClient) return;
-      openAudioFiltersModal(activeContextClient);
+      openAudioFiltersModal(activeContextClient).catch((e) => hooks.onError?.(e, 'audio-filters'));
       closeContextMenu();
     });
     on($id('btn-audio-filters-save'), 'click', () => {
       previewAudioFiltersFromUi();
+      if (activeAudioFiltersClient) {
+        rememberAudioFilterPrefs(activeAudioFiltersClient, readAudioFilterPrefsFromUi());
+      }
       closeAudioFiltersModal();
     });
     on($id('btn-audio-filters-cancel'), 'click', () => closeAudioFiltersModal({ revert: true }));
