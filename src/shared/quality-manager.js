@@ -85,7 +85,8 @@ export function getPreset(id) {
 export function videoEncodingParamsFromQuality(quality = {}) {
   return {
     maxBitrate: quality.maxBitrate ?? 10_000_000,
-    maxFramerate: quality.targetFrameRate ?? 30
+    maxFramerate: quality.targetFrameRate ?? 30,
+    scaleResolutionDownBy: 1
   };
 }
 
@@ -133,19 +134,11 @@ export function buildDisplayMediaConstraints(quality = {}) {
   const fpsIdeal = quality.targetFrameRate ?? 30;
   const fpsMax = quality.maxFrameRate ?? 30;
 
-  const video = {
-    frameRate: { ideal: fpsIdeal, max: fpsMax },
-    resizeMode: 'none'
-  };
-
-  // Resolução nativa do monitor — sem cap artificial em 1080p
-  if (typeof screen !== 'undefined' && screen.width > 0 && screen.height > 0) {
-    video.width = { ideal: screen.width };
-    video.height = { ideal: screen.height };
-  }
-
   return {
-    video,
+    video: {
+      frameRate: { ideal: fpsIdeal, max: fpsMax },
+      resizeMode: 'none'
+    },
     audio: false,
     preferCurrentTab: false,
     selfBrowserSurface: 'exclude',
@@ -174,7 +167,7 @@ function h264CodecScore(codec) {
   const profileByte = id.slice(0, 2);
   const levelByte = Number.parseInt(id.slice(4, 6), 16);
   const profileRank =
-    profileByte === '64' ? 3 : profileByte === '4d' ? 2 : profileByte === '42' ? 1 : 0;
+    profileByte === '42' ? 3 : profileByte === '4d' ? 2 : profileByte === '64' ? 1 : 0;
   const level = Number.isFinite(levelByte) ? levelByte : 0;
   return profileRank * 1000 + level;
 }
@@ -191,7 +184,8 @@ export function pickScreenCodec(device, preferH264 = true) {
 }
 
 export function buildVideoProduceOptions(track, device, quality = {}) {
-  const { maxBitrate, maxFramerate } = videoEncodingParamsFromQuality(quality);
+  const { maxBitrate, maxFramerate, scaleResolutionDownBy } =
+    videoEncodingParamsFromQuality(quality);
   const maxKbps = Math.floor(maxBitrate / 1000);
   const startKbps = clampStartBitrateKbps(maxBitrate, quality.startBitrateKbps);
 
@@ -202,8 +196,10 @@ export function buildVideoProduceOptions(track, device, quality = {}) {
       {
         maxBitrate,
         maxFramerate,
+        scaleResolutionDownBy,
         scalabilityMode: 'L1T1',
-        priority: 'high'
+        priority: 'high',
+        networkPriority: 'high'
       }
     ],
     codecOptions: {
@@ -240,4 +236,33 @@ export function applyContentHint(track, hint = 'motion') {
   try {
     track.contentHint = hint;
   } catch (_) {}
+}
+
+export function describeVideoCodec(codec) {
+  if (!codec?.mimeType) return 'auto';
+  const profile = h264ProfileLevelId(codec);
+  return profile ? `${codec.mimeType} ${profile}` : codec.mimeType;
+}
+
+export async function applySenderResolutionPreference(producer) {
+  const sender = producer?.rtpSender;
+  if (!sender || typeof sender.getParameters !== 'function') return false;
+  try {
+    const params = sender.getParameters();
+    if (!params) return false;
+    params.degradationPreference = 'maintain-resolution';
+    if (Array.isArray(params.encodings)) {
+      for (const encoding of params.encodings) {
+        encoding.scaleResolutionDownBy = 1;
+        encoding.networkPriority = 'high';
+        encoding.priority = 'high';
+      }
+    }
+    if (typeof sender.setParameters === 'function') {
+      await sender.setParameters(params);
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
 }

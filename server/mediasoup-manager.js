@@ -31,7 +31,7 @@ const mediaCodecs = [
     clockRate: 90000,
     parameters: {
       'packetization-mode': 1,
-      'profile-level-id': '42e01f',
+      'profile-level-id': '42e033',
       'level-asymmetry-allowed': 1,
       'x-google-start-bitrate': startKbps
     }
@@ -43,6 +43,17 @@ const mediaCodecs = [
     parameters: {
       'packetization-mode': 1,
       'profile-level-id': '42e02a',
+      'level-asymmetry-allowed': 1,
+      'x-google-start-bitrate': startKbps
+    }
+  },
+  {
+    kind: 'video',
+    mimeType: 'video/H264',
+    clockRate: 90000,
+    parameters: {
+      'packetization-mode': 1,
+      'profile-level-id': '42e01f',
       'level-asymmetry-allowed': 1,
       'x-google-start-bitrate': startKbps
     }

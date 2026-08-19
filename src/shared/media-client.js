@@ -4,7 +4,9 @@ import {
   buildVideoProduceOptions,
   buildAudioProduceOptions,
   applyContentHint,
-  videoEncodingParamsFromQuality
+  videoEncodingParamsFromQuality,
+  applySenderResolutionPreference,
+  describeVideoCodec
 } from './quality-manager.js';
 import {
   acquireMicrophoneTrack
@@ -294,9 +296,11 @@ export class MediaClient {
       if (typeof producer.setRtpEncodingParameters === 'function') {
         await producer.setRtpEncodingParameters({
           maxBitrate: params.maxBitrate,
-          maxFramerate: params.maxFramerate
+          maxFramerate: params.maxFramerate,
+          scaleResolutionDownBy: 1
         });
       }
+      await applySenderResolutionPreference(producer);
     } catch (err) {
       this.onLog(
         `Nao foi possivel atualizar bitrate ao vivo: ${err?.message || err}`,
@@ -310,6 +314,28 @@ export class MediaClient {
     } catch (_) {}
 
     return true;
+  }
+
+  async _produceScreenVideo(videoTrack) {
+    applyContentHint(videoTrack, this.videoQuality.contentHint || 'detail');
+    const settings = videoTrack.getSettings?.() || {};
+    const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
+    videoOpts.track = videoTrack;
+    const codecLabel = describeVideoCodec(videoOpts.codec);
+    if (settings.width && settings.height) {
+      this.onLog(
+        `Captura: ${settings.width}x${settings.height} @ ${settings.frameRate || '?'}fps · ${codecLabel}`,
+        'info'
+      );
+    } else {
+      this.onLog(`Codec de tela: ${codecLabel}`, 'info');
+    }
+    const producer = await this.sendTransport.produce(videoOpts);
+    await applySenderResolutionPreference(producer);
+    try {
+      await producer.requestKeyFrame();
+    } catch (_) {}
+    return producer;
   }
 
   setCapturePrefs(prefs) {
@@ -1119,25 +1145,8 @@ export class MediaClient {
     this.localScreenStream = displayStream;
 
     try {
-      applyContentHint(videoTrack, this.videoQuality.contentHint || 'detail');
-
-      const settings = videoTrack.getSettings?.() || {};
-      if (settings.width && settings.height) {
-        this.onLog(
-          `Captura: ${settings.width}?f??"${settings.height} @ ${settings.frameRate || '?'}fps`,
-          'info'
-        );
-      }
-
       this._bindDisplayTrackEnded(displayStream, videoTrack);
-
-      const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
-      videoOpts.track = videoTrack;
-      this.producers.video = await this.sendTransport.produce(videoOpts);
-
-      try {
-        await this.producers.video.requestKeyFrame();
-      } catch (_) {}
+      this.producers.video = await this._produceScreenVideo(videoTrack);
 
       await this.syncPublishedAudio(capturePrefs, displayStream);
 
@@ -1845,13 +1854,7 @@ export class MediaClient {
     }
 
     try {
-      applyContentHint(videoTrack, this.videoQuality.contentHint || 'detail');
-      const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
-      videoOpts.track = videoTrack;
-      this.producers.video = await this.sendTransport.produce(videoOpts);
-      try {
-        await this.producers.video.requestKeyFrame();
-      } catch (_) {}
+      this.producers.video = await this._produceScreenVideo(videoTrack);
       this._producing = true;
       this.onLog('Producer de video sintetico publicado', 'info');
       return this.producers.video;
@@ -1882,13 +1885,7 @@ export class MediaClient {
     }
 
     try {
-      applyContentHint(videoTrack, this.videoQuality.contentHint || 'detail');
-      const videoOpts = buildVideoProduceOptions(videoTrack, this.device, this.videoQuality);
-      videoOpts.track = videoTrack;
-      this.producers.video = await this.sendTransport.produce(videoOpts);
-      try {
-        await this.producers.video.requestKeyFrame();
-      } catch (_) {}
+      this.producers.video = await this._produceScreenVideo(videoTrack);
       this._producing = true;
       this.onLog('Producer de video restaurado a partir da captura de tela', 'info');
       return true;

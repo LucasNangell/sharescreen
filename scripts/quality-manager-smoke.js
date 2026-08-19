@@ -7,6 +7,7 @@ import {
   mergeServerQuality,
   pickScreenCodec,
   buildVideoProduceOptions,
+  buildDisplayMediaConstraints,
   videoEncodingParamsFromQuality
 } from '../src/shared/quality-manager.js';
 
@@ -46,6 +47,12 @@ assert(getPreset('missing').id === 'highQuality', 'getPreset desconhecido cai em
 const params = videoEncodingParamsFromQuality(low);
 assert(params.maxBitrate === 8_000_000, 'encoding ao vivo usa maxBitrate do preset');
 assert(params.maxFramerate === 30, 'encoding ao vivo usa fps do preset');
+assert(params.scaleResolutionDownBy === 1, 'encoding nao reduz resolucao');
+
+const constraints = buildDisplayMediaConstraints(high);
+assert(constraints.video.width === undefined, 'captura sem cap de width CSS');
+assert(constraints.video.height === undefined, 'captura sem cap de height CSS');
+assert(constraints.video.resizeMode === 'none', 'captura sem resize do browser');
 
 const device = {
   rtpCapabilities: {
@@ -61,8 +68,22 @@ const device = {
 
 const picked = pickScreenCodec(device, true);
 assert(
-  picked?.parameters?.['profile-level-id'] === '64002a',
-  'pickScreenCodec prefere High level 4.2 a Baseline 3.1'
+  picked?.parameters?.['profile-level-id'] === '42e02a',
+  'pickScreenCodec prefere Constrained Baseline 4.2 a High e a Baseline 3.1'
+);
+
+const device4k = {
+  rtpCapabilities: {
+    codecs: [
+      { mimeType: 'video/H264', parameters: { 'profile-level-id': '42e02a' } },
+      { mimeType: 'video/H264', parameters: { 'profile-level-id': '42e033' } },
+      { mimeType: 'video/H264', parameters: { 'profile-level-id': '64002a' } }
+    ]
+  }
+};
+assert(
+  pickScreenCodec(device4k, true)?.parameters?.['profile-level-id'] === '42e033',
+  'pickScreenCodec prefere Baseline 5.1 quando disponivel'
 );
 
 const vp8 = pickScreenCodec(device, false);
@@ -70,8 +91,12 @@ assert(vp8?.mimeType.toLowerCase() === 'video/vp8', 'preferH264 false escolhe VP
 
 const opts = buildVideoProduceOptions(null, device, high);
 assert(opts.encodings[0].maxBitrate === 32_000_000, 'produce encodings seguem o preset');
+assert(opts.encodings[0].scaleResolutionDownBy === 1, 'produce nao reduz escala');
 assert(opts.codecOptions.videoGoogleStartBitrate <= 32000, 'google start bitrate no teto');
-assert(opts.codec?.parameters?.['profile-level-id'] === '64002a', 'produce usa o H.264 de maior score');
+assert(
+  opts.codec?.parameters?.['profile-level-id'] === '42e02a',
+  'produce usa Constrained Baseline de maior level'
+);
 
 if (failed) {
   console.error(`\n${failed} falha(s)`);
