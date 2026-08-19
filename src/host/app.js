@@ -4071,15 +4071,40 @@ function isSidebarPoppedOut() {
   return !!(controlsPopoutWindow && !controlsPopoutWindow.closed);
 }
 
+const ENABLE_SIDEBAR_POPOUT_EXPAND_BUTTON = false;
+
 function ensurePopoutExpandButtonInSidebar() {
-  // WIP: oculto até o expandir do popout estar pronto.
-  removePopoutExpandButtonFromSidebar();
+  if (!ENABLE_SIDEBAR_POPOUT_EXPAND_BUTTON) {
+    removePopoutExpandButtonFromSidebar();
+    return;
+  }
+  const sidebar = els.sidebar;
+  const actions = sidebar?.querySelector('.sidebar-actions');
+  if (!actions) return;
+  const doc = sidebar.ownerDocument;
+  let btn = doc.getElementById('btn-sidebar-popout-expand');
+  if (!btn) {
+    btn = doc.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btn-sidebar-popout-expand';
+    btn.className = 'sidebar-icon-btn';
+    btn.setAttribute('aria-label', 'Expandir controles avançados');
+    btn.title = 'Expandir controles avançados';
+    btn.innerHTML = POPOUT_EXPAND_ICON;
+    btn.addEventListener('click', () => {
+      setPopoutControlsExpanded(!popoutControlsExpanded);
+      syncStudioPopoutChrome();
+    });
+    actions.insertBefore(btn, actions.firstChild);
+  }
+  syncPopoutExpandButtonInSidebar();
 }
 
 function syncPopoutExpandButtonInSidebar() {
   const btn = els.sidebar?.ownerDocument?.getElementById('btn-sidebar-popout-expand');
   if (!btn) return;
-  btn.hidden = true;
+  const show = ENABLE_SIDEBAR_POPOUT_EXPAND_BUTTON && isSidebarPoppedOut() && !popoutControlsExpanded;
+  btn.hidden = !show;
 }
 
 function removePopoutExpandButtonFromSidebar() {
