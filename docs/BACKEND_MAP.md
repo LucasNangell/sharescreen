@@ -47,8 +47,8 @@ Mapeamento do backend da aplicação. Estruturado em **Node.js** com **Express**
 * `GET /api/registro-cliente` — Lê o IP do cliente e responde se ele está registrado no banco de dados e qual o nome mapeado.
 * `POST /api/registro-cliente` — Recebe `{ nome, computerName }` e associa ao IP do chamador na base SQLite.
 * `GET /api/lower-third/:clientName` — Retorna as configurações de lower third salvas (vídeo, croma, tolerância) para o client indicado.
-* `GET /api/audio-filter/:kind/:name` — Preset de filtros (`?userId=` opcional). Prioriza `user_id`, fallback por `subject_name` legado.
-* `POST /api/audio-filter` — Salva `{ kind, name, prefs, userId? }`. Requer sessão ou `X-Host-Token` (compat.).
+* `GET /api/audio-filter/:kind/:name` — Preset de filtros (`?userId=` opcional). `kind` é `client` ou `host`. Prioriza `user_id`, fallback por `subject_name` legado.
+* `POST /api/audio-filter` — Salva `{ kind, name, prefs, userId? }`. O modal do host grava `kind: 'host'`. Requer sessão ou `X-Host-Token` (compat.).
 * `POST /api/lower-third` — Recebe o binário do vídeo WebM da lower third e salva no servidor associando ao cliente (requer token de host no header).
 * `GET /lt-videos/:filename` — Serve os arquivos de vídeo gravados em `data/lower-thirds/`.
 * `GET /api/info` — Informa o estado atual do servidor (transmissões, cohosts ativos, build ID).
@@ -90,7 +90,7 @@ Arquivos envolvidos:
 4. `getHostState()` inclui `audioSources` (lista de producers de audio ativos) para o host sincronizar consumo sem depender apenas de `fontesAudio`.
 5. `addPeer()` envia `fontesAudio` ao novo peer; `broadcastAudioSources()` global só quando a assinatura de producers muda (evita ressync desnecessário nos demais participantes).
 6. `definirModoPonteMeet` (host/co-host) ativa `meetBridgeLiveMode` na sala; `getHostState()` e `buildRoomSnapshot()` incluem o flag; clients recebem `modoPonteMeetAtualizado`.
-7. `definirClientMute` atualiza `mutedPeerIds` na sala e faz broadcast de `clientesSilenciados`. Host/co-host pode silenciar qualquer client; um client pode silenciar apenas a si (`peerId` deve ser o próprio id).
+7. `definirClientMute` atualiza `mutedPeerIds` na sala e faz broadcast de `clientesSilenciados`. Host/co-host pode silenciar qualquer peer (incluindo a si); um client pode silenciar apenas a si (`peerId` deve ser o próprio id). Host e client aplicam o mute na publicação (`setPublishedAudioMuted`) e o host reflete o estado nos `source-mute-btn`.
 8. `anotacaoSegmento` (qualquer peer autenticado) valida payload (pontos normalizados, `shape`: `stroke`|`line`|`rect`|`ellipse`|`arrow`|`text`, cor, rate-limit ~20/s) e rebroadcast via `room.broadcastToRoom()`.
 9. **Quadro branco:** `quadroBrancoIniciar` / `quadroBrancoParar` (host/co-host); `quadroBrancoElemento` (qualquer peer, só com quadro ativo, rate-limit ~30/s); `quadroBrancoLimpar` (host/co-host). Estado em `room.whiteboardElements`; snapshot em `roomState.whiteboard` e `transmissaoAtiva.sourceKind = 'whiteboard'`.
 

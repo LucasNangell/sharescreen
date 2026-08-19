@@ -2055,6 +2055,10 @@
   width: 100%;
 }
 
+.ctx-item[hidden] {
+  display: none !important;
+}
+
 .ctx-item:hover {
   background: rgba(255, 255, 255, 0.08);
 }

@@ -169,6 +169,26 @@ export function hasActiveMicrophoneFilter(prefs) {
   );
 }
 
+/** Resolve o preset de publicação do host: API → cache local → ganho legado → defaults. */
+export function resolveHostMicFilterPrefs({
+  apiPrefs = null,
+  cachedPrefs = null,
+  legacyGain = null,
+  defaults = HOST_MIC_PUBLISH_DEFAULTS
+} = {}) {
+  if (apiPrefs && typeof apiPrefs === 'object') {
+    return normalizeMicrophoneFilterPrefs(apiPrefs);
+  }
+  if (cachedPrefs && typeof cachedPrefs === 'object') {
+    return normalizeMicrophoneFilterPrefs(cachedPrefs);
+  }
+  const gain = Number(legacyGain);
+  if (Number.isFinite(gain)) {
+    return normalizeMicrophoneFilterPrefs({ ...defaults, gain });
+  }
+  return normalizeMicrophoneFilterPrefs(defaults);
+}
+
 export function closeMicrophoneFilterGraph(graph) {
   if (!graph) return;
   if (graph.rafId) cancelAnimationFrame(graph.rafId);

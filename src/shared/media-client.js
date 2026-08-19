@@ -244,9 +244,14 @@ export class MediaClient {
     return this.setPublishedAudioMuted(!this.isPublishedAudioMuted());
   }
 
-  getLocalMicrophoneTrack() {
+  getPublishedMicrophoneTrack() {
     const published = this.producers.microphone?.track;
-    if (published?.readyState === 'live') return published;
+    return published?.readyState === 'live' ? published : null;
+  }
+
+  getLocalMicrophoneTrack() {
+    const published = this.getPublishedMicrophoneTrack();
+    if (published) return published;
     if (this._micTrack?.readyState === 'live') return this._micTrack;
     return this.localMicTracks.find((t) => t.readyState === 'live') || null;
   }

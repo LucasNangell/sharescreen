@@ -1917,6 +1917,7 @@ async function syncClientMicPublication() {
   }
 
   updateClientMicUi();
+  syncOwnMicMuteFromRoom();
   return media.hasPublishedMicrophone() || !prefs.microphone;
 }
 

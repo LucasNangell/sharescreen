@@ -12,7 +12,7 @@ import {
   computeNearFieldMetrics,
   normalizeNearFieldGate
 } from '../src/shared/near-field-analyzer.js';
-import { normalizeMicrophoneFilterPrefs, micGraphIsRunning } from '../src/shared/mic-dsp.js';
+import { normalizeMicrophoneFilterPrefs, micGraphIsRunning, resolveHostMicFilterPrefs, HOST_MIC_PUBLISH_DEFAULTS } from '../src/shared/mic-dsp.js';
 import { evaluateMicPublishHealth } from '../src/shared/mic-publish-health.js';
 import {
   classifyServerMessage,
@@ -333,6 +333,25 @@ assert(
 assert(micGraphIsRunning({ ctx: { state: 'running' } }) === true, 'micGraphIsRunning running');
 assert(micGraphIsRunning({ ctx: { state: 'suspended' } }) === false, 'micGraphIsRunning suspended');
 assert(micGraphIsRunning(null) === false, 'micGraphIsRunning null');
+
+const hostFromApi = resolveHostMicFilterPrefs({
+  apiPrefs: { gain: 2, noiseSuppressionMl: true },
+  cachedPrefs: { gain: 0.5 },
+  legacyGain: 1.9
+});
+assert(hostFromApi.gain === 2, 'host prefs: API vence cache e ganho legado');
+assert(hostFromApi.noiseSuppressionMl === true, 'host prefs: API preserva RNNoise');
+const hostFromCache = resolveHostMicFilterPrefs({
+  cachedPrefs: { bass: 4, compressor: false },
+  legacyGain: 1.9
+});
+assert(hostFromCache.bass === 4, 'host prefs: cache quando API vazia');
+assert(hostFromCache.gain === 1, 'host prefs: cache nao herda ganho legado');
+const hostFromLegacy = resolveHostMicFilterPrefs({ legacyGain: 1.8 });
+assert(hostFromLegacy.gain === 1.8, 'host prefs: ganho legado entra nos defaults');
+assert(hostFromLegacy.compressor === true, 'host prefs: legado mantem compressor padrao do host');
+const hostDefaults = resolveHostMicFilterPrefs({});
+assert(hostDefaults.peaking === HOST_MIC_PUBLISH_DEFAULTS.peaking, 'host prefs: defaults sem fonte');
 
 const deviceChoices = buildMicrophoneDeviceChoices([{ deviceId: 'dev-1', label: '  USB Mic  ' }]);
 assert(deviceChoices[0].deviceId === '' && deviceChoices[0].label.includes('Microfone'), 'lista de mics sempre inclui padrao');
