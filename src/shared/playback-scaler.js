@@ -1,15 +1,49 @@
 import { getVideoContentRect } from './drawing-primitives.js';
 
 const SCALE_ON_THRESHOLD = 0.98;
+const NEAR_ONE_PHYSICAL = 0.95;
 
-export function shouldPresentScaled(videoW, videoH, cssW, cssH, dpr = 1) {
+export function shouldPresentScaled(videoW, videoH, cssW, cssH, _dpr = 1) {
   const vw = Number(videoW) || 0;
   const vh = Number(videoH) || 0;
   const cw = Number(cssW) || 0;
   const ch = Number(cssH) || 0;
-  const ratio = Number(dpr) > 0 ? Number(dpr) : 1;
   if (vw < 2 || vh < 2 || cw < 2 || ch < 2) return false;
-  return Math.min(cw / vw, ch / vh) * ratio < SCALE_ON_THRESHOLD;
+  return Math.min(cw / vw, ch / vh) < SCALE_ON_THRESHOLD;
+}
+
+function drawContainSharp(outCtx, source, dx, dy, dw, dh, srcW, srcH, mipA, mipB) {
+  const physicalScale = Math.min(dw / srcW, dh / srcH);
+  if (physicalScale >= NEAR_ONE_PHYSICAL) {
+    outCtx.imageSmoothingEnabled = false;
+    outCtx.drawImage(source, dx, dy, dw, dh);
+    return;
+  }
+
+  let src = source;
+  let sw = srcW;
+  let sh = srcH;
+  let useA = true;
+
+  while (sw / 2 >= dw && sh / 2 >= dh && sw > dw && sh > dh) {
+    const nw = Math.max(dw, Math.round(sw / 2));
+    const nh = Math.max(dh, Math.round(sh / 2));
+    const mip = useA ? mipA : mipB;
+    if (mip.width !== nw) mip.width = nw;
+    if (mip.height !== nh) mip.height = nh;
+    const mctx = mip.getContext('2d', { alpha: false });
+    mctx.imageSmoothingEnabled = true;
+    mctx.imageSmoothingQuality = 'medium';
+    mctx.drawImage(src, 0, 0, nw, nh);
+    src = mip;
+    sw = nw;
+    sh = nh;
+    useA = !useA;
+  }
+
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = 'medium';
+  outCtx.drawImage(src, dx, dy, dw, dh);
 }
 
 export function attachPlaybackScaler({ video, container } = {}) {
@@ -24,6 +58,8 @@ export function attachPlaybackScaler({ video, container } = {}) {
   if (video.nextSibling) host.insertBefore(canvas, video.nextSibling);
   else host.appendChild(canvas);
 
+  const mipA = document.createElement('canvas');
+  const mipB = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
   let stopped = false;
   let active = false;
@@ -92,13 +128,16 @@ export function attachPlaybackScaler({ video, container } = {}) {
     }
 
     const rect = getVideoContentRect(video, host);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const dx = Math.round(rect.x * dpr);
+    const dy = Math.round(rect.y * dpr);
+    const dw = Math.max(1, Math.round(rect.width * dpr));
+    const dh = Math.max(1, Math.round(rect.height * dpr));
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, cssW, cssH);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.fillRect(0, 0, bw, bh);
     if (rect.width > 0 && rect.height > 0) {
-      ctx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
+      drawContainSharp(ctx, video, dx, dy, dw, dh, vw, vh, mipA, mipB);
     }
     scheduleNext();
   }

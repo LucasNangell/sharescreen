@@ -109,7 +109,11 @@ assert(
 );
 assert(
   shouldPresentScaled(1920, 1080, 1920, 1080, 1.5) === false,
-  'DPR alto em 1:1 CSS ainda nao e downscale da origem'
+  '1:1 CSS nao ativa o scaler mesmo com DPR alto'
+);
+assert(
+  shouldPresentScaled(1920, 1080, 1280, 720, 1.5) === true,
+  'HiDPI 1280 CSS de video 1920 ativa o scaler (ignora dpr)'
 );
 assert(
   shouldPresentScaled(1920, 1080, 900, 500, 2) === true,
