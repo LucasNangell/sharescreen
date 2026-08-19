@@ -66,7 +66,7 @@ export function mergeRoomClientEntry(a, b) {
   const primary = roomClientEntryScore(a) >= roomClientEntryScore(b) ? a : b;
   const secondary = primary === a ? b : a;
   const producerIds = mergeProducerIds(a.producerIds, b.producerIds);
-  return {
+  const merged = {
     ...secondary,
     ...primary,
     producerIds,
@@ -74,6 +74,13 @@ export function mergeRoomClientEntry(a, b) {
     permissions: { ...(secondary.permissions || {}), ...(primary.permissions || {}) },
     ...audioFlagsFromProducerIds(producerIds)
   };
+  if (typeof b.isCoHost === 'boolean') {
+    merged.isCoHost = b.isCoHost;
+  }
+  if (b.permissions && typeof b.permissions.isCoHost === 'boolean') {
+    merged.permissions = { ...(merged.permissions || {}), isCoHost: b.permissions.isCoHost };
+  }
+  return merged;
 }
 
 /** Une listas de participantes por id sem duplicar entradas. */

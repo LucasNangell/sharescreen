@@ -4884,7 +4884,11 @@ function openContextMenu(e, client) {
 
   if (cohostBtn) {
     cohostBtn.hidden = isHostCard;
-    if (!isHostCard) cohostBtn.classList.toggle('is-active', isCoHost);
+    if (!isHostCard) {
+      cohostBtn.classList.toggle('is-active', isCoHost);
+      const textEl = cohostBtn.querySelector('.ctx-text');
+      if (textEl) textEl.textContent = isCoHost ? 'Remover co-host' : 'Tornar co-host';
+    }
   }
   if (trocaTelasBtn) {
     trocaTelasBtn.hidden = isHostCard;
@@ -4920,10 +4924,32 @@ function closeContextMenu() {
   activeContextClient = null;
 }
 
+function applyLocalCoHostFlag(peerId, ativo) {
+  const id = String(peerId);
+  const flag = !!ativo;
+  estado = {
+    ...estado,
+    clients: (estado.clients || []).map((c) =>
+      String(c.id) === id
+        ? { ...c, isCoHost: flag, permissions: { ...(c.permissions || {}), isCoHost: flag } }
+        : c
+    )
+  };
+  if (estado.selecionado && String(estado.selecionado.id) === id) {
+    estado.selecionado = {
+      ...estado.selecionado,
+      isCoHost: flag,
+      permissions: { ...(estado.selecionado.permissions || {}), isCoHost: flag }
+    };
+  }
+  renderLista();
+}
+
 $('ctx-cohost')?.addEventListener('click', () => {
   if (!activeContextClient) return;
   const targetState = !activeContextClient.isCoHost;
   signaling.send('definirCoHost', { peerId: activeContextClient.id, ativo: targetState });
+  applyLocalCoHostFlag(activeContextClient.id, targetState);
   closeContextMenu();
 });
 

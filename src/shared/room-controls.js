@@ -403,7 +403,11 @@ export function createRoomControls(options = {}) {
     const trocaTelasBtn = $id('ctx-troca-telas');
     if (cohostBtn) {
       cohostBtn.hidden = isHostCard || !caps.canManageCoHosts;
-      if (!cohostBtn.hidden) cohostBtn.classList.toggle('is-active', isCoHost);
+      if (!cohostBtn.hidden) {
+        cohostBtn.classList.toggle('is-active', isCoHost);
+        const textEl = cohostBtn.querySelector('.ctx-text');
+        if (textEl) textEl.textContent = isCoHost ? 'Remover co-host' : 'Tornar co-host';
+      }
     }
     if (trocaTelasBtn) {
       trocaTelasBtn.hidden = isHostCard;
@@ -699,6 +703,29 @@ export function createRoomControls(options = {}) {
       : `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
   }
 
+  function applyLocalCoHostFlag(peerId, ativo) {
+    const id = String(peerId);
+    const flag = !!ativo;
+    const current = readEstado();
+    const next = {
+      ...current,
+      clients: (current.clients || []).map((c) =>
+        String(c.id) === id
+          ? { ...c, isCoHost: flag, permissions: { ...(c.permissions || {}), isCoHost: flag } }
+          : c
+      )
+    };
+    if (next.selecionado && String(next.selecionado.id) === id) {
+      next.selecionado = {
+        ...next.selecionado,
+        isCoHost: flag,
+        permissions: { ...(next.selecionado.permissions || {}), isCoHost: flag }
+      };
+    }
+    writeEstado(next);
+    renderLista();
+  }
+
   function bindEvents() {
     if (bound) return;
     bound = true;
@@ -726,10 +753,12 @@ export function createRoomControls(options = {}) {
     });
     on($id('ctx-cohost'), 'click', () => {
       if (!activeContextClient || !caps.canManageCoHosts) return;
+      const targetState = !activeContextClient.isCoHost;
       signaling()?.send('definirCoHost', {
         peerId: activeContextClient.id,
-        ativo: !activeContextClient.isCoHost
+        ativo: targetState
       });
+      applyLocalCoHostFlag(activeContextClient.id, targetState);
       closeContextMenu();
     });
     on($id('ctx-troca-telas'), 'click', () => {

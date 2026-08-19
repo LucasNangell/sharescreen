@@ -89,6 +89,43 @@ const fromPartial = resolveRoomClients({
 const additive = reconcileRoomClients(existing, fromPartial, { allowRemovals: false });
 assert(additive.some((p) => p.id === 'a') && additive.some((p) => p.id === 'b'), 'snapshot parcial nao apaga o restante da lista');
 
+const promoted = mergeRoomClientEntry(
+  {
+    id: 'a',
+    displayName: 'Alice',
+    isCoHost: false,
+    hasVideo: true,
+    producerIds: { video: 'v-a', microphone: 'm-a' }
+  },
+  {
+    id: 'a',
+    displayName: 'Alice',
+    isCoHost: true,
+    permissions: { isCoHost: true },
+    hasVideo: true,
+    producerIds: { video: 'v-a' }
+  }
+);
+assert(promoted.isCoHost === true, 'snapshot incoming isCoHost vence score local');
+assert(promoted.permissions?.isCoHost === true, 'permissions.isCoHost incoming vence merge');
+
+const demoted = mergeRoomClientEntry(
+  {
+    id: 'a',
+    isCoHost: true,
+    hasVideo: true,
+    producerIds: { video: 'v-a', microphone: 'm-a' }
+  },
+  {
+    id: 'a',
+    isCoHost: false,
+    permissions: { isCoHost: false },
+    hasVideo: true,
+    producerIds: { video: 'v-a' }
+  }
+);
+assert(demoted.isCoHost === false, 'snapshot incoming isCoHost false revoga co-host');
+
 if (failed) {
   console.error(`\n${failed} falha(s)`);
   process.exit(1);
