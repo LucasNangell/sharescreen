@@ -651,7 +651,11 @@ const hostRoomControls = createRoomControls({
     canCommand: () => canHostCommand(),
     notify: showToast,
     setStatus,
-    onError: (e, ctx) => errors.handle(e, ctx)
+    onError: (e, ctx) => errors.handle(e, ctx),
+    onMuteChanged: () => {
+      applyClientAudioMute();
+      renderLista();
+    }
   }
 });
 const errors = new ErrorManager({
@@ -2278,9 +2282,9 @@ async function applyRoomSnapshot(snapshot, { includeMedia = true } = {}) {
     applyDominantSpeakerFromRoom(snapshot.dominantSpeakerPeerId);
   }
 
-  if (Array.isArray(parsed.mutedPeerIds)) {
+  if (Array.isArray(snapshot.mutedPeerIds)) {
     mutedClients.clear();
-    for (const id of parsed.mutedPeerIds) {
+    for (const id of snapshot.mutedPeerIds) {
       mutedClients.add(String(id));
     }
     syncOwnMicMuteFromRoom();

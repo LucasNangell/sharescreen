@@ -8,7 +8,8 @@ import {
   resolveRoomClients,
   reconcileRoomClients,
   hasAuthoritativeRoomRoster,
-  enrichRoomSourcesState
+  enrichRoomSourcesState,
+  applyMutedPeerIdsFromSnapshot
 } from './transmission.js';
 import { formatSourceDisplayName, buildDisplaySourceCard } from './source-cards.js';
 import { sortDisplaySources, peerHasPublishedAudio } from './display-sources.js';
@@ -19,6 +20,7 @@ import {
   normalizeMicrophoneFilterPrefs
 } from './mic-dsp.js';
 import { fetchClientAudioFilterPreset } from './audio-filter-presets.js';
+import { startTrackLevelMeter } from './audio-level-meter.js';
 
 const MUTE_ICON_ON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c0 3.28-2.64 5.91-5.91 5.91S6.09 14.28 6.09 11H4.07c0 3.95 2.87 7.23 6.65 7.88v2.02h2.56v-2.02c3.78-.65 6.65-3.93 6.65-7.88h-2.02z"/></svg>';
 const MUTE_ICON_OFF = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
@@ -61,6 +63,7 @@ export function createRoomControls(options = {}) {
   let sharedRoomMode = false;
   let dominantSpeakerPeerId = null;
   let playbackMuted = false;
+  let localVuStop = null;
   const unsubscribers = [];
 
   function readEstado() {
@@ -145,8 +148,14 @@ export function createRoomControls(options = {}) {
   }
 
   function toggleClientMute(peerId) {
-    const muted = !mutedClients.has(peerId);
-    signaling()?.send('definirClientMute', { peerId, muted });
+    const id = String(peerId || '');
+    if (!id) return;
+    const muted = !mutedClients.has(id);
+    if (muted) mutedClients.add(id);
+    else mutedClients.delete(id);
+    signaling()?.send('definirClientMute', { peerId: id, muted });
+    if (mounted) renderLista();
+    hooks.onMuteChanged?.(mutedClients);
   }
 
   async function toggleDisplayControl(peerId, ativo) {
@@ -240,7 +249,7 @@ export function createRoomControls(options = {}) {
       ownerDocument,
       decorateBody: (body, source) => {
         if (peerHasPublishedAudio(source)) {
-          const isMuted = mutedClients.has(source.id);
+          const isMuted = mutedClients.has(String(source.id));
           const muteBtn = ownerDocument.createElement('button');
           muteBtn.type = 'button';
           muteBtn.className = `source-mute-btn${isMuted ? ' is-muted' : ''}`;
@@ -324,26 +333,69 @@ export function createRoomControls(options = {}) {
 
   function updateCardVuMeters(levels) {
     const current = readEstado();
+    const seen = new Set();
+    const selfId = selfPeerId() ? String(selfPeerId()) : '';
     let selectedLevel = 0;
     let selectedActive = false;
     for (const [peerId, info] of levels || []) {
       const id = String(peerId);
+      seen.add(id);
       const level = info?.level || 0;
       const active = !!info?.active || level > 0.02;
+      const speaking = !!info?.speaking;
       if (current.selecionado && String(current.selecionado.id) === id) {
         selectedLevel = level;
         selectedActive = active;
       }
-      const list = cardVuElements.get(id) || [];
-      const pct = Math.min(100, Math.max(0, Math.round(level * 120)));
-      for (const vu of list) {
+      const list = cardVuElements.get(id) || cardVuElements.get(peerId) || [];
+      const pct = Math.min(100, Math.max(2, Math.round(level * 120)));
+      const arr = Array.isArray(list) ? list : [list];
+      for (const vu of arr) {
         if (vu.fill) vu.fill.style.height = `${pct}%`;
         vu.column?.classList.toggle('is-active', active);
+        vu.column?.classList.toggle('is-speaking', speaking);
+      }
+    }
+    for (const [peerId, refs] of cardVuElements) {
+      const id = String(peerId);
+      if (seen.has(id) || (selfId && id === selfId)) continue;
+      const arr = Array.isArray(refs) ? refs : [refs];
+      for (const vu of arr) {
+        if (vu.fill) vu.fill.style.height = '0%';
+        vu.column?.classList.toggle('is-active', false);
+        vu.column?.classList.toggle('is-speaking', false);
       }
     }
     if (current.selecionado) updateTransmissionSectionVu(selectedLevel, selectedActive);
     else updateTransmissionSectionVu(0, false);
     updateDominantSpeakerIndicators();
+  }
+
+  function stopLocalVu() {
+    localVuStop?.();
+    localVuStop = null;
+  }
+
+  function syncLocalVu() {
+    stopLocalVu();
+    const id = selfPeerId() ? String(selfPeerId()) : '';
+    if (!id || !mounted) return;
+    const list = cardVuElements.get(id);
+    if (!list || !list.length) return;
+    const track = hooks.getLocalAudioTrack?.();
+    if (!track || track.readyState !== 'live') return;
+    localVuStop = startTrackLevelMeter(track, {
+      onLevel: (level) => {
+        const currentList = cardVuElements.get(id);
+        if (!currentList) return;
+        const pct = Math.min(100, Math.max(2, Math.round(level * 120)));
+        const arr = Array.isArray(currentList) ? currentList : [currentList];
+        for (const vu of arr) {
+          if (vu.fill) vu.fill.style.height = `${pct}%`;
+          vu.column?.classList.toggle('is-active', level > 0.02);
+        }
+      }
+    });
   }
 
   function renderLista() {
@@ -365,6 +417,7 @@ export function createRoomControls(options = {}) {
         hasSelection: false,
         isPaused: !!current.selecionado?.pausado
       });
+      stopLocalVu();
       return;
     }
 
@@ -384,6 +437,7 @@ export function createRoomControls(options = {}) {
       isPaused: !!current.selecionado?.pausado
     });
     hooks.afterRenderLista?.(current);
+    syncLocalVu();
   }
 
   function closeContextMenu() {
@@ -654,10 +708,7 @@ export function createRoomControls(options = {}) {
       )
     );
 
-    if (parsed.mutedPeerIds) {
-      mutedClients.clear();
-      for (const id of parsed.mutedPeerIds) mutedClients.add(String(id));
-    }
+    applyMutedPeerIdsFromSnapshot(snapshot, mutedClients);
     if (snapshot.meetBridgeLiveMode !== undefined) {
       meetBridgeLiveMode = !!snapshot.meetBridgeLiveMode;
       syncMeetBridgeUi();
@@ -688,6 +739,33 @@ export function createRoomControls(options = {}) {
   function setMutedFromRoom(ids) {
     mutedClients.clear();
     for (const id of ids || []) mutedClients.add(String(id));
+    if (mounted) renderLista();
+    hooks.onMuteChanged?.(mutedClients);
+  }
+
+  function applyAudioSources(sources = []) {
+    const current = readEstado();
+    const cleared = (current.clients || []).map((c) => ({
+      ...c,
+      producerIds: {
+        ...(c.producerIds || {}),
+        microphone: null,
+        system: null,
+        mixed: null,
+        audio: null
+      },
+      hasMicrophone: false,
+      hasSystemAudio: false,
+      hasAudio: false
+    }));
+    const nextClients = resolveRoomClients({
+      clients: cleared,
+      audioSources: sources
+    });
+    writeEstado({
+      ...current,
+      clients: reconcileRoomClients(cleared, nextClients, { allowRemovals: false })
+    });
     if (mounted) renderLista();
   }
 
@@ -847,6 +925,7 @@ export function createRoomControls(options = {}) {
 
   function unmount() {
     mounted = false;
+    stopLocalVu();
     unbindEvents();
     closeContextMenu();
     closeAudioFiltersModal();
@@ -881,6 +960,7 @@ export function createRoomControls(options = {}) {
     applyRoomSnapshot,
     applyLegacyEstado,
     applyTransmissionFlags,
+    applyAudioSources,
     setMutedFromRoom,
     renderLista,
     selectPeer,

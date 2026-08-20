@@ -6,7 +6,8 @@ import {
   mergeRoomClientEntry,
   mergeRoomClients,
   reconcileRoomClients,
-  resolveRoomClients
+  resolveRoomClients,
+  applyMutedPeerIdsFromSnapshot
 } from '../src/shared/transmission.js';
 
 let failed = 0;
@@ -125,6 +126,27 @@ const demoted = mergeRoomClientEntry(
   }
 );
 assert(demoted.isCoHost === false, 'snapshot incoming isCoHost false revoga co-host');
+
+const withMicFromSources = resolveRoomClients({
+  clients: [{ id: 'a', displayName: 'Alice' }],
+  audioSources: [{ peerId: 'a', producerId: 'm-a', source: 'microphone', name: 'Alice' }]
+});
+assert(
+  withMicFromSources.find((p) => p.id === 'a')?.hasMicrophone === true,
+  'audioSources marca hasMicrophone no roster'
+);
+assert(
+  withMicFromSources.find((p) => p.id === 'a')?.producerIds?.microphone === 'm-a',
+  'audioSources preenche producerIds.microphone'
+);
+
+const muted = new Set(['keep-me']);
+applyMutedPeerIdsFromSnapshot({ clients: [] }, muted);
+assert(muted.has('keep-me'), 'snapshot sem mutedPeerIds nao esvazia o set');
+applyMutedPeerIdsFromSnapshot({ mutedPeerIds: ['alice'] }, muted);
+assert(muted.has('alice') && !muted.has('keep-me'), 'snapshot com mutedPeerIds substitui o set');
+applyMutedPeerIdsFromSnapshot({ mutedPeerIds: [] }, muted);
+assert(muted.size === 0, 'snapshot com lista vazia limpa mutes');
 
 if (failed) {
   console.error(`\n${failed} falha(s)`);

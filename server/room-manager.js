@@ -895,6 +895,7 @@ export class RoomManager {
       meetBridgeLiveMode: this.meetBridgeLiveMode,
       sharedRoomMode: this.sharedRoomMode,
       dominantSpeakerPeerId: this.dominantSpeakerPeerId,
+      mutedPeerIds: [...this.mutedPeerIds],
       rtpCapabilities: getRtpCapabilities()
     };
   }

@@ -175,6 +175,23 @@ export function resolveRoomClients(snapshot = {}, parsed = null) {
     }
   }
 
+  const audioSources = p.audioSources || snapshot.audioSources || snapshot.audioProducers || [];
+  for (const src of audioSources) {
+    const id = src?.peerId || src?.id;
+    if (!id) continue;
+    const key = String(id);
+    const slot = src.source || 'microphone';
+    const existing = byId.get(key);
+    const producerIds = { ...(existing?.producerIds || {}) };
+    if (src.producerId) producerIds[slot] = src.producerId;
+    const flags = audioFlagsFromProducerIds(producerIds);
+    addClient({
+      ...(existing || { id: key, displayName: src.name || 'Fonte' }),
+      producerIds,
+      ...flags
+    });
+  }
+
   const tx = p.transmission || normalizeTransmission(snapshot.transmission || {});
   if (hasActiveVideo(tx) && tx.selectedPeerId) {
     const key = String(tx.selectedPeerId);
@@ -193,6 +210,14 @@ export function resolveRoomClients(snapshot = {}, parsed = null) {
   }
 
   return [...byId.values()];
+}
+
+/** Aplica mutedPeerIds só quando o snapshot traz o campo (nao defaultar para []). */
+export function applyMutedPeerIdsFromSnapshot(snapshot, mutedSet) {
+  if (!snapshot || !Array.isArray(snapshot.mutedPeerIds) || !mutedSet) return mutedSet;
+  mutedSet.clear();
+  for (const id of snapshot.mutedPeerIds) mutedSet.add(String(id));
+  return mutedSet;
 }
 
 /** Extrai transmissão e fontes de áudio de roomState, estadoSala ou payload legado. */

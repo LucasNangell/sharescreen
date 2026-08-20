@@ -309,7 +309,12 @@ const roomControls = createRoomControls({
     },
     onSnapshotApplied: (snapshot, parsed) => {
       syncCoHostFromSnapshot(snapshot, parsed);
-    }
+    },
+    onMuteChanged: () => {
+      applyClientAudioMute();
+      syncOwnMicMuteFromRoom();
+    },
+    getLocalAudioTrack: () => media?.getLocalAudioTrack?.() || null
   }
 });
 
@@ -317,6 +322,7 @@ function showCoHostSidebar() {
   const sidebar = $('sidebar');
   if (sidebar) sidebar.hidden = false;
   els.clientMain?.classList.add('sidebar-open');
+  ensureClientAudioMonitor();
   roomControls.mount();
 }
 
@@ -333,7 +339,6 @@ function applyCoHostState(next, { notifyUser = false } = {}) {
   const sidebar = $('sidebar');
   if (desired === isCoHost) {
     if (desired && sidebar?.hidden) showCoHostSidebar();
-    else if (desired) roomControls.rebind();
     return;
   }
   isCoHost = desired;
@@ -2102,11 +2107,7 @@ async function applyRoomSnapshot(snapshot, { force = false } = {}) {
     await applySharedRoomMode(snapshot.sharedRoomMode);
   }
 
-  if (parsed.mutedPeerIds) {
-    mutedClients.clear();
-    for (const id of parsed.mutedPeerIds) {
-      mutedClients.add(String(id));
-    }
+  if (Array.isArray(snapshot.mutedPeerIds)) {
     syncOwnMicMuteFromRoom();
     applyClientAudioMute();
   }
@@ -2672,6 +2673,7 @@ async function handleServerMessage(msg) {
     fontesAudioDebounceTimer = setTimeout(() => {
       fontesAudioDebounceTimer = null;
       syncClientAudioMonitor(sources).catch((e) => errors.handle(e, 'audio-sync'));
+      if (isCoHost) roomControls.applyAudioSources(sources);
     }, 80);
     return;
   }
