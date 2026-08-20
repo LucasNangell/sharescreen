@@ -71,7 +71,7 @@ const config = {
     hostMicPeaking: true,
     sharedRoomMode: false,
     activeSpeakerEnabled: true,
-    mlNoiseSuppressionDefault: false
+    mlNoiseSuppressionDefault: true
   },
 
   certDir: 'certs',

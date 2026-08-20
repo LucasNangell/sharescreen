@@ -16,6 +16,8 @@
     "test:quality": "node scripts/quality-manager-smoke.js",
     "test:audio-policy": "node scripts/audio-policy-smoke.js",
     "test:audio-filters": "node scripts/audio-filter-presets-smoke.js",
+    "test:mic-dsp": "node scripts/mic-dsp-prefs-smoke.js",
+    "test:click-guard": "node scripts/click-guard-smoke.js",
     "test:cohost": "node scripts/cohost-smoke.js",
     "test:roster": "node scripts/room-clients-smoke.js",
     "cert": "node scripts/generate-cert.js",

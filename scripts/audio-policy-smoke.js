@@ -228,9 +228,11 @@ const roomPreset = normalizeMicrophoneFilterPrefs({
   nearFieldThreshold: 0.5,
   micSensitivity: false
 });
-assert(roomPreset.nearFieldGate === 'soft', 'preset sala nearFieldGate soft');
-assert(roomPreset.micSensitivity === false, 'preset sala micSensitivity off');
+assert(roomPreset.roomIsolation === 'soft', 'preset sala roomIsolation soft');
+assert(roomPreset.nearFieldGate === 'soft', 'preset sala nearFieldGate soft (compat)');
+assert(roomPreset.noiseReduction !== 'off', 'preset sala noiseReduction ativo');
 assert(roomPreset.nearFieldThreshold === 0.5, 'preset sala nearFieldThreshold');
+assert(roomPreset.micSensitivity === false, 'preset sala micSensitivity off (compat)');
 
 assert(evaluateMicPublishHealth({ producerLive: false }) === 'republish', 'health: producer ausente republica');
 assert(
@@ -339,19 +341,20 @@ const hostFromApi = resolveHostMicFilterPrefs({
   cachedPrefs: { gain: 0.5 },
   legacyGain: 1.9
 });
-assert(hostFromApi.gain === 2, 'host prefs: API vence cache e ganho legado');
+assert(Math.abs(hostFromApi.gain - 2) < 0.02, 'host prefs: API vence cache e ganho legado');
 assert(hostFromApi.noiseSuppressionMl === true, 'host prefs: API preserva RNNoise');
 const hostFromCache = resolveHostMicFilterPrefs({
   cachedPrefs: { bass: 4, compressor: false },
   legacyGain: 1.9
 });
 assert(hostFromCache.bass === 4, 'host prefs: cache quando API vazia');
-assert(hostFromCache.gain === 1, 'host prefs: cache nao herda ganho legado');
+assert(Math.abs(hostFromCache.gain - 1) < 0.02, 'host prefs: cache nao herda ganho legado');
 const hostFromLegacy = resolveHostMicFilterPrefs({ legacyGain: 1.8 });
-assert(hostFromLegacy.gain === 1.8, 'host prefs: ganho legado entra nos defaults');
-assert(hostFromLegacy.compressor === true, 'host prefs: legado mantem compressor padrao do host');
+assert(Math.abs(hostFromLegacy.gain - 1.8) < 0.02, 'host prefs: ganho legado entra nos defaults');
+assert(hostFromLegacy.compressor === 'light', 'host prefs: legado mantem compressor padrao do host');
 const hostDefaults = resolveHostMicFilterPrefs({});
-assert(hostDefaults.peaking === HOST_MIC_PUBLISH_DEFAULTS.peaking, 'host prefs: defaults sem fonte');
+assert(hostDefaults.presence === HOST_MIC_PUBLISH_DEFAULTS.presence, 'host prefs: defaults sem fonte');
+assert(hostDefaults.peaking === true, 'host prefs: peaking compat espelha presence');
 
 const deviceChoices = buildMicrophoneDeviceChoices([{ deviceId: 'dev-1', label: '  USB Mic  ' }]);
 assert(deviceChoices[0].deviceId === '' && deviceChoices[0].label.includes('Microfone'), 'lista de mics sempre inclui padrao');

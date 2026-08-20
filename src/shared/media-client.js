@@ -25,11 +25,13 @@ import {
   CLIENT_MIC_PUBLISH_DEFAULTS,
   normalizeMicrophoneFilterPrefs,
   hasActiveMicrophoneFilter,
+  usesMlNoiseSuppression,
   closeMicrophoneFilterGraph,
   createMicrophoneFilterGraph,
   microphoneFilterPrefsSignature,
   resumeMicrophoneFilterGraph,
-  micGraphIsRunning
+  micGraphIsRunning,
+  gainToVolumeDb
 } from './mic-dsp.js';
 
 /** Acima deste ganho o portão é considerado aberto (o modo `soft` atenua para 0.16). */
@@ -87,6 +89,7 @@ export class MediaClient {
     this._dominantSpeakerPeerId = null;
     this._dominantEnableTimer = null;
     this._micCaptureAgcOff = null;
+    this._micCaptureNsOff = null;
     this._micCaptureDeviceId = '';
     this._micPublishDegraded = null;
     this._lastMicPublishHealth = 'ok';
@@ -352,12 +355,22 @@ export class MediaClient {
     if (!this.applyMicPublishChain) return user;
     const q = this.videoQuality || {};
     const defaults = this.micPublishDefaults || CLIENT_MIC_PUBLISH_DEFAULTS;
+    const defaultVolume =
+      q.hostMicPublishGain != null
+        ? gainToVolumeDb(Number(q.hostMicPublishGain))
+        : defaults.volume;
+    const defaultCompressor =
+      q.hostMicCompressor === false
+        ? 'off'
+        : defaults.compressor === 'off'
+          ? 'light'
+          : defaults.compressor;
     return normalizeMicrophoneFilterPrefs({
       ...defaults,
-      gain: Number(q.hostMicPublishGain ?? defaults.gain),
-      compressor: q.hostMicCompressor !== false,
-      peaking: q.hostMicPeaking !== false,
-      peakingGain: 2,
+      volume: defaultVolume,
+      compressor: defaultCompressor,
+      presence: q.hostMicPeaking !== false ? (defaults.presence ?? true) : false,
+      presenceGain: 2,
       ...user
     });
   }
@@ -610,6 +623,7 @@ export class MediaClient {
         this._micTrack = null;
       }
       this._micCaptureAgcOff = null;
+      this._micCaptureNsOff = null;
       this._micCaptureDeviceId = '';
       this._stopLocalMicTracks();
     }
@@ -655,13 +669,17 @@ export class MediaClient {
     return true;
   }
 
-  _canReuseMicTrack(track, { deviceId = '', agcOff = false } = {}) {
+  _canReuseMicTrack(track, { deviceId = '', agcOff = false, nsOff = false } = {}) {
     if (!track || track.readyState !== 'live') return false;
     const settings = track.getSettings?.() || {};
     const knownAgcOff = this._micCaptureAgcOff;
     const trackAgcOff =
       knownAgcOff != null ? knownAgcOff : settings.autoGainControl === false;
     if (!!trackAgcOff !== !!agcOff) return false;
+    const knownNsOff = this._micCaptureNsOff;
+    const trackNsOff =
+      knownNsOff != null ? knownNsOff : settings.noiseSuppression === false;
+    if (!!trackNsOff !== !!nsOff) return false;
     const wantId = deviceId || '';
     const activeId = settings.deviceId || '';
     if (wantId && activeId && wantId !== activeId) return false;
@@ -828,12 +846,20 @@ export class MediaClient {
 
     const publishPrefs = this._resolvePublishMicFilterPrefs();
     const needsAgcOff = this.applyMicPublishChain && hasActiveMicrophoneFilter(publishPrefs);
-    const micCaptureOptions = needsAgcOff ? { disableAutoGainControl: true } : {};
+    const needsNsOff = this.applyMicPublishChain && usesMlNoiseSuppression(publishPrefs);
+    const micCaptureOptions = {
+      ...(needsAgcOff ? { disableAutoGainControl: true } : {}),
+      ...(needsNsOff ? { disableNoiseSuppression: true } : {})
+    };
     const wantDeviceId = capturePrefs.microphoneDeviceId || '';
 
     const candidates = [capturePrefs.prefetchedMicTrack, this._micTrack].filter(Boolean);
     let track = candidates.find((candidate) =>
-      this._canReuseMicTrack(candidate, { deviceId: wantDeviceId, agcOff: needsAgcOff })
+      this._canReuseMicTrack(candidate, {
+        deviceId: wantDeviceId,
+        agcOff: needsAgcOff,
+        nsOff: needsNsOff
+      })
     ) || null;
 
     let previousToStop = null;
@@ -841,6 +867,7 @@ export class MediaClient {
       previousToStop = this._micTrack;
       track = await acquireMicrophoneTrack(wantDeviceId, this.onLog, micCaptureOptions);
       this._micCaptureAgcOff = needsAgcOff;
+      this._micCaptureNsOff = needsNsOff;
     }
     this._micCaptureDeviceId = wantDeviceId;
 

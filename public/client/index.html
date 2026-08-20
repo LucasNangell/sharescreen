@@ -381,8 +381,15 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
   <script>(function(){
-var BUILD_ID="2026-08-19T19-57-27-51fur8";
+var BUILD_ID="2026-08-20T17-28-06-on03pt";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -430,10 +437,11 @@ try{
       }
     })();
   </script>
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-19T19-57-27-51fur8" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-08-19T19-57-27-51fur8" />
-  <link rel="stylesheet" href="style.css?v=2026-08-19T19-57-27-51fur8" />
-  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-19T19-57-27-51fur8" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-08-20T17-28-06-on03pt" />
+  <link rel="stylesheet" href="/shared/audio-filters.css?v=2026-08-20T17-28-06-on03pt" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-08-20T17-28-06-on03pt" />
+  <link rel="stylesheet" href="style.css?v=2026-08-20T17-28-06-on03pt" />
+  <link rel="stylesheet" href="/shared/host-style.css?v=2026-08-20T17-28-06-on03pt" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body class="app-client">
@@ -793,164 +801,9 @@ try{
     </button>
   </div>
 
-  <div id="audio-filters-modal" class="modal-backdrop" hidden>
-    <div class="modal-panel audio-filters-modal-panel" role="dialog" aria-labelledby="audio-filters-modal-title" style="max-width: 480px; width: 100%;">
-      <h1 id="audio-filters-modal-title">Configurações de Filtros de Áudio</h1>
-      <p class="hint-text">Participante: <strong id="audio-filters-client-name">—</strong></p>
-      <p id="audio-filters-note" class="hint-text" style="color: var(--color-text-muted); font-size: 0.8rem; margin-top: 2px;">
-        Estes filtros são aplicados na origem do participante. Todos os participantes ouvem o resultado.
-      </p>
-
-      <div style="display: flex; flex-direction: column; gap: var(--space-md); margin-top: var(--space-md);">
-        <!-- Controles de Tom -->
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Controles de Tom</legend>
-          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-                <span>Ganho (Volume)</span>
-                <strong id="audio-gain-val">1.0x</strong>
-              </div>
-              <input id="audio-gain" type="range" min="0.0" max="3.0" step="0.1" value="1.0" style="width: 100%; cursor: pointer;" />
-            </div>
-            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-                <span>Graves (Bass)</span>
-                <strong id="audio-bass-val">0 dB</strong>
-              </div>
-              <input id="audio-bass" type="range" min="-12" max="12" step="1" value="0" style="width: 100%; cursor: pointer;" />
-            </div>
-            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-                <span>Agudos (Treble)</span>
-                <strong id="audio-treble-val">0 dB</strong>
-              </div>
-              <input id="audio-treble" type="range" min="-12" max="12" step="1" value="0" style="width: 100%; cursor: pointer;" />
-            </div>
-          </div>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Filtro Passa-Alta (High-Pass)</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-            <input type="checkbox" id="audio-hp-enabled" />
-            <label for="audio-hp-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar filtro (eliminar ruídos graves/hum)</label>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-              <span>Frequência de corte</span>
-              <strong id="audio-hp-freq-val">80 Hz</strong>
-            </div>
-            <input id="audio-hp-frequency" type="range" min="50" max="300" step="5" value="80" style="width: 100%; cursor: pointer;" />
-          </div>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Reforço de Presença (Peaking)</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-            <input type="checkbox" id="audio-peak-enabled" />
-            <label for="audio-peak-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar reforço (voz mais nítida/presença)</label>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-                <span>Frequência central</span>
-                <strong id="audio-peak-freq-val">3000 Hz</strong>
-              </div>
-              <input id="audio-peak-frequency" type="range" min="1000" max="5000" step="100" value="3000" style="width: 100%; cursor: pointer;" />
-            </div>
-            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-                <span>Ganho</span>
-                <strong id="audio-peak-gain-val">3 dB</strong>
-              </div>
-              <input id="audio-peak-gain" type="range" min="0" max="12" step="1" value="3" style="width: 100%; cursor: pointer;" />
-            </div>
-          </div>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Compressor de Dinâmica</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm);">
-            <input type="checkbox" id="audio-comp-enabled" />
-            <label for="audio-comp-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar compressor (normalizar volume da fala)</label>
-          </div>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Captura só fala próxima (near-field)</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-            <input type="checkbox" id="audio-nearfield-enabled" />
-            <label for="audio-nearfield-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar gate near-field (reduz vozes distantes no seu mic)</label>
-          </div>
-          <p class="hint-text" style="color: var(--color-text-muted); font-size: 0.75rem; margin: 0 0 var(--space-sm) 0;">
-            Reduz vozes de outras pessoas na sala captadas pelo microfone deste participante. Use junto com Modo sala compartilhada.
-          </p>
-          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-              <span>Restrição (maior = só fala bem próxima)</span>
-              <strong id="audio-nearfield-threshold-val">0.5</strong>
-            </div>
-            <input id="audio-nearfield-threshold" type="range" min="0.35" max="0.75" step="0.05" value="0.5" style="width: 100%; cursor: pointer;" />
-          </div>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Processamento inteligente (publicação)</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-            <input type="checkbox" id="audio-speech-gate-enabled" />
-            <label for="audio-speech-gate-enabled" style="cursor: pointer; font-size: 0.9rem;">Portão de fala suave (VAD — evita cortes abruptos)</label>
-          </div>
-          <div style="display: flex; align-items: center; gap: var(--space-sm);">
-            <input type="checkbox" id="audio-ml-ns-enabled" />
-            <label for="audio-ml-ns-enabled" style="cursor: pointer; font-size: 0.9rem;">Supressão de ruído ML (RNNoise)</label>
-          </div>
-          <p class="hint-text" style="color: var(--color-text-muted); font-size: 0.75rem; margin: var(--space-sm) 0 0 0;">
-            Recomendado para o preset Sala compartilhada. Sensibilidade/portão RMS abaixo são legados.
-          </p>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02); opacity: 0.92;">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text-muted);">Sensibilidade do Microfone (legado)</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-            <input type="checkbox" id="audio-sensitivity-enabled" />
-            <label for="audio-sensitivity-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar filtro de sensibilidade (RMS por volume)</label>
-          </div>
-          <p class="hint-text" style="color: var(--color-text-muted); font-size: 0.75rem; margin: 0 0 var(--space-sm) 0;">
-            Legado: usa só volume (RMS), não distingue reverb. Para salas compartilhadas, prefira near-field acima.
-          </p>
-          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-              <span>Proximidade (1 = só fala próxima, 10 = ambiente amplo)</span>
-              <strong id="audio-capture-distance-val">6/10</strong>
-            </div>
-            <input id="audio-capture-distance" type="range" min="1" max="10" step="1" value="6" style="width: 100%; cursor: pointer;" />
-          </div>
-        </fieldset>
-
-        <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-md); background: rgba(255,255,255,0.02);">
-          <legend style="padding: 0 var(--space-xs); font-weight: bold; font-size: 0.9rem; color: var(--color-text);">Portão de Ruído (Noise Gate)</legend>
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-            <input type="checkbox" id="audio-gate-enabled" />
-            <label for="audio-gate-enabled" style="cursor: pointer; font-size: 0.9rem;">Ativar portão (silenciar zumbidos quando calado)</label>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-muted);">
-              <span>Limiar (Threshold)</span>
-              <strong id="audio-gate-thresh-val">-45 dB</strong>
-            </div>
-            <input id="audio-gate-threshold" type="range" min="-70" max="-20" step="1" value="-45" style="width: 100%; cursor: pointer;" />
-          </div>
-        </fieldset>
-      </div>
-
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-lg);">
-        <button type="button" id="btn-audio-filters-reset" class="btn btn-ghost" style="color: var(--color-danger); border-color: var(--color-danger);">Resetar</button>
-        <div style="display: flex; gap: var(--space-sm);">
-          <button type="button" id="btn-audio-filters-cancel" class="btn btn-ghost">Cancelar</button>
-          <button type="button" id="btn-audio-filters-save" class="btn btn-primary">Salvar</button>
-        </div>
-      </div>
+    <div id="audio-filters-modal" class="modal-backdrop" hidden>
+    <div class="modal-panel afx-panel" role="dialog" aria-labelledby="audio-filters-modal-title"></div>
+  </div>
     </div>
   </div>
 
@@ -1001,7 +854,7 @@ try{
   </div>
 
   <footer id="status-bar" class="status-footer" hidden aria-hidden="true">Iniciando…</footer>
-  <script src="app.bundle.js?v=2026-08-19T19-57-27-51fur8"></script>
+  <script src="app.bundle.js?v=2026-08-20T17-28-06-on03pt"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/meet/sw.js', { scope: '/meet/' }).catch(function () {});

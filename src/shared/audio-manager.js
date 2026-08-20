@@ -40,10 +40,13 @@ export function installAudioUnlock(onUnlock) {
   document.addEventListener('keydown', unlock, { capture: true });
 }
 
-export function buildMicrophoneConstraints(deviceId = '', { disableAutoGainControl = false } = {}) {
+export function buildMicrophoneConstraints(
+  deviceId = '',
+  { disableAutoGainControl = false, disableNoiseSuppression = false } = {}
+) {
   const audio = {
     echoCancellation: true,
-    noiseSuppression: true,
+    noiseSuppression: !disableNoiseSuppression,
     autoGainControl: !disableAutoGainControl,
     channelCount: 1
   };

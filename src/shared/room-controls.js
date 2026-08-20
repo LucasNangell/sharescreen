@@ -19,6 +19,7 @@ import {
   SHARED_ROOM_MIC_PRESET,
   normalizeMicrophoneFilterPrefs
 } from './mic-dsp.js';
+import { createAudioFiltersPanel } from './audio-filters-panel.js';
 import { fetchClientAudioFilterPreset } from './audio-filter-presets.js';
 import { startTrackLevelMeter } from './audio-level-meter.js';
 
@@ -59,6 +60,7 @@ export function createRoomControls(options = {}) {
   let activeContextClient = null;
   let activeAudioFiltersClient = null;
   let originalAudioFilterPrefs = null;
+  let audioFiltersPanel = null;
   let meetBridgeLiveMode = false;
   let sharedRoomMode = false;
   let dominantSpeakerPeerId = null;
@@ -479,84 +481,11 @@ export function createRoomControls(options = {}) {
   }
 
   function populateAudioFiltersUi(prefs) {
-    const setVal = (id, value, labelId, fmt) => {
-      const input = $id(id);
-      if (!input) return;
-      input.value = value;
-      const label = $id(labelId);
-      if (label) label.textContent = fmt(input.value);
-    };
-    setVal('audio-gain', prefs.gain !== undefined ? prefs.gain : 1.0, 'audio-gain-val', (v) => `${Number(v).toFixed(1)}x`);
-    setVal('audio-bass', prefs.bass !== undefined ? prefs.bass : 0, 'audio-bass-val', (v) => `${v} dB`);
-    setVal('audio-treble', prefs.treble !== undefined ? prefs.treble : 0, 'audio-treble-val', (v) => `${v} dB`);
-    const hpEnabled = $id('audio-hp-enabled');
-    if (hpEnabled) hpEnabled.checked = !!prefs.highpass;
-    const peakEnabled = $id('audio-peak-enabled');
-    if (peakEnabled) peakEnabled.checked = !!prefs.peaking;
-    const compEnabled = $id('audio-comp-enabled');
-    if (compEnabled) compEnabled.checked = !!prefs.compressor;
-    const gateEnabled = $id('audio-gate-enabled');
-    if (gateEnabled) gateEnabled.checked = !!prefs.noiseGate;
-    const sensitivityEnabled = $id('audio-sensitivity-enabled');
-    if (sensitivityEnabled) sensitivityEnabled.checked = !!prefs.micSensitivity;
-    const speechGateEnabled = $id('audio-speech-gate-enabled');
-    if (speechGateEnabled) {
-      speechGateEnabled.checked = prefs.speechGate === 'soft' || prefs.speechGate === 'hard';
-    }
-    const mlNsEnabled = $id('audio-ml-ns-enabled');
-    if (mlNsEnabled) mlNsEnabled.checked = !!prefs.noiseSuppressionMl;
-    const nearFieldEnabled = $id('audio-nearfield-enabled');
-    if (nearFieldEnabled) {
-      nearFieldEnabled.checked = prefs.nearFieldGate === 'soft' || prefs.nearFieldGate === 'strict';
-    }
-    setVal(
-      'audio-nearfield-threshold',
-      prefs.nearFieldThreshold !== undefined ? prefs.nearFieldThreshold : 0.5,
-      'audio-nearfield-threshold-val',
-      (v) => Number(v).toFixed(2)
-    );
-    setVal('audio-hp-frequency', prefs.highpassFreq || 80, 'audio-hp-freq-val', (v) => `${v} Hz`);
-    setVal('audio-peak-frequency', prefs.peakingFreq || 3000, 'audio-peak-freq-val', (v) => `${v} Hz`);
-    setVal(
-      'audio-peak-gain',
-      prefs.peakingGain !== undefined ? prefs.peakingGain : 3,
-      'audio-peak-gain-val',
-      (v) => `${v} dB`
-    );
-    setVal(
-      'audio-gate-threshold',
-      prefs.noiseGateThreshold !== undefined ? prefs.noiseGateThreshold : -45,
-      'audio-gate-thresh-val',
-      (v) => `${v} dB`
-    );
-    setVal(
-      'audio-capture-distance',
-      prefs.micCaptureDistance !== undefined ? prefs.micCaptureDistance : 6,
-      'audio-capture-distance-val',
-      (v) => `${v}/10`
-    );
+    audioFiltersPanel?.populate(prefs);
   }
 
   function readAudioFilterPrefsFromUi() {
-    return {
-      gain: Number($id('audio-gain')?.value !== undefined ? $id('audio-gain')?.value : 1.0),
-      bass: Number($id('audio-bass')?.value || 0),
-      treble: Number($id('audio-treble')?.value || 0),
-      highpass: !!$id('audio-hp-enabled')?.checked,
-      highpassFreq: Number($id('audio-hp-frequency')?.value || 80),
-      peaking: !!$id('audio-peak-enabled')?.checked,
-      peakingFreq: Number($id('audio-peak-frequency')?.value || 3000),
-      peakingGain: Number($id('audio-peak-gain')?.value || 3),
-      compressor: !!$id('audio-comp-enabled')?.checked,
-      noiseGate: !!$id('audio-gate-enabled')?.checked,
-      noiseGateThreshold: Number($id('audio-gate-threshold')?.value || -45),
-      micSensitivity: !!$id('audio-sensitivity-enabled')?.checked,
-      micCaptureDistance: Number($id('audio-capture-distance')?.value || 6),
-      speechGate: $id('audio-speech-gate-enabled')?.checked ? 'soft' : 'off',
-      noiseSuppressionMl: !!$id('audio-ml-ns-enabled')?.checked,
-      nearFieldGate: $id('audio-nearfield-enabled')?.checked ? 'soft' : 'off',
-      nearFieldThreshold: Number($id('audio-nearfield-threshold')?.value || 0.5)
-    };
+    return audioFiltersPanel?.readPrefs?.() || normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
   }
 
   function audioFilterNameCacheKey(displayName) {
@@ -598,15 +527,38 @@ export function createRoomControls(options = {}) {
     return normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS);
   }
 
-  function previewAudioFiltersFromUi() {
+  function previewAudioFiltersFromUi(prefsOverride = null) {
     const client = activeAudioFiltersClient;
     if (!client) return;
-    const prefs = readAudioFilterPrefsFromUi();
+    const prefs = prefsOverride || readAudioFilterPrefsFromUi();
     if (isHostPeer(client) && hooks.onHostAudioFiltersPreview) {
       hooks.onHostAudioFiltersPreview(prefs);
       return;
     }
     sendAudioFiltersToClient(client, prefs, { force: true });
+  }
+
+  function ensureAudioFiltersPanel() {
+    if (audioFiltersPanel) return audioFiltersPanel;
+    audioFiltersPanel = createAudioFiltersPanel({
+      getRoot: () => $id('audio-filters-modal'),
+      capabilities: { selfMonitor: false },
+      hooks: {
+        onSave: () => {
+          previewAudioFiltersFromUi();
+          if (activeAudioFiltersClient) {
+            rememberAudioFilterPrefs(activeAudioFiltersClient, readAudioFilterPrefsFromUi());
+          }
+          closeAudioFiltersModal();
+        },
+        onCancel: () => closeAudioFiltersModal({ revert: true }),
+        onReset: () => {
+          populateAudioFiltersUi(normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS));
+          previewAudioFiltersFromUi();
+        }
+      }
+    });
+    return audioFiltersPanel;
   }
 
   async function openAudioFiltersModal(client) {
@@ -621,18 +573,20 @@ export function createRoomControls(options = {}) {
     const prefs = stored || getAppliedClientAudioFilterPrefs(client);
     if (stored) rememberAudioFilterPrefs(client, stored);
     originalAudioFilterPrefs = { ...prefs };
-    const nameEl = $id('audio-filters-client-name');
-    if (nameEl) nameEl.textContent = client.displayName || '-';
-    const selfSection = $id('audio-self-monitor-section');
-    if (selfSection) selfSection.hidden = true;
-    populateAudioFiltersUi(prefs);
-    const modal = $id('audio-filters-modal');
-    if (modal) modal.hidden = false;
+    ensureAudioFiltersPanel();
+    audioFiltersPanel.open({
+      clientName: client.displayName || '-',
+      note: 'Estes filtros sao aplicados na origem do participante. Todos os participantes ouvem o resultado.',
+      prefs,
+      selfMonitor: false,
+      onChange: (next) => previewAudioFiltersFromUi(next)
+    });
+    audioFiltersPanel.attachMeters({ local: false, getMeter: () => null });
   }
 
   function closeAudioFiltersModal({ revert = false } = {}) {
-    const modal = $id('audio-filters-modal');
-    if (modal) modal.hidden = true;
+    audioFiltersPanel?.stopMeters?.();
+    audioFiltersPanel?.close?.();
     if (revert && activeAudioFiltersClient && originalAudioFilterPrefs) {
       sendAudioFiltersToClient(activeAudioFiltersClient, originalAudioFilterPrefs, { force: true });
     }
@@ -869,23 +823,6 @@ export function createRoomControls(options = {}) {
       openAudioFiltersModal(activeContextClient).catch((e) => hooks.onError?.(e, 'audio-filters'));
       closeContextMenu();
     });
-    on($id('btn-audio-filters-save'), 'click', () => {
-      previewAudioFiltersFromUi();
-      if (activeAudioFiltersClient) {
-        rememberAudioFilterPrefs(activeAudioFiltersClient, readAudioFilterPrefsFromUi());
-      }
-      closeAudioFiltersModal();
-    });
-    on($id('btn-audio-filters-cancel'), 'click', () => closeAudioFiltersModal({ revert: true }));
-    on($id('btn-audio-filters-reset'), 'click', () => {
-      populateAudioFiltersUi(normalizeMicrophoneFilterPrefs(CLIENT_MIC_PUBLISH_DEFAULTS));
-      previewAudioFiltersFromUi();
-    });
-    const modal = $id('audio-filters-modal');
-    if (modal) {
-      on(modal, 'input', () => previewAudioFiltersFromUi());
-      on(modal, 'change', () => previewAudioFiltersFromUi());
-    }
     on($id('chk-meet-bridge-live'), 'change', (e) => sendMeetBridgeLiveMode(e.target.checked));
     on($id('chk-shared-room-mode'), 'change', (e) => sendSharedRoomMode(e.target.checked));
     on($id('btn-shared-room-preset'), 'click', () => applySharedRoomPresetToClients());

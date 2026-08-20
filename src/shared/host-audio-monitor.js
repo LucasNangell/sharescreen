@@ -698,16 +698,24 @@ export class HostAudioMonitor {
       }
       const defaults =
         source === 'system'
-          ? { ...MIC_FILTER_DEFAULTS, noiseGate: false, micSensitivity: false }
+          ? {
+              ...MIC_FILTER_DEFAULTS,
+              noiseReduction: 'off',
+              gateMode: 'off',
+              roomIsolation: 'off'
+            }
           : { ...MIC_FILTER_DEFAULTS };
-      this.filterPrefs.set(key, saved || defaults);
+      this.filterPrefs.set(key, normalizeMicrophoneFilterPrefs(saved || defaults));
     }
     return this.filterPrefs.get(key);
   }
 
   setFilterPrefs(channelKeyOrPeerId, prefs) {
     const key = String(channelKeyOrPeerId);
-    this.filterPrefs.set(key, { ...this.getFilterPrefs(key), ...prefs });
+    this.filterPrefs.set(
+      key,
+      normalizeMicrophoneFilterPrefs({ ...this.getFilterPrefs(key), ...prefs })
+    );
     for (const ch of this.channels.values()) {
       const chKey = audioChannelKey(ch.peerId, ch.source);
       if (chKey === key || ch.peerId === key) {
@@ -809,23 +817,31 @@ export class HostAudioMonitor {
 
     if (ch.highpassNode) {
       if (prefs.highpass) {
-        ch.highpassNode.frequency.value = prefs.highpassFreq || 80;
+        ch.highpassNode.frequency.value = prefs.highpassFreq || 85;
       } else {
         ch.highpassNode.frequency.value = 10;
       }
     }
 
     if (ch.peakingNode) {
-      if (prefs.peaking) {
-        ch.peakingNode.frequency.value = prefs.peakingFreq || 3000;
-        ch.peakingNode.gain.value = prefs.peakingGain !== undefined ? prefs.peakingGain : 3;
+      const presenceOn = prefs.presence ?? prefs.peaking;
+      if (presenceOn) {
+        ch.peakingNode.frequency.value = prefs.presenceFreq || prefs.peakingFreq || 3000;
+        ch.peakingNode.gain.value =
+          prefs.presenceGain !== undefined
+            ? prefs.presenceGain
+            : prefs.peakingGain !== undefined
+              ? prefs.peakingGain
+              : 3;
       } else {
         ch.peakingNode.gain.value = 0;
       }
     }
 
     if (ch.compressorNode) {
-      if (prefs.compressor) {
+      const mode = prefs.compressor;
+      const on = mode && mode !== 'off' && mode !== false;
+      if (on) {
         ch.compressorNode.threshold.value = -24;
         ch.compressorNode.ratio.value = 4;
       } else {
@@ -840,7 +856,11 @@ export class HostAudioMonitor {
     const channelKey = audioChannelKey(ch.peerId, ch.source);
     const initialPrefs = this.getFilterPrefs(channelKey);
     const initiallyActive =
-      ch.source !== 'system' && (initialPrefs.noiseGate || initialPrefs.micSensitivity);
+      ch.source !== 'system' &&
+      (initialPrefs.gateMode === 'manual' ||
+        initialPrefs.gateMode === 'auto' ||
+        initialPrefs.noiseGate ||
+        initialPrefs.micSensitivity);
     if (!initiallyActive || !ch.analyserNode) {
       ch.gateInterval = null;
       return;
@@ -861,7 +881,11 @@ export class HostAudioMonitor {
       const prefs = this.getFilterPrefs(channelKey);
       const targetGain = prefs.gain !== undefined ? prefs.gain : 1.0;
       const gateActive =
-        ch.source !== 'system' && (prefs.noiseGate || prefs.micSensitivity);
+        ch.source !== 'system' &&
+        (prefs.gateMode === 'manual' ||
+          prefs.gateMode === 'auto' ||
+          prefs.noiseGate ||
+          prefs.micSensitivity);
 
       if (!gateActive) {
         if (!isOpen) isOpen = true;

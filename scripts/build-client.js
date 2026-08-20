@@ -106,6 +106,34 @@ await esbuild.build({
   outfile: path.join(root, 'public/shared/audio-ml.bundle.js')
 });
 
+const workletsDir = path.join(root, 'public/shared/worklets');
+fs.mkdirSync(workletsDir, { recursive: true });
+await esbuild.build({
+  bundle: true,
+  format: 'esm',
+  platform: 'browser',
+  target: ['chrome90', 'edge90', 'firefox90'],
+  minify: isProd,
+  sourcemap: !isProd,
+  logLevel: 'info',
+  entryPoints: [path.join(root, 'src/shared/worklets/voice-gate-processor.js')],
+  outfile: path.join(workletsDir, 'voice-gate-processor.js')
+});
+console.log('Worklet voice-gate-processor gerado em public/shared/worklets');
+
+await esbuild.build({
+  bundle: true,
+  format: 'esm',
+  platform: 'browser',
+  target: ['chrome90', 'edge90', 'firefox90'],
+  minify: isProd,
+  sourcemap: !isProd,
+  logLevel: 'info',
+  entryPoints: [path.join(root, 'src/shared/worklets/click-guard-processor.js')],
+  outfile: path.join(workletsDir, 'click-guard-processor.js')
+});
+console.log('Worklet click-guard-processor gerado em public/shared/worklets');
+
 const buildId =
   new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) +
   '-' +
