@@ -399,7 +399,10 @@ function createApp() {
       httpsPort: config.httpsPort,
       maxClients: config.maxClients,
       rtcPorts: `${config.rtcMinPort}-${config.rtcMaxPort}`,
+      // roomPinRequired é mantido para versões antigas do frontend.
       roomPinRequired: !!(config.roomPin || '').trim(),
+      clientPinRequired: !!(config.clientRoomPin || '').trim(),
+      hostPinRequired: !!(config.hostPin || '').trim(),
       dev: !!config.dev,
       publicUrl: config.publicUrl || null,
       publicClientPath: (config.publicUrl || '').trim() ? '/meet/' : '/client/',

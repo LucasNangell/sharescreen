@@ -103,7 +103,16 @@ const config = {
 
   /** DEV / seguranÃƒÂ§a Ã¢â‚¬â€ vazio = sem PIN (compatÃƒÂ­vel com deploy legado) */
   dev: isDevRuntime,
+  /**
+   * Compatibilidade: SHARESCREEN_ROOM_PIN protege host e client, como nas
+   * instalações legadas. Em produção pública, prefira CLIENT_ROOM_PIN para
+   * proteger apenas /meet e deixe ROOM_PIN/HOST_PIN vazios quando /host já é
+   * protegido pelo proxy (por exemplo, Caddy basic_auth).
+   */
   roomPin: process.env.SHARESCREEN_ROOM_PIN || '',
+  clientRoomPin:
+    process.env.SHARESCREEN_CLIENT_ROOM_PIN || process.env.SHARESCREEN_ROOM_PIN || '',
+  hostPin: process.env.SHARESCREEN_HOST_PIN || process.env.SHARESCREEN_ROOM_PIN || '',
   hostToken: process.env.SHARESCREEN_HOST_TOKEN || '',
   trustProxy: process.env.TRUST_PROXY === '1',
   publicUrl: process.env.PUBLIC_URL || '',

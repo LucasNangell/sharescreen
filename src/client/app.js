@@ -1749,8 +1749,10 @@ async function initOnboarding() {
       els.nomeInput.value = displayName;
     }
     if (displayName) {
-      showIdentifyStep();
-      setStatus('Clique abaixo para compartilhar a tela');
+      hideOverlay();
+      // Links externos são exclusivamente para assistir; não devem pedir
+      // getDisplayMedia (indisponível, por exemplo, no Safari do iPhone).
+      await salvarEIniciar(true);
       return;
     }
     showIdentifyStep();
@@ -1799,7 +1801,8 @@ async function initOnboarding() {
 
   try {
     const info = await fetch('/api/info').then((r) => r.json());
-    if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
+    const clientPinRequired = info.clientPinRequired ?? info.roomPinRequired;
+    if (clientPinRequired && els.pinWrap && !viewerAccessToken) {
       els.pinWrap.hidden = false;
     }
   } catch (_) {}

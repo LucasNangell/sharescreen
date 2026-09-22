@@ -22,6 +22,8 @@ Documentação para publicação futura (não deployada nesta etapa).
 | `STUN_SERVERS` | `stun:stun.l.google.com:19302` (padrão) |
 | `TURN_SERVERS` | JSON array para NAT restrito |
 | `SHARESCREEN_ROOM_PIN` | PIN de sala |
+| `SHARESCREEN_CLIENT_ROOM_PIN` | PIN exigido somente de clients sem link externo |
+| `SHARESCREEN_HOST_PIN` | PIN exigido somente do host (opcional) |
 | `SHARESCREEN_HOST_TOKEN` | Token fixo de host |
 | `ALLOWED_ORIGINS` | Origens CORS permitidas (futuro) |
 
@@ -40,7 +42,7 @@ Em internet real com NAT simétrico, **TURN é necessário** além de STUN. Conf
 ## Segurança
 
 - Use certificado confiável (mkcert na LAN, CA corporativa ou Let's Encrypt)
-- Ative PIN em produção (`SHARESCREEN_ROOM_PIN`)
+- Ative PIN em produção (`SHARESCREEN_CLIENT_ROOM_PIN`; `SHARESCREEN_ROOM_PIN` mantém compatibilidade e protege ambos os papéis)
 - Proteja `POST /api/gravacao` com token de host (`SHARESCREEN_HOST_TOKEN`)
 - Rate limit no proxy para uploads
 - **HTTPS obrigatório** fora de localhost para captura de tela/microfone

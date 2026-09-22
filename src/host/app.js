@@ -3071,7 +3071,7 @@ async function bootstrap() {
     }
     try {
       const info = await fetch('/api/info').then((r) => r.json());
-      await promptRoomPinIfRequired(!!info.roomPinRequired);
+      await promptRoomPinIfRequired(info.hostPinRequired ?? !!info.roomPinRequired);
     } catch (_) {
       await promptRoomPinIfRequired(false);
     }

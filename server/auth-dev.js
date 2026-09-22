@@ -39,11 +39,16 @@ export function getSessionHostToken() {
 }
 
 /**
- * Valida PIN/host na entrada. Compatível: sem roomPin = sem bloqueio.
+ * Valida PIN/host na entrada.
+ *
+ * Compatibilidade: SHARESCREEN_ROOM_PIN continua protegendo ambos os papéis.
+ * SHARESCREEN_CLIENT_ROOM_PIN e SHARESCREEN_HOST_PIN permitem separar os
+ * acessos quando o host é protegido por um proxy reverso.
  */
 export function validateJoinAuth(payload = {}) {
   const { papel, pin, hostToken, viewerToken } = payload;
-  const requiredPin = (config.roomPin || '').trim();
+  const requiredClientPin = (config.clientRoomPin || '').trim();
+  const requiredHostPin = (config.hostPin || '').trim();
 
   if (papel === 'client' && viewerToken) {
     if (validateViewerLinkToken(viewerToken)) {
@@ -52,17 +57,13 @@ export function validateJoinAuth(payload = {}) {
     throw new Error('Link de acesso inválido ou expirado');
   }
 
-  if (!requiredPin) {
-    return { hostToken: sessionHostToken || config.hostToken || '' };
-  }
-
   if (papel === 'host') {
     const configuredHost = (config.hostToken || '').trim();
     if (configuredHost && hostToken === configuredHost) {
       sessionHostToken = configuredHost;
       return { hostToken: sessionHostToken };
     }
-    if (String(pin || '').trim() !== requiredPin) {
+    if (requiredHostPin && String(pin || '').trim() !== requiredHostPin) {
       throw new Error('PIN inválido para host');
     }
     if (!sessionHostToken) {
@@ -71,7 +72,7 @@ export function validateJoinAuth(payload = {}) {
     return { hostToken: sessionHostToken };
   }
 
-  if (String(pin || '').trim() !== requiredPin) {
+  if (requiredClientPin && String(pin || '').trim() !== requiredClientPin) {
     throw new Error('PIN inválido');
   }
   return {};
