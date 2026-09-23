@@ -38,18 +38,11 @@ export function resolvePublishAudioSources(
   } = {}
 ) {
   let microphone = !!prefs.microphone;
-  let systemAudio = prefs.systemAudio !== false;
+  let systemAudio = !!prefs.systemAudio;
   let blockedReason = null;
 
   if (meetBridgeLiveMode) {
     return { microphone: false, systemAudio: true, blockedReason: 'meet-bridge' };
-  }
-
-  if (displaySurface === 'monitor') {
-    systemAudio = false;
-    if (prefs.systemAudio !== false) {
-      blockedReason = 'monitor-no-audio';
-    }
   }
 
   if (dualPublishPolicy === 'mic-wins' && microphone && systemAudio) {
@@ -94,30 +87,12 @@ export function readDisplaySurfaceFromStream(stream) {
 }
 
 /**
- * Remove áudio capturado em tela inteira (monitor) e retorna metadados da superfície.
+ * Lê a superfície capturada. Não encerra trilhas de áudio: a publicação
+ * (opt-in do usuário) é o que decide se o áudio de sistema/aba sobe na SFU.
  */
-export function stripMonitorSystemAudio(stream, onLog) {
+export function stripMonitorSystemAudio(stream, _onLog, _opts = {}) {
   const displaySurface = readDisplaySurfaceFromStream(stream);
-  const audioTracks = stream?.getAudioTracks?.() || [];
-  let systemAudioBlocked = false;
-
-  if (displaySurface === 'monitor') {
-    for (const track of audioTracks) {
-      if (track.readyState !== 'live') continue;
-      try {
-        track.stop();
-      } catch (_) {}
-      systemAudioBlocked = true;
-    }
-    if (systemAudioBlocked) {
-      onLog?.(
-        'Áudio indisponível em tela inteira — selecione aba ou janela, ou desmarque o áudio',
-        'warn'
-      );
-    }
-  }
-
-  return { displaySurface, systemAudioBlocked };
+  return { displaySurface, systemAudioBlocked: false };
 }
 
 export async function applyTabCaptureAudioHints(stream) {

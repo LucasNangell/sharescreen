@@ -13,12 +13,9 @@ function matchesPeerFilter(peerId, restrictToPeerId) {
   return String(peerId) === String(restrictToPeerId);
 }
 
-function collectOwnAudioTracks(media, { excludeSystem = false } = {}) {
+export function collectOwnAudioTracks(media, { excludeSystem = false } = {}) {
   const tracks = [];
-  const hasMic =
-    media?.producers?.microphone?.track?.readyState === 'live' ||
-    media?.getLocalMicrophoneTrack?.()?.readyState === 'live';
-  if (!excludeSystem && !hasMic) {
+  if (!excludeSystem) {
     addTrackOnce(tracks, media?.producers?.system?.track);
     addTrackOnce(tracks, media?.localScreenStream?.getAudioTracks?.()[0]);
   }
@@ -27,7 +24,7 @@ function collectOwnAudioTracks(media, { excludeSystem = false } = {}) {
   return tracks;
 }
 
-function collectMonitorAudioTracks(hostAudioMonitor, mutedClients, restrictToPeerId = null) {
+export function collectMonitorAudioTracks(hostAudioMonitor, mutedClients, restrictToPeerId = null) {
   const sources = [];
   if (!hostAudioMonitor) return sources;
 

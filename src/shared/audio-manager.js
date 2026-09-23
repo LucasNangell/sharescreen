@@ -260,7 +260,7 @@ export class AudioMixer {
  */
 export async function collectAudioForPublish(displayStream, capturePrefs, onLog) {
   const tracks = [];
-  const wantSystem = capturePrefs.systemAudio !== false;
+  const wantSystem = !!capturePrefs.systemAudio;
   const wantMic = !!capturePrefs.microphone;
 
   if (wantSystem && displayStream) {

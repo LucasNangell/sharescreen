@@ -8,6 +8,7 @@ import {
   pickScreenCodec,
   buildVideoProduceOptions,
   buildDisplayMediaConstraints,
+  buildDisplayConstraintsWithAudio,
   videoEncodingParamsFromQuality
 } from '../src/shared/quality-manager.js';
 import { shouldPresentScaled } from '../src/shared/playback-scaler.js';
@@ -54,6 +55,13 @@ const constraints = buildDisplayMediaConstraints(high);
 assert(constraints.video.width === undefined, 'captura sem cap de width CSS');
 assert(constraints.video.height === undefined, 'captura sem cap de height CSS');
 assert(constraints.video.resizeMode === 'none', 'captura sem resize do browser');
+
+const withAudio = buildDisplayConstraintsWithAudio(high, true);
+assert(withAudio.audio === true, 'opt-in pede audio no getDisplayMedia');
+assert(withAudio.systemAudio === 'include', 'opt-in inclui audio de tela inteira');
+const withoutAudio = buildDisplayConstraintsWithAudio(high, false);
+assert(withoutAudio.audio === false, 'sem opt-in nao pede audio');
+assert(withoutAudio.systemAudio === 'exclude', 'sem opt-in exclui audio de sistema');
 
 const device = {
   rtpCapabilities: {

@@ -692,7 +692,7 @@ const recorder = new RecordingClient({
 let recordingCapture = null;
 
 const hostCapturePrefs = loadCapturePrefs();
-if (els.hostChkSystem) els.hostChkSystem.checked = hostCapturePrefs.systemAudio !== false;
+if (els.hostChkSystem) els.hostChkSystem.checked = !!hostCapturePrefs.systemAudio;
 if (els.hostChkMic) els.hostChkMic.checked = !!hostCapturePrefs.microphone;
 if (els.qualityPreset) {
   els.qualityPreset.value = loadPresetId();
@@ -756,21 +756,37 @@ async function onHostAudioPrefsChange() {
     if (prefs.microphone) {
       await applyHostMicFilterPrefs(hostMicFilterPrefs, { persist: false });
     }
-    const result = await media.ensureMicrophonePublication(prefs);
-    if (prefs.systemAudio !== false && media.localScreenStream) {
-      await media.publishSystemAudioFromDisplay(media.localScreenStream);
-    } else if (media.hasPublishedSystemAudio()) {
-      await media.stopSystemAudio();
+    const displayStream = media.localScreenStream;
+    const wantsSystem = !!prefs.systemAudio;
+    const hasDisplayAudio = !!displayStream
+      ?.getAudioTracks?.()
+      ?.some((track) => track.readyState === 'live');
+
+    let recaptureCancelled = false;
+    if (wantsSystem && displayStream && !hasDisplayAudio) {
+      const switched = await media.switchDisplayCapture(prefs);
+      recaptureCancelled = !!switched?.cancelled;
+      if (recaptureCancelled) {
+        showToast(
+          'Selecao cancelada - microfone inalterado. Marque Compartilhar audio no dialogo para incluir o audio da aba/sistema.',
+          'info'
+        );
+      } else if (switched?.busy) {
+        showToast('Aguarde a troca de tela terminar', 'warn');
+      }
+    } else {
+      await media.syncPublishedAudio(prefs, displayStream);
     }
     syncLocalHostVu();
     refreshHostMicDeviceList();
     syncHostMicPublishHealthUi();
     syncOwnMicMuteFromRoom();
-    if (prefs.microphone && !result.ok && result.reason !== 'disabled') {
+    if (recaptureCancelled) {
+      return;
+    }
+    if (prefs.microphone && !media.hasPublishedMicrophone()) {
       showToast('Microfone nao publicado - verifique permissao do navegador', 'warn');
-    } else if (prefs.microphone && !media.hasPublishedMicrophone()) {
-      showToast('Microfone nao publicado - verifique permissao do navegador', 'warn');
-    } else if (!prefs.microphone && prefs.systemAudio === false) {
+    } else if (!prefs.microphone && !prefs.systemAudio) {
       showToast('Audio desativado', 'info');
     } else if (!prefs.microphone) {
       showToast('Microfone desativado - so audio da aba/janela', 'info');
@@ -819,7 +835,7 @@ function setBadge(text, type = 'muted') {
 
 function getHostCapturePrefs() {
   return {
-    systemAudio: els.hostChkSystem?.checked !== false,
+    systemAudio: !!els.hostChkSystem?.checked,
     microphone: !!els.hostChkMic?.checked,
     microphoneDeviceId: els.hostMicSelect?.value || ''
   };

@@ -150,9 +150,8 @@ export function buildDisplayMediaConstraints(quality = {}) {
 export function buildDisplayConstraintsWithAudio(quality, wantSystemAudio) {
   const base = buildDisplayMediaConstraints(quality);
   if (wantSystemAudio) {
-    // exclude: áudio em aba/janela; não oferece áudio de sistema em tela inteira (Chrome)
     base.audio = true;
-    base.systemAudio = 'exclude';
+    base.systemAudio = 'include';
   }
   return base;
 }

@@ -178,7 +178,7 @@ export function getVideoQualityForClients() {
     serverHost: config.serverHost,
     rtcPortRange: `${config.rtcMinPort}-${config.rtcMaxPort}`,
     audioEnabled: config.audio?.enabled !== false,
-    systemAudioDefault: config.audio?.systemAudioDefault !== false,
+    systemAudioDefault: config.audio?.systemAudioDefault === true,
     microphoneDefault: !!config.audio?.microphoneDefault,
     maxAudioBitrate: config.audio?.maxBitrate ?? 128_000,
     micAudioBitrate: config.audio?.micAudioBitrate ?? 48_000,

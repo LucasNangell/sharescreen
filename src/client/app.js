@@ -581,7 +581,7 @@ function applyLtOverlayForTransmission(tx) {
 }
 
 const capturePrefs = loadCapturePrefs();
-if (els.chkSystemAudio) els.chkSystemAudio.checked = capturePrefs.systemAudio !== false;
+if (els.chkSystemAudio) els.chkSystemAudio.checked = !!capturePrefs.systemAudio;
 if (els.chkMicrophone) els.chkMicrophone.checked = !!capturePrefs.microphone;
 
 clientMicPicker = setupMicrophonePicker({
@@ -670,13 +670,13 @@ function isSharingScreen() {
 }
 
 function applyCapturePrefsToUi(prefs) {
-  if (els.chkSystemAudio) els.chkSystemAudio.checked = prefs.systemAudio !== false;
+  if (els.chkSystemAudio) els.chkSystemAudio.checked = !!prefs.systemAudio;
   if (els.chkMicrophone) els.chkMicrophone.checked = !!prefs.microphone;
   if (els.micWrap) els.micWrap.hidden = !prefs.microphone;
   if (els.micSelect && prefs.microphoneDeviceId) {
     els.micSelect.value = prefs.microphoneDeviceId;
   }
-  if (els.settingsChkSystem) els.settingsChkSystem.checked = prefs.systemAudio !== false;
+  if (els.settingsChkSystem) els.settingsChkSystem.checked = !!prefs.systemAudio;
   if (els.settingsChkMic) els.settingsChkMic.checked = !!prefs.microphone;
   if (els.settingsMicWrap) els.settingsMicWrap.hidden = !prefs.microphone;
   if (els.settingsMicSelect && prefs.microphoneDeviceId) {
@@ -1326,7 +1326,7 @@ async function ensureLiveCaptureStream(capturePrefs) {
   });
   setStatus('Selecione a tela no dialogo do navegador...');
   clientDisplayStream = await promptDisplayCapture({
-    systemAudio: capturePrefs.systemAudio !== false,
+    systemAudio: !!capturePrefs.systemAudio,
     microphone: false
   });
   mediaPublisher = null;
@@ -1388,7 +1388,7 @@ function showOverlay() {
 async function promptDisplayCapture(capturePrefs) {
   assertSecureContext();
   const quality = mergeServerQuality(media?.videoQuality || {}, loadPresetId());
-  const constraints = buildDisplayConstraintsWithAudio(quality, capturePrefs.systemAudio !== false);
+  const constraints = buildDisplayConstraintsWithAudio(quality, !!capturePrefs.systemAudio);
   setStatus('Selecione a tela no dialogo do navegador...');
   return navigator.mediaDevices.getDisplayMedia(constraints);
 }
@@ -1506,7 +1506,7 @@ async function runPublisherFlowBody(t0, flowGen) {
       elapsedMs: Math.round(performance.now() - t0)
     });
     clientDisplayStream = await promptDisplayCapture({
-      systemAudio: prefs.systemAudio !== false,
+      systemAudio: !!prefs.systemAudio,
       microphone: false
     });
   }

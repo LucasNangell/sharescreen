@@ -4,7 +4,8 @@
 import {
   pickAntiEchoSources,
   resolvePublishAudioSources,
-  resolvePlaybackSources
+  resolvePlaybackSources,
+  stripMonitorSystemAudio
 } from '../src/shared/audio-policy.js';
 import { isOwnAudioSource, normalizeRemoteAudioSources, liveProducerId } from '../src/shared/audio-sources.js';
 import {
@@ -72,12 +73,35 @@ const allowBoth = resolvePublishAudioSources(
 );
 assert(allowBoth.microphone && allowBoth.systemAudio && !allowBoth.blockedReason, 'allow-both publica mic e system');
 
-// monitor sem áudio
-const monitorBlock = resolvePublishAudioSources(
-  { microphone: false, systemAudio: true },
-  { displaySurface: 'monitor', dualPublishPolicy: 'mic-wins' }
+const omittedSystem = resolvePublishAudioSources(
+  { microphone: true },
+  { dualPublishPolicy: 'allow-both' }
 );
-assert(!monitorBlock.systemAudio && monitorBlock.blockedReason === 'monitor-no-audio', 'monitor bloqueia áudio');
+assert(omittedSystem.microphone && !omittedSystem.systemAudio, 'systemAudio omitido nao publica sistema');
+
+const explicitOff = resolvePublishAudioSources(
+  { microphone: true, systemAudio: false },
+  { dualPublishPolicy: 'allow-both' }
+);
+assert(explicitOff.microphone && !explicitOff.systemAudio, 'systemAudio false nao publica sistema');
+
+const monitorAllowed = resolvePublishAudioSources(
+  { microphone: false, systemAudio: true },
+  { displaySurface: 'monitor', dualPublishPolicy: 'allow-both' }
+);
+assert(
+  monitorAllowed.systemAudio && !monitorAllowed.blockedReason,
+  'monitor com opt-in publica audio do sistema'
+);
+
+const monitorWithMic = resolvePublishAudioSources(
+  { microphone: true, systemAudio: true },
+  { displaySurface: 'monitor', dualPublishPolicy: 'allow-both' }
+);
+assert(
+  monitorWithMic.microphone && monitorWithMic.systemAudio,
+  'monitor com opt-in publica mic e sistema juntos'
+);
 
 // meet bridge
 const meet = resolvePublishAudioSources(
@@ -85,6 +109,21 @@ const meet = resolvePublishAudioSources(
   { meetBridgeLiveMode: true }
 );
 assert(!meet.microphone && meet.systemAudio && meet.blockedReason === 'meet-bridge', 'meet bridge força system');
+
+const monitorAudioTrack = {
+  id: 'sys-1',
+  readyState: 'live',
+  stop() {
+    this.readyState = 'ended';
+  }
+};
+const monitorStream = {
+  getVideoTracks: () => [{ readyState: 'live', getSettings: () => ({ displaySurface: 'monitor' }) }],
+  getAudioTracks: () => [monitorAudioTrack]
+};
+const stripped = stripMonitorSystemAudio(monitorStream, () => {}, { wantSystemAudio: false });
+assert(stripped.displaySurface === 'monitor', 'stripMonitorSystemAudio reporta superficie monitor');
+assert(monitorAudioTrack.readyState === 'live', 'captura de monitor nao encerra trilha de audio');
 
 // resolvePlaybackSources
 const playback = resolvePlaybackSources(mixedSources, { excludeSourceTypes: ['system'] });

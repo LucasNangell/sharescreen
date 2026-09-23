@@ -133,7 +133,7 @@ export function createAudioFiltersPanel(options = {}) {
     el.innerHTML = `
       <header class="afx-header">
         <div class="afx-header-main">
-          <h1 id="audio-filters-modal-title">Channel Strip</h1>
+          <h1 id="audio-filters-modal-title">Filtros de áudio</h1>
           <p class="afx-subtitle">Participante: <strong id="audio-filters-client-name">—</strong></p>
           <p id="audio-filters-note" class="afx-note">Filtros aplicados na origem. Todos ouvem o resultado.</p>
         </div>
@@ -143,6 +143,7 @@ export function createAudioFiltersPanel(options = {}) {
         </div>
       </header>
 
+      <div class="afx-body">
       <div class="afx-meters">
         <div class="afx-meter" data-meter="in">
           <span class="afx-meter-label">IN</span>
@@ -323,6 +324,7 @@ export function createAudioFiltersPanel(options = {}) {
         </div>
         <p class="afx-hint">Use fones. Com caixas o retorno volta ao mic. Não é lembrado entre sessões.</p>
       </fieldset>
+      </div>
 
       <footer class="afx-footer">
         <button type="button" id="btn-audio-filters-reset" class="btn btn-ghost afx-danger">Resetar</button>

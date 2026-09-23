@@ -15,6 +15,7 @@ import { normalizeAudioSource, parseAudioChannelKey, audioTrace } from './audio-
 import {
   applyTabCaptureAudioHints,
   dualPublishPolicyFromQuality,
+  readDisplaySurfaceFromStream,
   resolvePublishAudioSources,
   stripMonitorSystemAudio
 } from './audio-policy.js';
@@ -283,12 +284,6 @@ export class MediaClient {
 
   setVideoQuality(quality) {
     if (quality) this.videoQuality = { ...quality };
-    if (quality?.systemAudioDefault !== undefined) {
-      this.capturePrefs.systemAudio = quality.systemAudioDefault;
-    }
-    if (quality?.microphoneDefault !== undefined) {
-      this.capturePrefs.microphone = quality.microphoneDefault;
-    }
   }
 
   async applyLiveVideoQuality() {
@@ -378,7 +373,7 @@ export class MediaClient {
   _resolvedPublishPrefs(capturePrefs = {}, displayStream = null) {
     const stream = displayStream ?? this.localScreenStream ?? null;
     const displaySurface =
-      this._displaySurface || (stream ? stripMonitorSystemAudio(stream).displaySurface : null);
+      this._displaySurface || (stream ? readDisplaySurfaceFromStream(stream) : null);
     return resolvePublishAudioSources(capturePrefs, {
       displaySurface,
       dualPublishPolicy: dualPublishPolicyFromQuality(this.videoQuality),
@@ -1038,7 +1033,7 @@ export class MediaClient {
 
   async publishSystemAudioFromDisplay(displayStream = null) {
     const stream = displayStream ?? this.localScreenStream;
-    if (!stream || this.capturePrefs.systemAudio === false) {
+    if (!stream || !this.capturePrefs.systemAudio) {
       return this.stopSystemAudio();
     }
 
@@ -1047,20 +1042,21 @@ export class MediaClient {
       .find((t) => t.readyState === 'live');
     if (!systemTrack) {
       this.onLog(
-        '?fiudio do sistema n?fio capturado i?,???? marque "Compartilhar ?fiudio" no di?filogo do Chrome',
+        'Áudio do sistema/aba não capturado — marque "Compartilhar áudio" no diálogo do Chrome',
         'warn'
       );
-      return this.stopSystemAudio();
+      await this.stopSystemAudio();
+      return false;
     }
 
     const ok = await this._publishAudioTrack(systemTrack, 'system');
-    if (ok) this.onLog('?fiudio do sistema publicado', 'info');
+    if (ok) this.onLog('Áudio do sistema publicado', 'info');
     return ok;
   }
 
   async stopSystemAudio() {
     await this._closeAudioProducerBySource('system');
-    this.onLog('?fiudio do sistema encerrado', 'info');
+    this.onLog('Áudio do sistema encerrado', 'info');
     return false;
   }
 
@@ -1068,11 +1064,8 @@ export class MediaClient {
   async _syncPublishedAudioUnlocked(capturePrefs, displayStream = null) {
     this.setCapturePrefs(capturePrefs);
     const resolved = this._resolvedPublishPrefs(capturePrefs, displayStream);
-    if (resolved.blockedReason === 'mic-wins' && capturePrefs.systemAudio !== false) {
+    if (resolved.blockedReason === 'mic-wins' && !!capturePrefs.systemAudio) {
       this.onLog('Áudio da aba/janela omitido — microfone ativo (anti-eco)', 'info');
-    }
-    if (resolved.blockedReason === 'monitor-no-audio' && capturePrefs.systemAudio !== false) {
-      this.onLog('Áudio indisponível em tela inteira — use aba ou janela', 'warn');
     }
 
     let micOk = true;
@@ -1134,18 +1127,19 @@ export class MediaClient {
     this.setCapturePrefs(capturePrefs);
     const constraints = buildDisplayConstraintsWithAudio(
       this.videoQuality,
-      capturePrefs.systemAudio !== false
+      !!capturePrefs.systemAudio
     );
-    this.onLog('Solicitando captura de telai?,?i', 'info');
+    this.onLog('Solicitando captura de tela', 'info');
     return navigator.mediaDevices.getDisplayMedia(constraints);
   }
 
   async publishDisplayStream(displayStream, capturePrefs) {
     if (!displayStream) throw new Error('Nenhuma captura de tela fornecida');
 
-    const { displaySurface, systemAudioBlocked } = stripMonitorSystemAudio(
+    const { displaySurface } = stripMonitorSystemAudio(
       displayStream,
-      (message, level) => this.onLog(message, level)
+      (message, level) => this.onLog(message, level),
+      { wantSystemAudio: !!capturePrefs.systemAudio }
     );
     this._displaySurface = displaySurface;
     await applyTabCaptureAudioHints(displayStream);
@@ -1256,8 +1250,10 @@ export class MediaClient {
         throw err;
       }
 
-      const { displaySurface } = stripMonitorSystemAudio(displayStream, (message, level) =>
-        this.onLog(message, level)
+      const { displaySurface } = stripMonitorSystemAudio(
+        displayStream,
+        (message, level) => this.onLog(message, level),
+        { wantSystemAudio: !!capturePrefs.systemAudio }
       );
       this._displaySurface = displaySurface;
       await applyTabCaptureAudioHints(displayStream);

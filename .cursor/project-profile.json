@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
   "generatedBy": "bootstrap-project-rules",
-  "generatedAt": "2026-07-07T17:34:00Z",
+  "generatedAt": "2026-09-23T14:56:36Z",
   "projectTypes": [
     "web-app",
     "realtime-streaming",
     "node-server"
   ],
   "sourceHashes": {
-    "README.md": "001f5f74bc88ea52e1472d75ec7ec270a6668024bd64cc49015b0c5f09058654",
-    "package.json": "806f3fd10dc7df25f23a51cfe7f5d784914f6afdfe84d8ac714a185e545abe98",
-    "config/default.js": "4f766c4310fa8dfa5011b76ad7b1e25fcc9b0da298273e73f0312d5533994fac",
-    "scripts/build-client.js": "a095e29436a7174fab347824fce45104fb281c89570d5daf50c57ad1026f0554",
+    "README.md": "22028db7e88e7345dd97dbc371c3bc0a3e13a7678450f8b8a4566dfe235bb284",
+    "package.json": "22978def2b26086afa40e8fd23c65afa7bf479902ffa3d8cdaf2540fa5afd986",
+    "config/default.js": "183496357096331bbd90a288bcb3bb4080195280e86b50081eb3a5dcad3a5a3c",
+    "scripts/build-client.js": "a6f2d0b1d677ed61bea16e8b8340aa277428809a38b91837be72e5f5e00cf00d",
     "start-dev.bat": "3fa79f0274eed3f32683ea6416068ca4d606943f443e93a9b941f25e01538994",
     "check-dev.bat": "1464dbaf94181d27ed8ed426a7ff6c59fad9773eb58bdf5cce376211a7c4a6aa",
-    "server/index.js": "ff477d80bee688449c292340388cc89dfab3388e05eb29f5d5f3c017c91bbff5"
+    "server/index.js": "0e64c86202308db48fd1ea73f052497e8f400f971b162f1130a309196aa53231"
   },
   "generatedRules": [
     ".cursor/rules/auto-project-core.mdc",
