@@ -1,12 +1,8 @@
-/* Pass-through: Chrome installability without caching the app. */
+/* Registro mínimo para installability; as requisições ficam com o navegador. */
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-  event.respondWith(fetch(event.request));
 });

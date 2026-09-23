@@ -23,6 +23,7 @@
     "test:rooms": "node scripts/room-registry-smoke.js",
     "test:ice": "node scripts/ice-config-smoke.js",
     "test:recording-download-access": "node scripts/recording-download-access-smoke.js",
+    "test:service-worker": "node scripts/service-worker-smoke.js",
     "test:roster": "node scripts/room-clients-smoke.js",
     "cert": "node scripts/generate-cert.js",
     "cert:prod": "node scripts/generate-cert.js",
