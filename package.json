@@ -20,6 +20,8 @@
     "test:mic-dsp": "node scripts/mic-dsp-prefs-smoke.js",
     "test:click-guard": "node scripts/click-guard-smoke.js",
     "test:cohost": "node scripts/cohost-smoke.js",
+    "test:rooms": "node scripts/room-registry-smoke.js",
+    "test:ice": "node scripts/ice-config-smoke.js",
     "test:roster": "node scripts/room-clients-smoke.js",
     "cert": "node scripts/generate-cert.js",
     "cert:prod": "node scripts/generate-cert.js",

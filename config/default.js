@@ -3,10 +3,9 @@ import os from 'os';
 /**
  * ConfiguraÃƒÂ§ÃƒÂ£o padrÃƒÂ£o Ã¢â‚¬â€ ajuste para sua LAN.
  *
- * ProduÃƒÂ§ÃƒÂ£o (padrÃƒÂ£o): 10.1.1.73
- * Desenvolvimento:     $env:SHARESCREEN_SERVER_HOST="10.120.1.12" antes de npm start
+ * O host de produção não é fixado no código: defina SHARESCREEN_SERVER_HOST
+ * (e ANNOUNCED_IP/PUBLIC_ANNOUNCED_IP em uma VPS) no ambiente de execução.
  */
-const PROD_HOST = '10.1.1.73';
 const isDevRuntime = process.env.SHARESCREEN_DEV === '1' || process.argv.includes('--dev');
 
 function detectLanIPv4() {
@@ -37,9 +36,13 @@ const config = {
   rtcMaxPort: 40100,
 
   /** IP nas URLs (Chrome/agente) */
-  serverHost: isDevRuntime && isLocalhost(process.env.SHARESCREEN_SERVER_HOST)
-    ? detectLanIPv4()
-    : process.env.SHARESCREEN_SERVER_HOST || (isDevRuntime ? detectLanIPv4() : PROD_HOST),
+  serverHost:
+    isDevRuntime && isLocalhost(process.env.SHARESCREEN_SERVER_HOST)
+      ? detectLanIPv4()
+      : process.env.SHARESCREEN_SERVER_HOST ||
+        process.env.ANNOUNCED_IP ||
+        process.env.PUBLIC_ANNOUNCED_IP ||
+        detectLanIPv4(),
   /**
    * IP anunciado no WebRTC (ICE). null = detecta automaticamente a LAN.
    * ProduÃƒÂ§ÃƒÂ£o: start-producao.bat define ANNOUNCED_IP=10.1.1.73

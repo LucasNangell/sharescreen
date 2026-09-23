@@ -1,10 +1,11 @@
 import { WebSocketServer } from 'ws';
-import { room, logClientTrace } from './room-manager.js';
+import { logClientTrace } from './room-manager.js';
+import { rooms } from './room-registry.js';
 import { getRtpCapabilities } from './mediasoup-manager.js';
 import { logger } from './logger.js';
 import config, { getVideoQualityForClients } from '../config/default.js';
 import { dispatchOpenClient, listAgentClients } from './agent-bridge.js';
-import { validateJoinAuth, getSessionHostToken } from './auth-dev.js';
+import { validateJoinAuth, getSessionHostToken, getViewerLinkRoomId } from './auth-dev.js';
 import { validateWsSession } from './auth-session.js';
 import { debugLog } from './debug-log.js';
 import { registerClientByName, saveAudioFilterPreset, renameAudioFilterPreset } from './client-db.js';
@@ -144,6 +145,7 @@ export function attachSignaling(server) {
   wss.on('connection', (ws, req) => {
     ws._clientReq = req;
     let peer = null;
+    let roomContext = null;
     let alive = true;
 
     ws.on('pong', () => {
@@ -171,7 +173,9 @@ export function attachSignaling(server) {
       try {
         await handleMessage(enviar, ws, msg, (p) => {
           peer = p;
-        }, () => peer);
+        }, () => peer, (context) => {
+          roomContext = context;
+        }, () => roomContext);
       } catch (err) {
         const producerId = msg.payload?.producerId;
         const mensagem = err.message || 'Erro interno';
@@ -203,7 +207,7 @@ export function attachSignaling(server) {
       });
       // #endregion
       if (peer) {
-        room.removePeer(peer.id);
+        rooms.removePeer(roomContext, peer.id);
       }
     });
 
@@ -216,7 +220,7 @@ export function attachSignaling(server) {
   return wss;
 }
 
-function sendPeerJoinSnapshot(enviar, peer = null) {
+function sendPeerJoinSnapshot(enviar, room, peer = null) {
   if (!peer) {
     enviar({ type: 'estadoSala', payload: room.buildRoomSnapshot(peer) });
     return;
@@ -229,13 +233,19 @@ function sendPeerJoinSnapshot(enviar, peer = null) {
   room.sendWhiteboardStateToPeer(peer);
 }
 
-async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
+async function handleMessage(enviar, ws, msg, setPeer, getPeer, setRoomContext, getRoomContext) {
   const peer = getPeer();
+  const roomContext = getRoomContext();
+  const room = roomContext?.manager || null;
   const isHostOrCoHost = (p) => p && (p.role === 'host' || p.isCoHost);
+
+  if (msg.type !== 'entrar' && !room) {
+    throw new Error('Entre em uma sala antes de enviar comandos');
+  }
 
   switch (msg.type) {
     case 'entrar': {
-      const { papel, nome, maquina, pin, hostToken, viewerToken } = msg.payload || {};
+      const { papel, nome, maquina, pin, roomPin, roomToken, hostToken, viewerToken } = msg.payload || {};
       if (!['host', 'client'].includes(papel)) {
         throw new Error('Papel inválido. Use host ou client.');
       }
@@ -245,9 +255,38 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
       const sessionUser = assertJoinSession(ws, { viewerToken, hostToken });
 
       const existingPeer = getPeer();
+      let targetContext = existingPeer ? roomContext : null;
+      if (existingPeer && !targetContext) {
+        throw new Error('Conexão sem sala associada');
+      }
+      if (existingPeer) {
+        targetContext.joinAuth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
+      } else if (papel === 'host') {
+        // `pin` continua sendo o PIN opcional de acesso legado. O PIN da
+        // reunião é separado e pertence exclusivamente à sala criada pelo host.
+        const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
+        targetContext = rooms.createOrResumeHost({
+          roomPin: roomPin || (!config.hostPin ? pin : ''),
+          roomToken,
+          ownerUserId: sessionUser?.id || null
+        });
+        targetContext.joinAuth = auth;
+      } else if (viewerToken) {
+        const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
+        targetContext = rooms.getForViewerLink(getViewerLinkRoomId(viewerToken));
+        targetContext.joinAuth = auth;
+      } else {
+        const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
+        targetContext = rooms.getForClient(roomPin || (!config.clientRoomPin ? pin : ''));
+        targetContext.joinAuth = auth;
+      }
+
       if (existingPeer && existingPeer.ws === ws) {
         if (existingPeer.role !== papel) {
           throw new Error('Esta conexão já está autenticada com outro papel');
+        }
+        if (roomContext?.id !== targetContext.id) {
+          throw new Error('Esta conexão já pertence a outra sala');
         }
         room.cleanupPeerMedia(existingPeer);
         existingPeer.displayName = nome.trim() || existingPeer.displayName;
@@ -268,7 +307,7 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
         if (papel === 'host') {
           existingPeer.isCoHost = !!msg.payload.isCoHost;
         }
-        const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
+        const auth = targetContext.joinAuth;
         enviar({
           type: 'entrou',
           payload: {
@@ -277,24 +316,29 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
             papel,
             rtpCapabilities: getRtpCapabilities(),
             videoQuality: getVideoQualityForClients(),
-            hostToken: auth.hostToken || undefined
+            hostToken: auth.hostToken || undefined,
+            roomId: targetContext.id,
+            roomToken: papel === 'host' ? targetContext.hostToken : undefined
           }
         });
-        sendPeerJoinSnapshot(enviar, existingPeer);
+        sendPeerJoinSnapshot(enviar, room, existingPeer);
         break;
       }
 
-      const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
+      const auth = targetContext.joinAuth;
       const publishIntent =
         viewerToken || msg.payload?.publishIntent === 'viewer' ? 'viewer' : 'publisher';
-      const newPeer = room.addPeer(ws, papel, nome, maquina, {
+      const targetRoom = targetContext.manager;
+      const newPeer = targetRoom.addPeer(ws, papel, nome, maquina, {
         isExternal: !!viewerToken,
         publishIntent,
         userId: sessionUser?.id || null,
         username: sessionUser?.username || null,
         userRole: sessionUser?.role || null
       });
+      newPeer.roomId = targetContext.id;
       setPeer(newPeer);
+      setRoomContext(targetContext);
       if (papel === 'client') {
         registerClientByName(nome.trim(), getClientIpFromWs(ws), maquina || '');
       }
@@ -315,11 +359,13 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
           shortId: newPeer.id.slice(0, 8),
           papel,
           rtpCapabilities: getRtpCapabilities(),
-          videoQuality: getVideoQualityForClients(),
-          hostToken: auth.hostToken || undefined
-        }
-      });
-      sendPeerJoinSnapshot(enviar, newPeer);
+            videoQuality: getVideoQualityForClients(),
+            hostToken: auth.hostToken || undefined,
+            roomId: targetContext.id,
+            roomToken: papel === 'host' ? targetContext.hostToken : undefined
+          }
+        });
+      sendPeerJoinSnapshot(enviar, targetRoom, newPeer);
       // #region agent log
       debugSessionLog('H6', 'signaling:entrar', 'client joined', {
         peerId: newPeer.id.slice(0, 8),
@@ -562,7 +608,7 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer) {
           payload: room.buildRoomState(peer, 'requested')
         });
       }
-      sendPeerJoinSnapshot(enviar, peer);
+      sendPeerJoinSnapshot(enviar, room, peer);
       break;
     }
 

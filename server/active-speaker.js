@@ -3,18 +3,20 @@ import { logger } from './logger.js';
 
 let observer = null;
 let initPromise = null;
-/** @type {Map<string, string>} producerId -> peerId */
+/** @type {Map<string, { peerId: string, roomId: string | null }>} producerId -> owner */
 const producerPeerMap = new Map();
-/** @type {((info: { peerId: string, producerId: string, volume?: number } | null) => void) | null} */
-let onDominantSpeaker = null;
-let lastDominant = null;
+const dominantSpeakerHandlers = new Map();
+const lastDominantByRoom = new Map();
 
-export function setDominantSpeakerHandler(handler) {
-  onDominantSpeaker = typeof handler === 'function' ? handler : null;
+export function setDominantSpeakerHandler(roomId, handler) {
+  const key = String(roomId || 'default');
+  if (typeof handler === 'function') dominantSpeakerHandlers.set(key, handler);
+  else dominantSpeakerHandlers.delete(key);
 }
 
-export function getLastDominantSpeaker() {
-  return lastDominant ? { ...lastDominant } : null;
+export function getLastDominantSpeaker(roomId) {
+  const value = lastDominantByRoom.get(String(roomId || 'default'));
+  return value ? { ...value } : null;
 }
 
 export async function ensureActiveSpeakerObserver() {
@@ -28,14 +30,17 @@ export async function ensureActiveSpeakerObserver() {
       const producer = dominantSpeaker?.producer;
       const producerId = producer?.id;
       if (!producerId) return;
-      const peerId = producerPeerMap.get(producerId);
-      if (!peerId) return;
-      lastDominant = {
-        peerId,
+      const owner = producerPeerMap.get(producerId);
+      if (!owner) return;
+      const roomKey = String(owner.roomId || 'default');
+      const info = {
+        peerId: owner.peerId,
         producerId,
+        roomId: owner.roomId,
         volume: producer?.volume ?? null
       };
-      onDominantSpeaker?.(lastDominant);
+      lastDominantByRoom.set(roomKey, info);
+      dominantSpeakerHandlers.get(roomKey)?.(info);
     });
     logger.info('[active-speaker] ActiveSpeakerObserver criado', { observerId: observer.id });
     return observer;
@@ -49,10 +54,10 @@ export async function ensureActiveSpeakerObserver() {
   }
 }
 
-export async function trackMicProducer(producer, peerId) {
+export async function trackMicProducer(producer, peerId, roomId = null) {
   if (!producer?.id || !peerId) return;
   await ensureActiveSpeakerObserver();
-  producerPeerMap.set(producer.id, String(peerId));
+  producerPeerMap.set(producer.id, { peerId: String(peerId), roomId });
   try {
     await observer.addProducer({ producerId: producer.id });
     logger.debug('[active-speaker] producer monitorado', {
@@ -70,20 +75,23 @@ export async function trackMicProducer(producer, peerId) {
 
 export async function untrackMicProducer(producerId) {
   if (!producerId) return;
+  const owner = producerPeerMap.get(producerId);
   producerPeerMap.delete(producerId);
   if (!observer) return;
   try {
     await observer.removeProducer({ producerId });
   } catch (_) {}
-  if (lastDominant?.producerId === producerId) {
-    lastDominant = null;
-    onDominantSpeaker?.(null);
+  const roomKey = String(owner?.roomId || 'default');
+  if (lastDominantByRoom.get(roomKey)?.producerId === producerId) {
+    lastDominantByRoom.delete(roomKey);
+    dominantSpeakerHandlers.get(roomKey)?.(null);
   }
 }
 
 export async function closeActiveSpeakerObserver() {
   producerPeerMap.clear();
-  lastDominant = null;
+  lastDominantByRoom.clear();
+  dominantSpeakerHandlers.clear();
   if (observer) {
     try {
       observer.close();

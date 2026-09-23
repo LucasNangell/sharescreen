@@ -16,10 +16,13 @@ function pruneViewerLinkTokens() {
   }
 }
 
-export function createViewerLinkToken() {
+export function createViewerLinkToken(roomId) {
+  if (!roomId || typeof roomId !== 'string') {
+    throw new Error('Sala inválida para link externo');
+  }
   pruneViewerLinkTokens();
   const token = crypto.randomBytes(24).toString('base64url');
-  viewerLinkTokens.set(token, { expiresAt: Date.now() + VIEWER_LINK_TTL_MS });
+  viewerLinkTokens.set(token, { roomId, expiresAt: Date.now() + VIEWER_LINK_TTL_MS });
   return { token, expiresInMs: VIEWER_LINK_TTL_MS };
 }
 
@@ -32,6 +35,11 @@ export function validateViewerLinkToken(token) {
     return false;
   }
   return true;
+}
+
+export function getViewerLinkRoomId(token) {
+  if (!validateViewerLinkToken(token)) return null;
+  return viewerLinkTokens.get(token)?.roomId || null;
 }
 
 export function getSessionHostToken() {

@@ -45,7 +45,8 @@ import {
   getUserSetting
 } from './client-db.js';
 import { getClientIpFromRequest } from './client-ip.js';
-import { room, getAgentDebugLogPath } from './room-manager.js';
+import { getAgentDebugLogPath } from './room-manager.js';
+import { rooms } from './room-registry.js';
 import { getDebugSessionRing, debugSessionLog } from './debug-session-log.js';
 import {
   initAuth,
@@ -191,7 +192,7 @@ function registerDevAdminRoutes(app) {
         res.status(400).json(result);
         return;
       }
-      room.refreshTransmissionIfSelected(clientName);
+      rooms.refreshTransmissionIfSelected(clientName);
       res.json(result);
     }
   );
@@ -409,7 +410,7 @@ function createApp() {
         res.status(400).json(result);
         return;
       }
-      room.refreshTransmissionIfSelected(clientName);
+      rooms.refreshTransmissionIfSelected(clientName);
       res.json(result);
     }
   );
@@ -437,7 +438,8 @@ function createApp() {
       roomPinRequired: !!(config.roomPin || '').trim(),
       clientPinRequired: !!(config.clientRoomPin || '').trim(),
       hostPinRequired: !!(config.hostPin || '').trim(),
-      roomOpen: room.hasActiveHost(),
+      roomOpen: rooms.hasActiveRooms(),
+      activeRoomCount: rooms.getActiveRoomCount(),
       dev: !!config.dev,
       publicUrl: config.publicUrl || null,
       publicClientPath: (config.publicUrl || '').trim() ? '/meet/' : '/client/',
@@ -484,7 +486,13 @@ function createApp() {
       res.status(400).json({ ok: false, erro: 'Informe o nome do convidado (máx. 64 caracteres)' });
       return;
     }
-    const { token, expiresInMs } = createViewerLinkToken();
+    const roomId = String(req.headers['x-room-id'] || '').trim();
+    const roomToken = String(req.headers['x-room-token'] || '').trim();
+    if (!rooms.canManageRoom(roomId, roomToken, req.user?.id || null)) {
+      res.status(403).json({ ok: false, erro: 'Sem autorização para gerar link desta sala' });
+      return;
+    }
+    const { token, expiresInMs } = createViewerLinkToken(roomId);
     const configuredPublic = (config.publicUrl || '').trim().replace(/\/$/, '');
     let baseUrl = configuredPublic;
     if (!baseUrl) {

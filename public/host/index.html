@@ -413,7 +413,7 @@
   
   
   <script>(function(){
-var BUILD_ID="2026-09-23T14-58-16-mwt02l";
+var BUILD_ID="2026-09-23T15-30-34-xxg7m8";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -447,10 +447,10 @@ try{
   if(!stored)localStorage.setItem(KEY,BUILD_ID);
 }catch(e){}
 })();</script>
-<link rel="stylesheet" href="/shared/theme.css?v=2026-09-23T14-58-16-mwt02l" />
-  <link rel="stylesheet" href="/shared/audio-filters.css?v=2026-09-23T14-58-16-mwt02l" />
-  <link rel="stylesheet" href="/shared/components.css?v=2026-09-23T14-58-16-mwt02l" />
-  <link rel="stylesheet" href="style.css?v=2026-09-23T14-58-16-mwt02l" />
+<link rel="stylesheet" href="/shared/theme.css?v=2026-09-23T15-30-34-xxg7m8" />
+  <link rel="stylesheet" href="/shared/audio-filters.css?v=2026-09-23T15-30-34-xxg7m8" />
+  <link rel="stylesheet" href="/shared/components.css?v=2026-09-23T15-30-34-xxg7m8" />
+  <link rel="stylesheet" href="style.css?v=2026-09-23T15-30-34-xxg7m8" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body class="app-host">
@@ -805,8 +805,12 @@ try{
         <label for="host-name-input">Seu nome</label>
         <input id="host-name-input" type="text" maxlength="64" placeholder="Ex.: Felipe" autocomplete="name" />
       </div>
+      <div id="host-room-pin-wrap" class="field">
+        <label for="host-room-pin-input">Defina o PIN desta sala</label>
+        <input id="host-room-pin-input" type="password" minlength="4" maxlength="64" autocomplete="new-password" />
+      </div>
       <div id="host-pin-wrap" class="field" hidden>
-        <label for="pin-input">PIN da sala</label>
+        <label for="pin-input">PIN de acesso ao painel</label>
         <input id="pin-input" type="password" maxlength="32" autocomplete="off" />
       </div>
       <button type="button" id="btn-host-entry-submit" class="btn btn-primary" style="width:100%;margin-top:1rem">Entrar e compartilhar tela</button>
@@ -1012,7 +1016,7 @@ try{
     </div>
   </template>
 
-  <script src="app.bundle.js?v=2026-09-23T14-58-16-mwt02l"></script>
+  <script src="app.bundle.js?v=2026-09-23T15-30-34-xxg7m8"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/host/sw.js', { scope: '/host/' }).catch(function () {});

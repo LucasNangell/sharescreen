@@ -233,7 +233,8 @@ export class Peer {
 }
 
 export class RoomManager {
-  constructor() {
+  constructor({ roomId = null } = {}) {
+    this.roomId = roomId;
     this.peers = new Map();
     this.selectedPeerId = null;
     this.transmissionPaused = false;
@@ -323,7 +324,7 @@ export class RoomManager {
     ensureActiveSpeakerObserver().catch((err) => {
       logger.warn('[active-speaker] inicialização adiada', { err: err?.message });
     });
-    setDominantSpeakerHandler((info) => {
+    setDominantSpeakerHandler(this.roomId, (info) => {
       this._onDominantSpeakerChanged(info);
     });
   }
@@ -1590,7 +1591,7 @@ export class RoomManager {
         producerId: producer.id.slice(0, 8)
       });
       if (slot === 'microphone') {
-        trackMicProducer(producer, peer.id).catch(() => {});
+        trackMicProducer(producer, peer.id, this.roomId).catch(() => {});
       }
       this.broadcastAudioSources();
     }
@@ -1705,9 +1706,13 @@ export class RoomManager {
       peer.consumers.delete(consumerId);
     }
   }
-}
 
-export const room = new RoomManager();
+  destroy() {
+    setDominantSpeakerHandler(this.roomId, null);
+    for (const peer of this.peers.values()) this.cleanupPeerMedia(peer);
+    this.peers.clear();
+  }
+}
 
 export function logClientTrace(peer, { message, data = {} } = {}) {
   agentDebugLog({

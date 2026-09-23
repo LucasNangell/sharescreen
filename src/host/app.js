@@ -166,6 +166,8 @@ const els = {
   btnSidebarCollapse: $('btn-sidebar-collapse'),
   hostEntryModal: $('host-entry-modal'),
   hostNameInput: $('host-name-input'),
+  hostRoomPinWrap: $('host-room-pin-wrap'),
+  hostRoomPinInput: $('host-room-pin-input'),
   hostPinWrap: $('host-pin-wrap'),
   pinInput: $('pin-input'),
   btnHostEntrySubmit: $('btn-host-entry-submit'),
@@ -484,22 +486,31 @@ function setHostShellVisible(visible) {
   if (els.techDrawer) els.techDrawer.hidden = !visible;
 }
 
-function promptRoomPinIfRequired(roomPinRequired) {
-  if (!roomPinRequired) return Promise.resolve();
-
+function promptRoomPinIfRequired(hostPinRequired) {
   return new Promise((resolve) => {
+    const title = document.getElementById('host-entry-title');
+    const desc = els.hostEntryModal?.querySelector('.modal-panel > p');
     const nameField = els.hostNameInput?.closest('.field');
     if (nameField) nameField.hidden = true;
-    if (els.hostPinWrap) els.hostPinWrap.hidden = false;
+    if (els.hostRoomPinWrap) els.hostRoomPinWrap.hidden = false;
+    if (els.hostPinWrap) els.hostPinWrap.hidden = !hostPinRequired;
+    if (title) title.textContent = 'Criar ou retomar sala';
+    if (desc) desc.textContent = 'Defina o PIN que os clients usarão para entrar nesta reunião.';
     if (els.hostEntryModal) els.hostEntryModal.hidden = false;
     if (els.btnHostEntrySubmit) {
       els.btnHostEntrySubmit.textContent = 'Continuar';
     }
 
     const submit = () => {
-      roomPin = els.pinInput?.value.trim() || '';
+      roomPin = els.hostRoomPinInput?.value.trim() || '';
       if (!roomPin) {
         showToast('Informe o PIN da sala', 'warn');
+        els.hostRoomPinInput?.focus();
+        return;
+      }
+      hostAccessPin = els.pinInput?.value.trim() || '';
+      if (hostPinRequired && !hostAccessPin) {
+        showToast('Informe o PIN de acesso ao painel', 'warn');
         els.pinInput?.focus();
         return;
       }
@@ -508,13 +519,15 @@ function promptRoomPinIfRequired(roomPinRequired) {
     };
 
     els.btnHostEntrySubmit.onclick = submit;
-    els.pinInput?.addEventListener('keydown', (e) => {
+    const submitOnEnter = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         submit();
       }
-    });
-    els.pinInput?.focus();
+    };
+    els.hostRoomPinInput?.addEventListener('keydown', submitOnEnter);
+    els.pinInput?.addEventListener('keydown', submitOnEnter);
+    els.hostRoomPinInput?.focus();
   });
 }
 
@@ -524,6 +537,7 @@ function promptHostScreenShare() {
     const desc = els.hostEntryModal?.querySelector('.modal-panel > p');
     const nameField = els.hostNameInput?.closest('.field');
     if (nameField) nameField.hidden = true;
+    if (els.hostRoomPinWrap) els.hostRoomPinWrap.hidden = true;
     if (els.hostPinWrap) els.hostPinWrap.hidden = true;
     if (title) title.textContent = 'Compartilhar tela';
     if (desc) {
@@ -554,7 +568,10 @@ function promptHostScreenShare() {
 }
 
 let roomPin = '';
+let hostAccessPin = '';
 let hostToken = '';
+let roomToken = '';
+let roomId = '';
 let authUser = null;
 let hostDisplayName = readQueryParam('nome') || localStorage.getItem(STORAGE_HOST_NAME) || '';
 let statsTimer = null;
@@ -564,6 +581,15 @@ const HOST_LOCK_TTL_MS = 8000;
 let hostTabBlocked = false;
 let hostLockTimer = null;
 let hostSessionJoined = false;
+
+function getHostLockKey() {
+  let hash = 2166136261;
+  for (const char of roomPin) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${HOST_LOCK_KEY}:${(hash >>> 0).toString(36)}`;
+}
 
 function debugHostLog(_hypothesisId, _message, _data = {}) {}
 
@@ -605,7 +631,7 @@ function debug3a36beLog(hypothesisId, location, message, data = {}) {
 
 function readHostLock() {
   try {
-    return JSON.parse(localStorage.getItem(HOST_LOCK_KEY) || 'null');
+    return JSON.parse(localStorage.getItem(getHostLockKey()) || 'null');
   } catch {
     return null;
   }
@@ -617,20 +643,20 @@ function tryAcquireHostLock() {
   if (current && current.tabId !== HOST_TAB_ID && now - current.ts < HOST_LOCK_TTL_MS) {
     return false;
   }
-  localStorage.setItem(HOST_LOCK_KEY, JSON.stringify({ tabId: HOST_TAB_ID, ts: now }));
+  localStorage.setItem(getHostLockKey(), JSON.stringify({ tabId: HOST_TAB_ID, ts: now }));
   const verify = readHostLock();
   return verify?.tabId === HOST_TAB_ID;
 }
 
 function refreshHostLock() {
   if (readHostLock()?.tabId !== HOST_TAB_ID) return;
-  localStorage.setItem(HOST_LOCK_KEY, JSON.stringify({ tabId: HOST_TAB_ID, ts: Date.now() }));
+  localStorage.setItem(getHostLockKey(), JSON.stringify({ tabId: HOST_TAB_ID, ts: Date.now() }));
 }
 
 function releaseHostLock() {
   const current = readHostLock();
   if (current?.tabId === HOST_TAB_ID) {
-    localStorage.removeItem(HOST_LOCK_KEY);
+    localStorage.removeItem(getHostLockKey());
   }
 }
 
@@ -2992,7 +3018,9 @@ async function joinHost({ autoShare = true } = {}) {
     const payload = {
       papel: 'host',
       nome: hostDisplayName,
-      pin: roomPin || undefined,
+      pin: hostAccessPin || undefined,
+      roomPin: roomPin || undefined,
+      roomToken: roomToken || undefined,
       hostToken: hostToken || undefined,
       isCoHost: !!isCoHostInstance
     };
@@ -3004,6 +3032,8 @@ async function joinHost({ autoShare = true } = {}) {
     hostPeerId = entrou.peerId;
     if (hostPeerId) ownPeerIds.add(String(hostPeerId));
     hostToken = entrou.hostToken || hostToken;
+    roomId = entrou.roomId || roomId;
+    roomToken = entrou.roomToken || roomToken;
     signaling.markAuthenticated(true);
     debugHostLog('F', 'joinHost entrou', { gen, hostPeerId });
 
@@ -3104,20 +3134,6 @@ async function bootstrap() {
 
   setHostShellVisible(false);
 
-  hostTabBlocked = !tryAcquireHostLock();
-  if (hostTabBlocked) {
-    debugHostLog('A', 'duplicate host tab blocked', { lock: readHostLock() });
-    setBadge('Aba duplicada', 'error');
-    setStatus('Ja existe outro painel host aberto neste navegador. Feche a outra aba.');
-    showToast('Feche a outra aba do painel host antes de continuar', 'error');
-    return;
-  }
-  hostLockTimer = setInterval(refreshHostLock, 2000);
-  window.addEventListener('beforeunload', () => {
-    clearInterval(hostLockTimer);
-    releaseHostLock();
-  });
-
   const cohostParam = readQueryParam('cohost') === 'true';
   const tokenParam = readQueryParam('token');
   const nomeParam = readQueryParam('nome');
@@ -3144,13 +3160,28 @@ async function bootstrap() {
       showToast(e.message || 'Falha na autenticação', 'error');
       return;
     }
-    try {
-      const info = await fetch('/api/info').then((r) => r.json());
-      await promptRoomPinIfRequired(info.hostPinRequired ?? !!info.roomPinRequired);
-    } catch (_) {
-      await promptRoomPinIfRequired(false);
-    }
   }
+
+  try {
+    const info = await fetch('/api/info').then((r) => r.json());
+    await promptRoomPinIfRequired(!cohostParam && (info.hostPinRequired ?? !!info.roomPinRequired));
+  } catch (_) {
+    await promptRoomPinIfRequired(false);
+  }
+
+  hostTabBlocked = !tryAcquireHostLock();
+  if (hostTabBlocked) {
+    debugHostLog('A', 'duplicate host tab blocked', { lock: readHostLock() });
+    setBadge('Aba duplicada', 'error');
+    setStatus('Ja existe outro painel host aberto nesta sala neste navegador. Feche a outra aba.');
+    showToast('Feche a outra aba desta sala antes de continuar', 'error');
+    return;
+  }
+  hostLockTimer = setInterval(refreshHostLock, 2000);
+  window.addEventListener('beforeunload', () => {
+    clearInterval(hostLockTimer);
+    releaseHostLock();
+  });
 
   updateHostSettingsAccountUi();
   setHostShellVisible(true);
@@ -4408,7 +4439,9 @@ async function gerarLinkExterno(guestName) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(hostToken ? { 'X-Host-Token': hostToken } : {})
+        ...(hostToken ? { 'X-Host-Token': hostToken } : {}),
+        ...(roomId ? { 'X-Room-Id': roomId } : {}),
+        ...(roomToken ? { 'X-Room-Token': roomToken } : {})
       },
       body: JSON.stringify({ nome })
     });

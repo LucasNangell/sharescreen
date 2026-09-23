@@ -55,6 +55,8 @@ const els = {
   nomeInput: $('nome-input'),
   pinWrap: $('pin-wrap'),
   clientPinInput: $('client-pin-input'),
+  roomPinWrap: $('room-pin-wrap'),
+  roomPinInput: $('room-pin-input'),
   chkSystemAudio: $('chk-system-audio'),
   chkMicrophone: $('chk-microphone'),
   chkViewerOnly: $('chk-viewer-only'),
@@ -205,6 +207,7 @@ let joinInFlight = false;
 let bootstrapPromise = null;
 let clientJoinPromise = null;
 let roomPin = readQueryParam('pin') || '';
+let clientAccessPin = '';
 let displayControlActive = false;
 let displaySources = [];
 const clientSession = new ClientSession();
@@ -1739,9 +1742,7 @@ async function initOnboarding() {
     setClientShellVisible(true);
     try {
       const info = await fetch('/api/info').then((r) => r.json());
-      if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) {
-        els.pinWrap.hidden = false;
-      }
+      if (info.roomPinRequired && els.pinWrap && !viewerAccessToken) els.pinWrap.hidden = false;
     } catch (_) {}
     const nomeUrl = readQueryParam('nome');
     displayName = nomeUrl || displayName || '';
@@ -1828,7 +1829,16 @@ async function salvarEIniciar(asViewer = false, { autoTransmitAfterCapture = fal
       body: JSON.stringify({ nome, computerName: ensureAgentHostname() })
     });
   } catch (_) {}
-  roomPin = els.clientPinInput?.value?.trim() || roomPin;
+  roomPin = els.roomPinInput?.value?.trim() || roomPin;
+  clientAccessPin = els.clientPinInput?.value?.trim() || '';
+
+  if (!viewerAccessToken && !roomPin) {
+    showToast('Informe o PIN da sala', 'warn');
+    els.roomPinInput?.focus();
+    return;
+  }
+
+  if (roomPin && els.roomPinInput) els.roomPinInput.value = roomPin;
 
   if (asViewer || els.chkViewerOnly?.checked) {
     viewerOnly = true;
@@ -2311,7 +2321,8 @@ async function executeJoinAndStart() {
         papel: 'client',
         nome,
         maquina: ensureAgentHostname(),
-        pin: roomPin || undefined,
+        pin: clientAccessPin || undefined,
+        roomPin: roomPin || undefined,
         viewerToken: viewerAccessToken || undefined,
         ...joinPayloadExtras(clientSession, {
           viewerOnly,
@@ -2451,7 +2462,8 @@ async function rejoinSession() {
       papel: 'client',
       nome: getNome(),
       maquina: ensureAgentHostname(),
-      pin: roomPin || undefined,
+      pin: clientAccessPin || undefined,
+      roomPin: roomPin || undefined,
       viewerToken: viewerAccessToken || undefined,
       ...joinPayloadExtras(clientSession, {
         viewerOnly,
