@@ -17,6 +17,12 @@ for (const file of ['public/client/sw.js', 'public/host/sw.js']) {
   assert(source.includes("self.skipWaiting()"), `${file} ativa a nova versão imediatamente`);
 }
 
+const hostHtml = fs.readFileSync('public/host/index.html', 'utf8');
+assert(
+  /rel=["']manifest["'][^>]*crossorigin=["']use-credentials["']/.test(hostHtml),
+  'manifest do host reutiliza as credenciais exigidas pelo proxy'
+);
+
 if (failed) {
   console.error(`\n${failed} teste(s) falharam`);
   process.exit(1);
