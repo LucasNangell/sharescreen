@@ -435,7 +435,7 @@ export class MediaClient {
         : this.device.createRecvTransport(transportOptions);
 
     if (hasTurnServers(this.videoQuality) && direction === 'recv') {
-      this.onLog('TURN dispon?fivel i?,???? fallback se conex?fio direta falhar', 'info');
+      this.onLog('TURN disponivel - fallback para conexoes diretas bloqueadas', 'info');
     }
 
     transport.on('connect', ({ dtlsParameters }, callback, errback) => {
@@ -464,7 +464,10 @@ export class MediaClient {
           this.videoQuality?.serverHost ||
           '?';
         const ports = this.videoQuality?.rtcPortRange || '40000-40100';
-        msg += ` i?,???? verifique firewall UDP ${ports} em ${ice}`;
+        const turnHint = hasTurnServers(this.videoQuality)
+          ? ' e confirme que o endpoint TURN esta acessivel'
+          : ' ou configure um endpoint TURN acessivel';
+        msg += ` - falha ICE; verifique UDP/TCP ${ports} em ${ice}${turnHint}`;
         this.onIceState?.('failed', direction);
       } else if (state === 'connected') {
         this.onIceState?.('connected', direction);

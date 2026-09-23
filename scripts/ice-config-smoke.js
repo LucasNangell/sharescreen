@@ -1,4 +1,5 @@
 import { buildIceListenIps, resolveAnnouncedIp } from '../server/network.js';
+import fs from 'fs';
 
 let failed = 0;
 
@@ -23,6 +24,16 @@ assert(
 assert(
   candidates.every((entry) => entry.ip === '0.0.0.0'),
   'mediasoup escuta em todas as interfaces locais'
+);
+
+const hostSource = fs.readFileSync('src/host/app.js', 'utf8');
+const hostJoinIndex = hostSource.indexOf('async function joinHost(');
+const hostQualityIndex = hostSource.indexOf('media.setVideoQuality(quality);', hostJoinIndex);
+const hostRecvIndex = hostSource.indexOf('await media.ensureRecvTransport();', hostQualityIndex);
+assert(hostJoinIndex >= 0 && hostQualityIndex > hostJoinIndex, 'host aplica a configuracao ICE recebida do servidor');
+assert(
+  hostRecvIndex > hostQualityIndex,
+  'host aplica STUN/TURN antes de criar os transportes de recepcao'
 );
 
 if (failed) {

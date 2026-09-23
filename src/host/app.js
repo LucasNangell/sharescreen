@@ -3051,12 +3051,16 @@ async function joinHost({ autoShare = true } = {}) {
     await media.loadDevice(entrou.rtpCapabilities);
     if (gen !== joinGeneration) return;
 
+    // ICE servers must be configured before mediasoup-client creates the
+    // underlying RTCPeerConnections. Updating videoQuality afterwards does
+    // not retrofit TURN into transports that already exist.
+    media.setVideoQuality(quality);
+    media.setOwnPeerId(hostPeerId);
+
     await media.ensureRecvTransport();
     await media.ensureRecvTransport(media._audioRecvTag());
     if (gen !== joinGeneration) return;
 
-    media.setVideoQuality(quality);
-    media.setOwnPeerId(hostPeerId);
     if (entrou.videoQuality?.sharedRoomMode) {
       applySharedRoomModeFromRoom(true);
     }
