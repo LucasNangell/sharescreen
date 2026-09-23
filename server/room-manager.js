@@ -450,7 +450,7 @@ export class RoomManager {
 
   hasActiveHost() {
     this.purgeStalePeers();
-    return !!this.getHostPeer();
+    return !!this.getSnapshotHostPeer();
   }
 
   getHostPeers() {
@@ -1003,7 +1003,7 @@ export class RoomManager {
       throw new Error('Já existe um painel host aberto nesta sala. Feche-o antes de abrir outro.');
     }
 
-    if (role === 'client' && !this.getHostPeer()) {
+    if (role === 'client' && !this.hasActiveHost()) {
       throw new Error('A sala ainda não foi aberta pelo host. Aguarde o host iniciar e tente novamente.');
     }
 
