@@ -277,7 +277,9 @@ async function handleMessage(enviar, ws, msg, setPeer, getPeer, setRoomContext, 
         targetContext.joinAuth = auth;
       } else {
         const auth = validateJoinAuth({ papel, pin, hostToken, viewerToken });
-        targetContext = rooms.getForClient(roomPin || (!config.clientRoomPin ? pin : ''));
+        // `pin` é aceito apenas como compatibilidade com bundles antigos; nos
+        // clientes atuais a credencial da reunião sempre é enviada em roomPin.
+        targetContext = rooms.getForClient(roomPin || pin);
         targetContext.joinAuth = auth;
       }
 

@@ -68,8 +68,7 @@ Relatório QA: [RELATORIO-QA-FINAL-DEV.md](RELATORIO-QA-FINAL-DEV.md)
 | `ANNOUNCED_IP` | `127.0.0.1` |
 | `SHARESCREEN_RECORDINGS_DIR` | `_dev_recordings/` |
 | `SHARESCREEN_RECORDING_DOWNLOAD_TTL_HOURS` | `24` — remove gravações pendentes que não foram baixadas |
-| `SHARESCREEN_ROOM_PIN` | opcional (descomente no bat) |
-| `SHARESCREEN_CLIENT_ROOM_PIN` | PIN apenas para clientes/convidados; permite proteger o host no proxy |
+| `SHARESCREEN_ROOM_PIN` | compatibilidade: fallback opcional para o PIN do host |
 | `SHARESCREEN_HOST_PIN` | PIN apenas para host; vazio quando o proxy já o protege |
 | `SHARESCREEN_HOST_TOKEN` | opcional |
 | `STUN_SERVERS` | `stun:stun.l.google.com:19302` |

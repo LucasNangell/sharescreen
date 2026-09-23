@@ -439,7 +439,8 @@ function createApp() {
       rtcPorts: `${config.rtcMinPort}-${config.rtcMaxPort}`,
       // roomPinRequired é mantido para versões antigas do frontend.
       roomPinRequired: !!(config.roomPin || '').trim(),
-      clientPinRequired: !!(config.clientRoomPin || '').trim(),
+      // O PIN global de convidado foi removido; o acesso usa o PIN da sala.
+      clientPinRequired: false,
       hostPinRequired: !!(config.hostPin || '').trim(),
       roomOpen: rooms.hasActiveRooms(),
       activeRoomCount: rooms.getActiveRoomCount(),

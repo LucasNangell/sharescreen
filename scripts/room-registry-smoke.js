@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { RoomRegistry } from '../server/room-registry.js';
 
 let failed = 0;
@@ -75,6 +76,21 @@ assert(takeoverRejected, 'token errado não assume sala em reconexão');
 
 assert(registry.canManageRoom(alpha.id, alpha.hostToken), 'token da sala autoriza link externo da própria sala');
 assert(!registry.canManageRoom(alpha.id, beta.hostToken), 'token de outra sala não autoriza link externo');
+
+const clientHtml = readFileSync(new URL('../public/client/index.html', import.meta.url), 'utf8');
+const clientSource = readFileSync(new URL('../src/client/app.js', import.meta.url), 'utf8');
+assert(clientHtml.includes('id="room-pin-input"'), 'entrada do convidado mantém o campo de PIN da sala');
+assert(!clientHtml.includes('client-pin-input'), 'entrada do convidado não exibe um segundo campo de PIN');
+assert(!clientHtml.includes('PIN de acesso'), 'rótulo legado de PIN de acesso foi removido');
+assert(clientSource.includes('roomPin: roomPin || undefined'), 'cliente envia o PIN da sala ao servidor');
+assert(!clientSource.includes('clientAccessPin'), 'cliente não mantém nem envia o PIN de acesso legado');
+
+const authModuleUrl = new URL('../server/auth-dev.js', import.meta.url).href;
+const authProbe = await import(`${authModuleUrl}?client-pin-disabled=${Date.now()}`);
+assert(
+  JSON.stringify(authProbe.validateJoinAuth({ papel: 'client', pin: 'qualquer-valor' })) === '{}',
+  'servidor não exige um PIN global adicional do convidado'
+);
 
 if (failed) {
   console.error(`\n${failed} teste(s) falharam`);

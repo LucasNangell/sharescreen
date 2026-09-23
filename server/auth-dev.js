@@ -49,13 +49,11 @@ export function getSessionHostToken() {
 /**
  * Valida PIN/host na entrada.
  *
- * Compatibilidade: SHARESCREEN_ROOM_PIN continua protegendo ambos os papéis.
- * SHARESCREEN_CLIENT_ROOM_PIN e SHARESCREEN_HOST_PIN permitem separar os
- * acessos quando o host é protegido por um proxy reverso.
+ * O convidado é autenticado pelo PIN dinâmico da sala em RoomRegistry.
+ * SHARESCREEN_HOST_PIN continua disponível apenas para proteger o host.
  */
 export function validateJoinAuth(payload = {}) {
   const { papel, pin, hostToken, viewerToken } = payload;
-  const requiredClientPin = (config.clientRoomPin || '').trim();
   const requiredHostPin = (config.hostPin || '').trim();
 
   if (papel === 'client' && viewerToken) {
@@ -80,9 +78,6 @@ export function validateJoinAuth(payload = {}) {
     return { hostToken: sessionHostToken };
   }
 
-  if (requiredClientPin && String(pin || '').trim() !== requiredClientPin) {
-    throw new Error('PIN inválido');
-  }
   return {};
 }
 

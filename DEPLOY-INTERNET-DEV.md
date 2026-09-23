@@ -21,8 +21,7 @@ Documentação para publicação futura (não deployada nesta etapa).
 | `TRUST_PROXY` | `1` se atrás de Nginx/Load Balancer |
 | `STUN_SERVERS` | `stun:stun.l.google.com:19302` (padrão) |
 | `TURN_SERVERS` | JSON array para NAT restrito |
-| `SHARESCREEN_ROOM_PIN` | PIN de sala |
-| `SHARESCREEN_CLIENT_ROOM_PIN` | PIN exigido somente de clients sem link externo |
+| `SHARESCREEN_ROOM_PIN` | compatibilidade: fallback opcional para o PIN do host |
 | `SHARESCREEN_HOST_PIN` | PIN exigido somente do host (opcional) |
 | `SHARESCREEN_RECORDING_DOWNLOAD_TTL_HOURS` | Horas para apagar gravações pendentes não baixadas (padrão: `24`) |
 | `SHARESCREEN_HOST_TOKEN` | Token fixo de host |
@@ -43,7 +42,7 @@ Em internet real com NAT simétrico, **TURN é necessário** além de STUN. Conf
 ## Segurança
 
 - Use certificado confiável (mkcert na LAN, CA corporativa ou Let's Encrypt)
-- Ative PIN em produção (`SHARESCREEN_CLIENT_ROOM_PIN`; `SHARESCREEN_ROOM_PIN` mantém compatibilidade e protege ambos os papéis)
+- Cada convidado entra com o PIN dinâmico definido pelo host ao criar a sala
 - Proteja `POST /api/gravacao` com token de host (`SHARESCREEN_HOST_TOKEN`)
 - Rate limit no proxy para uploads
 - **HTTPS obrigatório** fora de localhost para captura de tela/microfone
