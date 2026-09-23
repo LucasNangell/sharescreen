@@ -66,6 +66,30 @@ function copyAudioMlAssets() {
   console.log('Assets de audio ML copiados para public/shared/vad e public/shared/rnnoise');
 }
 
+async function bundleRnnoiseWorklet(isProd) {
+  const source = path.join(
+    root,
+    'node_modules/@timephy/rnnoise-wasm/dist/NoiseSuppressorWorklet.js'
+  );
+  const destination = path.join(root, 'public/shared/rnnoise/NoiseSuppressorWorklet.js');
+  if (!fs.existsSync(source)) {
+    throw new Error(`Worklet RNNoise ausente: ${source}`);
+  }
+
+  await esbuild.build({
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: ['chrome90', 'edge90', 'firefox90'],
+    minify: isProd,
+    sourcemap: !isProd,
+    logLevel: 'info',
+    entryPoints: [source],
+    outfile: destination
+  });
+  console.log('Worklet RNNoise gerado como bundle autocontido');
+}
+
 const isProd = process.argv.includes('--prod') || process.env.NODE_ENV === 'production';
 
 const common = {
@@ -193,4 +217,5 @@ for (const htmlPath of htmlPages) {
 console.log('Bundles gerados: public/client e public/host');
 copyBrandIcons();
 copyAudioMlAssets();
+await bundleRnnoiseWorklet(isProd);
 console.log(`Build ID: ${buildId}`);
