@@ -403,6 +403,7 @@ function createApp() {
       roomPinRequired: !!(config.roomPin || '').trim(),
       clientPinRequired: !!(config.clientRoomPin || '').trim(),
       hostPinRequired: !!(config.hostPin || '').trim(),
+      roomOpen: room.hasActiveHost(),
       dev: !!config.dev,
       publicUrl: config.publicUrl || null,
       publicClientPath: (config.publicUrl || '').trim() ? '/meet/' : '/client/',

@@ -448,6 +448,11 @@ export class RoomManager {
     return [...this.peers.values()].find((p) => p.role === 'host');
   }
 
+  hasActiveHost() {
+    this.purgeStalePeers();
+    return !!this.getHostPeer();
+  }
+
   getHostPeers() {
     return [...this.peers.values()].filter((p) => p.role === 'host');
   }
@@ -993,6 +998,15 @@ export class RoomManager {
 
   addPeer(ws, role, displayName, agentHostname = '', { isExternal = false, publishIntent = 'publisher', userId = null, username = null, userRole = null } = {}) {
     this.purgeStalePeers();
+
+    if (role === 'host' && this.getHostPeer()) {
+      throw new Error('Já existe um painel host aberto nesta sala. Feche-o antes de abrir outro.');
+    }
+
+    if (role === 'client' && !this.getHostPeer()) {
+      throw new Error('A sala ainda não foi aberta pelo host. Aguarde o host iniciar e tente novamente.');
+    }
+
     if (role === 'client' && this.getClientCount() >= config.maxClients) {
       throw new Error(`Limite de ${config.maxClients} clients atingido`);
     }
@@ -1001,39 +1015,6 @@ export class RoomManager {
 
     if (role === 'host') {
       this.actingHostPeerId = null;
-      // Um painel host ativo — aba antiga deixa de receber atualizações
-      for (const old of this.getHostPeers()) {
-        if (old.ws === ws) continue;
-        logger.info('Substituindo host anterior', { peerId: old.id });
-        try {
-          old.ws?.close(4000, 'Novo painel host conectado');
-        } catch (_) {}
-        if (old.hasAudioProducer()) audioSourcesChanged = true;
-        this._stopWhiteboardIfSource(old.id);
-        this.cleanupPeerMedia(old);
-        if (this.selectedPeerId === old.id) {
-          const alternative = [...this.peers.values()].find(
-            (p) =>
-              p.id !== old.id &&
-              this.isPeerSocketOpen(p) &&
-              p.hasVideoProducer()
-          );
-          if (alternative) {
-            this.selectedPeerId = alternative.id;
-            this.transmissionPaused = false;
-            this.interrompidaPor = null;
-            this.finalizadaPor = null;
-            this.broadcastActiveProducer();
-          } else {
-            this.selectedPeerId = null;
-            this.transmissionPaused = false;
-            this.interrompidaPor = null;
-            this.finalizadaPor = null;
-            this.broadcastActiveProducer();
-          }
-        }
-        this.peers.delete(old.id);
-      }
     }
 
     // Mesma máquina ou convidado externo reconectando — remove sessão anterior ainda aberta
