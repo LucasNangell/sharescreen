@@ -23,7 +23,8 @@ import {
   listPendingRecordingDownloads,
   prunePendingRecordingDownloads,
   registerRecordingForDownload,
-  sendPendingRecordingDownload
+  sendPendingRecordingDownload,
+  canAccessPendingRecordingDownloads
 } from './recording-downloads.js';
 import { validateRecordingUpload, createViewerLinkToken, getSessionHostToken } from './auth-dev.js';
 import {
@@ -96,12 +97,14 @@ function attachRecordingDownload(result) {
 }
 
 function requireRecordingDownloadAccess(req, res, next) {
+  const user = resolveSessionUser(req);
   const requiredToken = (getSessionHostToken() || config.hostToken || '').trim();
   const suppliedToken = String(req.headers['x-host-token'] || '').trim();
-  if (!requiredToken || suppliedToken !== requiredToken) {
+  if (!canAccessPendingRecordingDownloads({ user, requiredToken, suppliedToken })) {
     res.status(403).json({ ok: false, erro: 'Acesso às gravações pendentes não autorizado' });
     return;
   }
+  if (user) req.user = user;
   next();
 }
 

@@ -12,6 +12,15 @@ const RETENTION_MS =
     ? retentionHours * 60 * 60 * 1000
     : DEFAULT_RETENTION_MS;
 
+/**
+ * A sessão autenticada do host é a autorização normal do painel. O token é
+ * mantido como alternativa para o fluxo legado de host sem cookie.
+ */
+export function canAccessPendingRecordingDownloads({ user = null, requiredToken = '', suppliedToken = '' } = {}) {
+  if (user) return true;
+  return !!requiredToken && suppliedToken === requiredToken;
+}
+
 function getIndexPath() {
   const resolved = resolveRecordingDir('');
   if (!resolved.ok) throw new Error(resolved.erro || 'Pasta de gravações inacessível');
