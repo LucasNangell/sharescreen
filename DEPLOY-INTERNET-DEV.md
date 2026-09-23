@@ -24,6 +24,7 @@ Documentação para publicação futura (não deployada nesta etapa).
 | `SHARESCREEN_ROOM_PIN` | PIN de sala |
 | `SHARESCREEN_CLIENT_ROOM_PIN` | PIN exigido somente de clients sem link externo |
 | `SHARESCREEN_HOST_PIN` | PIN exigido somente do host (opcional) |
+| `SHARESCREEN_RECORDING_DOWNLOAD_TTL_HOURS` | Horas para apagar gravações pendentes não baixadas (padrão: `24`) |
 | `SHARESCREEN_HOST_TOKEN` | Token fixo de host |
 | `ALLOWED_ORIGINS` | Origens CORS permitidas (futuro) |
 

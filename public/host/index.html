@@ -413,7 +413,7 @@
   
   
   <script>(function(){
-var BUILD_ID="2026-08-20T17-28-06-on03pt";
+var BUILD_ID="2026-09-23T00-13-04-xe49fb";
 var KEY='sharescreen_build_id';
 var RELOAD_KEY='sharescreen_cache_reload';
 try{
@@ -704,6 +704,10 @@ try{
                   <div class="progress-fill" id="upload-progress"></div>
                 </div>
                 <p id="recording-filename" class="hint-text"></p>
+                <div id="pending-recordings-wrap" hidden style="margin-top:var(--space-sm);padding-top:var(--space-sm);border-top:1px solid var(--color-border);">
+                  <p class="hint-text" style="margin:0;">Gravações pendentes — são apagadas do servidor após o download.</p>
+                  <div id="pending-recordings-list"></div>
+                </div>
                 <div class="field" style="margin-top: var(--space-sm);">
                   <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: var(--space-xs); font-size: 0.8rem; cursor: pointer;">
                     <input id="rec-exclude-own-system" type="checkbox" style="margin-top: 2px;" />

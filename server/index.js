@@ -19,7 +19,13 @@ import {
   finishSession as finishRecordingStream,
   pruneStaleSessions as pruneStaleRecordingStreams
 } from './recording-stream-session.js';
-import { validateRecordingUpload, createViewerLinkToken } from './auth-dev.js';
+import {
+  listPendingRecordingDownloads,
+  prunePendingRecordingDownloads,
+  registerRecordingForDownload,
+  sendPendingRecordingDownload
+} from './recording-downloads.js';
+import { validateRecordingUpload, createViewerLinkToken, getSessionHostToken } from './auth-dev.js';
 import {
   lookupClientByIp,
   registerClientByName,
@@ -69,6 +75,34 @@ function loadAppBuildId() {
 }
 
 const appBuildId = loadAppBuildId();
+
+function attachRecordingDownload(result) {
+  if (!result?.ok || !result.path || !result.filename) return result;
+  try {
+    const pending = registerRecordingForDownload(result);
+    return {
+      ...result,
+      downloadUrl: pending.downloadUrl,
+      downloadExpiresAt: pending.expiresAt
+    };
+  } catch (err) {
+    logger.error('Gravação salva sem disponibilidade de download', {
+      filename: result.filename,
+      error: err.message
+    });
+    return { ...result, downloadErro: err.message };
+  }
+}
+
+function requireRecordingDownloadAccess(req, res, next) {
+  const requiredToken = (getSessionHostToken() || config.hostToken || '').trim();
+  const suppliedToken = String(req.headers['x-host-token'] || '').trim();
+  if (!requiredToken || suppliedToken !== requiredToken) {
+    res.status(403).json({ ok: false, erro: 'Acesso às gravações pendentes não autorizado' });
+    return;
+  }
+  next();
+}
 
 function applyNoStoreHeaders(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -512,7 +546,7 @@ function createApp() {
         res.status(result.erro?.includes('inválido') ? 400 : 500).json(result);
         return;
       }
-      res.json(result);
+      res.json(attachRecordingDownload(result));
     }
   );
 
@@ -542,7 +576,7 @@ function createApp() {
       res.status(500).json(result);
       return;
     }
-    res.json(result);
+    res.json(attachRecordingDownload(result));
   });
 
   app.post('/api/gravacao/stream/start', requireAuthOrHostToken, (req, res) => {
@@ -571,7 +605,16 @@ function createApp() {
       res.status(result.erro?.includes('inválido') ? 400 : 500).json(result);
       return;
     }
-    res.json(result);
+    res.json(attachRecordingDownload(result));
+  });
+
+  app.get('/api/gravacao/pendentes', requireRecordingDownloadAccess, (_req, res) => {
+    res.json({ ok: true, recordings: listPendingRecordingDownloads() });
+  });
+
+  app.get('/api/gravacao/download/:id', (req, res) => {
+    const result = sendPendingRecordingDownload(String(req.params.id || ''), res);
+    if (!result.ok) res.status(result.status || 404).json({ ok: false, erro: result.erro });
   });
 
   app.get('/api/diagnostico', (_req, res) => {
@@ -641,6 +684,15 @@ async function main() {
     location: 'main() startup',
     data: { clientCount: listAllClients().length, dataWritable: dataWritable.ok }
   });
+  await pruneStaleRecordingStreams();
+  prunePendingRecordingDownloads();
+  const recordingCleanupTimer = setInterval(() => {
+    pruneStaleRecordingStreams().catch((err) => {
+      logger.warn('Falha ao limpar gravações em streaming obsoletas', { error: err.message });
+    });
+    prunePendingRecordingDownloads();
+  }, 60 * 60 * 1000);
+  recordingCleanupTimer.unref?.();
   await initMediasoup();
   logger.info('Debug session log (servidor + clientTrace)', { path: getAgentDebugLogPath() });
 

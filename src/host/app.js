@@ -113,6 +113,8 @@ const els = {
   uploadProgressWrap: $('upload-progress-wrap'),
   uploadProgress: $('upload-progress'),
   recordingFilename: $('recording-filename'),
+  pendingRecordingsWrap: $('pending-recordings-wrap'),
+  pendingRecordingsList: $('pending-recordings-list'),
   recExcludeOwnSystem: $('rec-exclude-own-system'),
   recSelectedPeerOnly: $('rec-selected-peer-only'),
   chkMeetBridgeLive: $('chk-meet-bridge-live'),
@@ -2442,6 +2444,70 @@ function updateRecordingUi(state) {
   }
 }
 
+function triggerRecordingDownload(downloadUrl) {
+  if (!downloadUrl) return false;
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = '';
+  link.style.display = 'none';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  return true;
+}
+
+function renderPendingRecordingDownloads(recordings = []) {
+  if (!els.pendingRecordingsWrap || !els.pendingRecordingsList) return;
+  els.pendingRecordingsList.replaceChildren();
+  els.pendingRecordingsWrap.hidden = recordings.length === 0;
+
+  for (const recording of recordings) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.35rem;';
+    const label = document.createElement('span');
+    const size = Number(recording.bytes || 0);
+    const suffix = recording.incomplete ? ' (incompleta)' : '';
+    label.textContent = `${recording.filename || 'Gravação'}${suffix}${size ? ` — ${(size / (1024 * 1024)).toFixed(1)} MB` : ''}`;
+    label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;';
+    const download = document.createElement('a');
+    download.href = recording.downloadUrl;
+    download.className = 'btn btn-secondary';
+    download.textContent = 'Baixar';
+    download.style.cssText = 'padding:.25rem .5rem;font-size:.75rem;flex-shrink:0;';
+    download.addEventListener('click', () => {
+      window.setTimeout(() => refreshPendingRecordingDownloads(), 1500);
+    });
+    row.append(label, download);
+    els.pendingRecordingsList.append(row);
+  }
+}
+
+async function refreshPendingRecordingDownloads() {
+  if (!els.pendingRecordingsWrap || !els.pendingRecordingsList) return;
+  try {
+    const res = await fetch('/api/gravacao/pendentes', {
+      headers: hostToken ? { 'X-Host-Token': hostToken } : {}
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) return;
+    renderPendingRecordingDownloads(Array.isArray(data.recordings) ? data.recordings : []);
+  } catch (_) {}
+}
+
+function offerRecordingDownload(uploadResult, fallbackFilename) {
+  const filename = uploadResult?.filename || fallbackFilename;
+  if (els.recordingFilename) els.recordingFilename.textContent = filename;
+  if (!uploadResult?.downloadUrl) {
+    showToast('Gravação salva; o download estará disponível no painel.', 'info');
+    refreshPendingRecordingDownloads();
+    return;
+  }
+  triggerRecordingDownload(uploadResult.downloadUrl);
+  showToast('Download da gravação iniciado. O arquivo será apagado após a transferência.', 'success');
+  setStatus(`Baixando gravação: ${filename}`);
+  window.setTimeout(() => refreshPendingRecordingDownloads(), 1500);
+}
+
 async function iniciarGravacao() {
   if (ui._flags.isRecording || ui._flags.isUploading || ui._flags.isRecordingBusy) return;
   try {
@@ -2484,11 +2550,7 @@ async function pararGravacao() {
         return;
       }
       const uploadResult = await recorder.finishStream(filename, customDir);
-      if (els.recordingFilename) {
-        els.recordingFilename.textContent = uploadResult.filename || filename;
-      }
-      showToast('Gravacao salva com sucesso', 'success');
-      setStatus(`Gravacao salva: ${uploadResult.filename || filename}`);
+      offerRecordingDownload(uploadResult, filename);
       setTimeout(() => recorder.resetIdle(), 4000);
       return;
     }
@@ -2500,11 +2562,7 @@ async function pararGravacao() {
     }
 
     const uploadResult = await recorder.upload(stopResult, filename, customDir);
-    if (els.recordingFilename) {
-      els.recordingFilename.textContent = uploadResult.filename || filename;
-    }
-    showToast('Gravacao salva com sucesso', 'success');
-    setStatus(`Gravacao salva: ${uploadResult.filename || filename}`);
+    offerRecordingDownload(uploadResult, filename);
     setTimeout(() => recorder.resetIdle(), 4000);
   } catch (e) {
     stopRecordingCapture();
@@ -2961,6 +3019,7 @@ async function joinHost({ autoShare = true } = {}) {
     hostReady = true;
     ui.set({ wsConnected: true, wsWasConnected: true });
     setBadge('Online', 'online');
+    refreshPendingRecordingDownloads();
 
     if (gen === joinGeneration) {
       joinInProgress = false;
